@@ -1,0 +1,16 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="profile-page" style="max-width:860px;margin-top:60px">
+  <h1 style="font-size:2rem;font-weight:800;margin-bottom:.3rem">隐私政策</h1>
+  <p style="color:#888;margin-bottom:1.2rem">我们如何收集、使用与保护你的信息。</p>
+
+  <div class="card">
+    {{if .Data}}
+    {{safeHTML .Data}}
+    {{else}}
+    <p style="color:#666">暂无隐私政策内容，请管理员在 <a href="/admin/settings">站点设置</a> 中维护。</p>
+    {{end}}
+  </div>
+</div>
+{{end}}

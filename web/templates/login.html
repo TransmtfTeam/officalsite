@@ -1,0 +1,51 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="auth-page" style="margin-top:0;min-height:100vh">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-text">Team TransMTF</div>
+    </div>
+    <h2 class="auth-title">欢迎登录</h2>
+
+    {{if .Flash}}
+    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+    {{end}}
+
+    {{with .Data}}
+    {{if .Providers}}
+    <div style="display:flex;flex-direction:column;gap:.6rem;margin-bottom:1.2rem">
+      {{range .Providers}}
+      <a class="btn btn-ghost" style="justify-content:center;gap:.6rem"
+         href="/auth/oidc/{{.Slug}}{{if $.Data}}{{with $.Data}}{{if .Next}}?next={{.Next}}{{end}}{{end}}{{end}}">
+        {{if .Icon}}<span>{{.Icon}}</span>{{end}}
+        使用 {{.Name}} 登录
+      </a>
+      {{end}}
+    </div>
+    <div style="display:flex;align-items:center;gap:.8rem;margin-bottom:1.2rem">
+      <div style="flex:1;height:1px;background:rgba(255,255,255,.12)"></div>
+      <span style="font-size:.8rem;color:#666">或使用邮箱密码</span>
+      <div style="flex:1;height:1px;background:rgba(255,255,255,.12)"></div>
+    </div>
+    {{end}}
+    {{end}}
+
+    <form method="POST" action="/login">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+      {{with .Data}}{{if .Next}}<input type="hidden" name="next" value="{{.Next}}">{{end}}{{end}}
+      <div class="form-group">
+        <label class="form-label">邮箱</label>
+        <input class="form-control" type="email" name="email" placeholder="you@example.com" required autofocus>
+      </div>
+      <div class="form-group">
+        <label class="form-label">密码</label>
+        <input class="form-control" type="password" name="password" placeholder="请输入密码" required>
+      </div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.5rem" type="submit">登录</button>
+    </form>
+
+    <p class="auth-footer-link">还没有账号？<a href="/register">立即注册</a></p>
+  </div>
+</div>
+{{end}}

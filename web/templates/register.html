@@ -1,0 +1,39 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="auth-page" style="margin-top:0;min-height:100vh">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-text">Team TransMTF</div>
+    </div>
+    <h2 class="auth-title">创建账号</h2>
+
+    {{if .Flash}}
+    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+    {{end}}
+
+    <form method="POST" action="/register">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+      <div class="form-group">
+        <label class="form-label">邮箱</label>
+        <input class="form-control" type="email" name="email" placeholder="you@example.com" required autofocus>
+      </div>
+      <div class="form-group">
+        <label class="form-label">显示名称</label>
+        <input class="form-control" type="text" name="display_name" placeholder="你的昵称" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">密码（至少 8 位）</label>
+        <input class="form-control" type="password" name="password" placeholder="请输入密码" required minlength="8">
+      </div>
+      <div class="form-group">
+        <label class="form-label">确认密码</label>
+        <input class="form-control" type="password" name="confirm" placeholder="再次输入密码" required>
+      </div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.5rem" type="submit">注册</button>
+    </form>
+
+    <p class="auth-footer-link">已有账号？<a href="/login">去登录</a></p>
+  </div>
+</div>
+{{end}}

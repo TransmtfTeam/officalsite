@@ -1,0 +1,103 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="panel-wrap">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">管理导航</div>
+      <a class="sidebar-link" href="/admin">概览</a>
+      <a class="sidebar-link" href="/admin/users">用户</a>
+      <a class="sidebar-link active" href="/admin/clients">应用</a>
+      <a class="sidebar-link" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/settings">设置</a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">快速入口</div>
+      <a class="sidebar-link" href="/">返回首页</a>
+    </div>
+  </aside>
+
+  <main class="panel-content">
+    <h1 class="panel-title">OIDC 应用管理</h1>
+    <p class="panel-sub">注册和维护 OAuth2/OIDC 客户端。</p>
+
+    {{if .Flash}}
+    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+    {{end}}
+
+    {{with .Data}}
+    {{if .NewSecret}}
+    <div class="secret-box">
+      <p>新建客户端成功，请立即保存以下信息（Secret 只显示一次）。</p>
+      <div class="secret-val">
+        <div style="margin-bottom:.4rem">Client ID：{{.NewClientID}}</div>
+        <div>Client Secret：{{.NewSecret}}</div>
+      </div>
+    </div>
+    {{end}}
+    {{end}}
+
+    <div class="form-panel">
+      <p class="form-panel-title">创建客户端</p>
+      <form method="POST" action="/admin/clients">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">应用名称</label>
+            <input class="form-control" type="text" name="name" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">描述（可选）</label>
+            <input class="form-control" type="text" name="description">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Redirect URIs（每行一个）</label>
+            <textarea class="form-control" name="redirect_uris" rows="4" placeholder="https://app.example.com/callback" required></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Scopes（空格分隔）</label>
+            <input class="form-control" type="text" name="scopes" value="openid profile email">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">创建客户端</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>名称</th>
+            <th>Client ID</th>
+            <th>Scopes</th>
+            <th>Redirect URIs</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{with .Data}}
+          {{range .Clients}}
+          <tr>
+            <td>{{.Name}}</td>
+            <td><code style="font-size:.8rem;color:var(--blue)">{{.ClientID}}</code></td>
+            <td style="font-size:.8rem">{{range .Scopes}}<span class="proj-tag">{{.}}</span> {{end}}</td>
+            <td style="font-size:.8rem;max-width:260px;overflow:hidden;text-overflow:ellipsis">{{range .RedirectURIs}}<div>{{.}}</div>{{end}}</td>
+            <td>
+              <form method="POST" action="/admin/clients/{{.ID}}/delete">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button class="btn btn-danger btn-sm" type="submit">删除</button>
+              </form>
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="5" style="color:#666;text-align:center;padding:2rem">暂无客户端</td></tr>
+          {{end}}
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+{{end}}

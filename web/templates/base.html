@@ -1,0 +1,54 @@
+{{define "base"}}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{.Title}} - {{.SiteName}}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-brand" href="/">{{.SiteName}}</a>
+  <div class="nav-links">
+    {{if .CurrentUser}}
+      {{if .CurrentUser.IsMember}}
+        <a href="/member/projects">项目管理</a>
+      {{end}}
+      {{if .CurrentUser.IsAdmin}}
+        <a href="/admin">管理后台</a>
+      {{end}}
+      <a href="/profile">{{.CurrentUser.DisplayName}}</a>
+      <form method="POST" action="/logout" class="nav-inline-form">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="nav-link-btn">退出</button>
+      </form>
+    {{else}}
+      <a href="/login">登录</a>
+      <a href="/register">注册</a>
+    {{end}}
+  </div>
+</nav>
+
+{{if .AnnZH}}
+<div style="background:rgba(85,205,252,.12);border-bottom:1px solid rgba(85,205,252,.2);text-align:center;padding:.6rem 1rem;font-size:.85rem;color:var(--blue);margin-top:60px">
+  {{.AnnZH}}
+</div>
+{{else if .AnnEN}}
+<div style="background:rgba(85,205,252,.12);border-bottom:1px solid rgba(85,205,252,.2);text-align:center;padding:.6rem 1rem;font-size:.85rem;color:var(--blue);margin-top:60px">
+  {{.AnnEN}}
+</div>
+{{end}}
+
+{{block "content" .}}{{end}}
+
+<footer>
+  <p>Copyright © {{.SiteName}} · 联系邮箱 <a href="mailto:{{.ContactEmail}}">{{.ContactEmail}}</a></p>
+  <p style="margin-top:.4rem;font-size:.8rem">
+    <a href="/tos" style="color:#666">服务条款</a>
+    <span style="color:#444;margin:0 .5rem">|</span>
+    <a href="/privacy" style="color:#666">隐私政策</a>
+  </p>
+</footer>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,33 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="auth-page" style="min-height:100vh">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-text">Team TransMTF</div>
+    </div>
+    <h2 class="auth-title">两步验证</h2>
+
+    {{if .Flash}}
+    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+    {{end}}
+
+    {{with .Data}}
+    <p style="font-size:.9rem;color:#a0a0b8;margin-bottom:1rem;text-align:center">
+      账号：<strong>{{index . "Email"}}</strong>
+    </p>
+    {{end}}
+
+    <form method="POST" action="/login/2fa">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+      <div class="form-group">
+        <label class="form-label">认证器验证码</label>
+        <input class="form-control" type="text" name="totp_code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required autofocus>
+      </div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.5rem" type="submit">验证并登录</button>
+    </form>
+
+    <p class="auth-footer-link"><a href="/login">返回登录页</a></p>
+  </div>
+</div>
+{{end}}

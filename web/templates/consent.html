@@ -1,0 +1,44 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="auth-page" style="min-height:100vh">
+  <div class="auth-card" style="max-width:520px">
+    <div class="auth-logo">
+      <div class="auth-logo-text">Team TransMTF</div>
+    </div>
+    <h2 class="auth-title">授权确认</h2>
+
+    {{if .Flash}}
+    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+    {{end}}
+
+    {{with .Data}}
+    <p style="font-size:.92rem;color:#a0a0b8;margin-bottom:1rem;text-align:center">
+      应用 <span class="consent-client">{{.Client.Name}}</span> 正在请求访问你的账号信息。
+    </p>
+
+    <p style="font-size:.85rem;color:#888;margin-bottom:.5rem">将授予以下权限：</p>
+    <ul class="scope-list">
+      {{range .Scopes}}
+      <li>{{scopeLabel .}}</li>
+      {{end}}
+    </ul>
+
+    <form method="POST" action="/oauth2/authorize">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+      <input type="hidden" name="client_id" value="{{.Request.ClientID}}">
+      <input type="hidden" name="redirect_uri" value="{{.Request.RedirectURI}}">
+      <input type="hidden" name="scope" value="{{.Request.Scope}}">
+      <input type="hidden" name="state" value="{{.Request.State}}">
+      <input type="hidden" name="nonce" value="{{.Request.Nonce}}">
+      <input type="hidden" name="code_challenge" value="{{.Request.CodeChallenge}}">
+      <input type="hidden" name="code_challenge_method" value="{{.Request.CodeChallengeMethod}}">
+      <div class="consent-actions">
+        <button class="btn btn-ghost" type="submit" name="action" value="deny">拒绝</button>
+        <button class="btn btn-primary" type="submit" name="action" value="allow">同意授权</button>
+      </div>
+    </form>
+    {{end}}
+  </div>
+</div>
+{{end}}

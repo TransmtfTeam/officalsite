@@ -1,0 +1,64 @@
+{{template "base" .}}
+
+{{define "content"}}
+<section class="page-hero">
+  <div class="hero-left">
+    <p class="hero-greeting">你好，欢迎来到</p>
+    <h1 class="hero-big">Team TransMTF</h1>
+    <p class="hero-trans">一个面向跨性别群体与盟友的开放社区。</p>
+    <p class="hero-desc">
+      我们提供公开官网、标准 OIDC/OAuth2 身份服务、成员项目展示与统一用户中心。
+    </p>
+    <div style="margin-top:1.5rem;display:flex;gap:.8rem;flex-wrap:wrap">
+      {{if .CurrentUser}}
+      <a class="btn btn-primary" href="/profile">进入用户中心</a>
+      {{else}}
+      <a class="btn btn-primary" href="/login">立即登录</a>
+      <a class="btn btn-ghost" href="/register">创建账号</a>
+      {{end}}
+    </div>
+  </div>
+
+  <div class="hero-right">
+    <div class="hero-blob-wrap card">
+      <div class="hero-blob"></div>
+      <p class="hero-what-title">我们在做什么</p>
+      <p class="hero-desc">
+        1. 提供统一身份认证能力，支持标准 OIDC 流程。
+      </p>
+      <p class="hero-desc">
+        2. 支持第三方登录（如 X、Google、Keycloak 等 OIDC 提供商）。
+      </p>
+      <p class="hero-desc">
+        3. 提供成员项目展示与持续迭代的社区基础设施。
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2 class="section-title">团队项目</h2>
+  <p class="section-sub">以下为公开展示的项目列表。</p>
+
+  <div class="cards-grid">
+    {{if .Data}}
+      {{range .Data}}
+      <article class="proj-card">
+        <div class="proj-card-header">
+          <span class="proj-name">{{if .NameZH}}{{.NameZH}}{{else}}{{.NameEN}}{{end}}</span>
+          <span class="proj-status proj-status-{{.Status}}">{{.Status}}</span>
+        </div>
+        {{if .DescZH}}<p class="proj-desc">{{.DescZH}}</p>{{else if .DescEN}}<p class="proj-desc">{{.DescEN}}</p>{{end}}
+        {{if .URL}}
+        <a class="proj-link" href="{{.URL}}" target="_blank" rel="noopener">访问项目</a>
+        {{end}}
+      </article>
+      {{end}}
+    {{else}}
+    <article class="proj-card">
+      <p class="proj-desc">暂无公开项目，欢迎稍后再来查看。</p>
+    </article>
+    {{end}}
+  </div>
+</section>
+{{end}}

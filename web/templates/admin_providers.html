@@ -1,0 +1,139 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="panel-wrap">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">管理导航</div>
+      <a class="sidebar-link" href="/admin">概览</a>
+      <a class="sidebar-link" href="/admin/users">用户</a>
+      <a class="sidebar-link" href="/admin/clients">应用</a>
+      <a class="sidebar-link active" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/settings">设置</a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">快速入口</div>
+      <a class="sidebar-link" href="/">返回首页</a>
+    </div>
+  </aside>
+
+  <main class="panel-content">
+    <h1 class="panel-title">外部登录方式</h1>
+    <p class="panel-sub">配置标准 OIDC 提供商（例如 X、Google、Keycloak），用于一键登录。</p>
+
+    {{if .Flash}}
+    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+    {{end}}
+
+    <div class="form-panel">
+      <p class="form-panel-title">新增提供商</p>
+      <p style="font-size:.82rem;color:#888;margin-bottom:1rem">
+        回调地址请填写为：<code style="color:var(--blue)">{{.Issuer}}/auth/oidc/{slug}/callback</code>
+      </p>
+      <form method="POST" action="/admin/providers">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">名称（展示用）</label>
+            <input class="form-control" type="text" name="name" placeholder="X / Google / Keycloak" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Slug（URL 路径）</label>
+            <input class="form-control" type="text" name="slug" placeholder="twitter" pattern="[a-z0-9\-]+" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">图标（可选）</label>
+            <input class="form-control" type="text" name="icon" placeholder="X">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Client ID</label>
+            <input class="form-control" type="text" name="client_id" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Client Secret</label>
+            <input class="form-control" type="password" name="client_secret" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Issuer URL</label>
+            <input class="form-control" type="url" name="issuer_url" placeholder="https://accounts.google.com" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Scopes（空格分隔）</label>
+            <input class="form-control" type="text" name="scopes" value="openid email profile">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">添加</button>
+      </form>
+    </div>
+
+    <details class="card" style="margin-bottom:1.5rem;cursor:pointer">
+      <summary style="font-size:.9rem;font-weight:600;padding:.2rem 0">常见配置示例</summary>
+      <div style="margin-top:1rem;font-size:.82rem;color:#888;display:flex;flex-direction:column;gap:.8rem">
+        <div>
+          <strong style="color:#b0b0c8">X (x.com)</strong><br>
+          Issuer: <code>https://twitter.com</code><br>
+          Scopes: <code>openid email profile</code><br>
+          Callback: <code>{{.Issuer}}/auth/oidc/twitter/callback</code>
+        </div>
+        <div>
+          <strong style="color:#b0b0c8">Google</strong><br>
+          Issuer: <code>https://accounts.google.com</code><br>
+          Scopes: <code>openid email profile</code>
+        </div>
+        <div>
+          <strong style="color:#b0b0c8">Keycloak / Authentik / Dex</strong><br>
+          使用各自的 OIDC Issuer 地址，例如：<code>https://auth.example.com/realms/master</code>
+        </div>
+      </div>
+    </details>
+
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>名称</th>
+            <th>Slug</th>
+            <th>Issuer</th>
+            <th>状态</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Data}}
+          <tr>
+            <td>{{if .Icon}}<span style="margin-right:.4rem">{{.Icon}}</span>{{end}}{{.Name}}</td>
+            <td><code style="font-size:.8rem;color:var(--blue)">/auth/oidc/{{.Slug}}</code></td>
+            <td style="font-size:.8rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{.IssuerURL}}</td>
+            <td>
+              {{if .Enabled}}
+              <span style="color:#6ef;font-size:.82rem">已启用</span>
+              {{else}}
+              <span style="color:#888;font-size:.82rem">已停用</span>
+              {{end}}
+            </td>
+            <td style="white-space:nowrap">
+              <form method="POST" action="/admin/providers/{{.ID}}/toggle" style="display:inline-block">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button class="btn btn-ghost btn-sm" type="submit">
+                  {{if .Enabled}}停用{{else}}启用{{end}}
+                </button>
+              </form>
+              <form method="POST" action="/admin/providers/{{.ID}}/delete" style="display:inline-block;margin-left:.4rem">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button class="btn btn-danger btn-sm" type="submit">删除</button>
+              </form>
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="5" style="color:#666;text-align:center;padding:2rem">尚未配置任何外部登录提供商</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+{{end}}

@@ -1,0 +1,124 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="panel-wrap">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">成员导航</div>
+      <a class="sidebar-link active" href="/member/projects">项目管理</a>
+      {{if .CurrentUser}}{{if .CurrentUser.IsAdmin}}<a class="sidebar-link" href="/admin">管理后台</a>{{end}}{{end}}
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">快速入口</div>
+      <a class="sidebar-link" href="/">返回首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
+    </div>
+  </aside>
+
+  <main class="panel-content">
+    <h1 class="panel-title">项目管理</h1>
+    <p class="panel-sub">创建和维护首页展示的团队项目。</p>
+
+    {{if .Flash}}
+    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+    {{end}}
+
+    <div class="form-panel">
+      <p class="form-panel-title">新增项目</p>
+      <form method="POST" action="/member/projects">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Slug</label>
+            <input class="form-control" type="text" name="slug" placeholder="my-project" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">中文名</label>
+            <input class="form-control" type="text" name="name_zh">
+          </div>
+          <div class="form-group">
+            <label class="form-label">英文名</label>
+            <input class="form-control" type="text" name="name_en">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">中文简介</label>
+            <textarea class="form-control" name="desc_zh" rows="2"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">英文简介</label>
+            <textarea class="form-control" name="desc_en" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">状态</label>
+            <select class="form-control" name="status">
+              <option value="active">active</option>
+              <option value="planning">planning</option>
+              <option value="completed">completed</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">项目链接（可选）</label>
+            <input class="form-control" type="url" name="url" placeholder="https://...">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tags(JSON)</label>
+            <input class="form-control" type="text" name="tags" placeholder='["Go","OIDC"]'>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">排序值</label>
+            <input class="form-control" type="number" name="sort_order" value="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">是否置顶</label>
+            <select class="form-control" name="featured">
+              <option value="0">否</option>
+              <option value="1">是</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">创建项目</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>项目</th>
+            <th>状态</th>
+            <th>置顶</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Data}}
+          <tr>
+            <td>
+              <strong>{{if .NameZH}}{{.NameZH}}{{else}}{{.NameEN}}{{end}}</strong>
+              {{if .URL}}<br><a href="{{.URL}}" target="_blank" style="font-size:.8rem">{{.URL}}</a>{{end}}
+            </td>
+            <td><span class="proj-status proj-status-{{.Status}}">{{.Status}}</span></td>
+            <td>{{if .Featured}}是{{else}}否{{end}}</td>
+            <td>
+              <a class="btn btn-ghost btn-sm" href="/member/projects/{{.ID}}/edit">编辑</a>
+              <form method="POST" action="/member/projects/{{.ID}}/delete" style="display:inline-block;margin-left:.4rem">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button class="btn btn-danger btn-sm" type="submit">删除</button>
+              </form>
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="4" style="color:#666;text-align:center;padding:2rem">暂无项目</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+{{end}}

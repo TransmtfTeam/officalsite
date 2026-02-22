@@ -1,0 +1,115 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="profile-page" style="margin-top:60px">
+  <h1 style="font-size:1.6rem;font-weight:800;margin-bottom:.3rem">个人资料</h1>
+  <p style="color:#888;margin-bottom:1.5rem">管理你的账户信息与安全设置</p>
+
+  {{if .Flash}}
+  <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+  {{end}}
+
+  {{with .CurrentUser}}
+  <div class="card" style="margin-bottom:1.5rem">
+    <p style="font-size:.8rem;color:#888;margin-bottom:1rem">账户概览</p>
+    <p style="font-size:.9rem;margin-bottom:.3rem">邮箱：<strong>{{.Email}}</strong></p>
+    <p style="font-size:.9rem;margin-bottom:.3rem">角色：<strong>{{.RoleLabel}}</strong></p>
+    <p style="font-size:.9rem;margin-bottom:.3rem">
+      2FA：<strong>{{if .TOTPEnabled}}已启用{{else}}未启用{{end}}</strong>
+    </p>
+  </div>
+
+  <form method="POST" action="/profile">
+    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+    <div class="card" style="margin-bottom:1.5rem">
+      <p class="form-panel-title">基础信息</p>
+      <div class="form-group">
+        <label class="form-label">显示名称</label>
+        <input class="form-control" type="text" name="display_name" value="{{.DisplayName}}" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">头像 URL（可选）</label>
+        <input class="form-control" type="url" name="avatar_url" value="{{.AvatarURL}}" placeholder="https://...">
+      </div>
+      <hr style="border-color:rgba(255,255,255,.08);margin:1rem 0">
+      <p style="font-size:.85rem;color:#888;margin-bottom:.8rem">修改密码（留空表示不修改）</p>
+      <div class="form-group">
+        <label class="form-label">新密码（至少 8 位）</label>
+        <input class="form-control" type="password" name="new_password" minlength="8">
+      </div>
+      <div class="form-group">
+        <label class="form-label">确认新密码</label>
+        <input class="form-control" type="password" name="confirm_password">
+      </div>
+      <button class="btn btn-primary" type="submit">保存资料</button>
+    </div>
+  </form>
+
+  <div class="card">
+    <p class="form-panel-title">两步验证（TOTP）</p>
+
+    {{if .TOTPEnabled}}
+    <p style="font-size:.9rem;color:#a0a0b8;margin-bottom:1rem">已启用。登录时需要输入认证器验证码。</p>
+    <form method="POST" action="/profile/2fa/disable">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+      <div class="form-group">
+        <label class="form-label">当前密码</label>
+        <input class="form-control" type="password" name="current_password" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">认证器验证码</label>
+        <input class="form-control" type="text" name="totp_code" inputmode="numeric" autocomplete="one-time-code" required>
+      </div>
+      <button class="btn btn-danger" type="submit">关闭 2FA</button>
+    </form>
+    {{else}}
+      {{with $.Data}}
+        {{if index . "PendingSecret"}}
+        <div class="secret-box" style="margin-bottom:1rem">
+          <p>请先将以下密钥添加到认证器应用，然后输入验证码完成启用。</p>
+          <div class="secret-val" style="margin-top:.5rem">Secret: {{index . "PendingSecret"}}</div>
+          <div class="secret-val" style="margin-top:.6rem;word-break:break-all">otpauth: {{index . "PendingURI"}}</div>
+        </div>
+        <form method="POST" action="/profile/2fa/enable" style="margin-bottom:1rem">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <div class="form-group">
+            <label class="form-label">认证器验证码</label>
+            <input class="form-control" type="text" name="totp_code" inputmode="numeric" autocomplete="one-time-code" required>
+          </div>
+          <button class="btn btn-primary" type="submit">确认启用 2FA</button>
+        </form>
+        <form method="POST" action="/profile/2fa/start">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <div class="form-group">
+            <label class="form-label">当前密码（重新生成密钥）</label>
+            <input class="form-control" type="password" name="current_password" required>
+          </div>
+          <button class="btn btn-ghost" type="submit">重新生成密钥</button>
+        </form>
+        {{else}}
+        <p style="font-size:.9rem;color:#a0a0b8;margin-bottom:1rem">启用后，登录将需要密码 + 认证器验证码。</p>
+        <form method="POST" action="/profile/2fa/start">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <div class="form-group">
+            <label class="form-label">当前密码（用于确认）</label>
+            <input class="form-control" type="password" name="current_password" required>
+          </div>
+          <button class="btn btn-primary" type="submit">开始启用 2FA</button>
+        </form>
+        {{end}}
+      {{else}}
+      <p style="font-size:.9rem;color:#a0a0b8;margin-bottom:1rem">启用后，登录将需要密码 + 认证器验证码。</p>
+      <form method="POST" action="/profile/2fa/start">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-group">
+          <label class="form-label">当前密码（用于确认）</label>
+          <input class="form-control" type="password" name="current_password" required>
+        </div>
+        <button class="btn btn-primary" type="submit">开始启用 2FA</button>
+      </form>
+      {{end}}
+    {{end}}
+  </div>
+  {{end}}
+</div>
+{{end}}
