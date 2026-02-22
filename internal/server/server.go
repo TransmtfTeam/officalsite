@@ -297,7 +297,7 @@ func (h *Handler) render(w http.ResponseWriter, name string, d PageData) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmpl.ExecuteTemplate(w, name, d); err != nil {
+	if err := tmpl.ExecuteTemplate(w, "base", d); err != nil {
 		log.Printf("template %s error: %v", name, err)
 	}
 }
