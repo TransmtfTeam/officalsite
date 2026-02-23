@@ -144,8 +144,9 @@
   <p class="section-sub">我们正在建设的一些项目与资源。</p>
 
   <div class="cards-grid">
-    {{if .Data}}
-      {{range .Data}}
+    {{$projects := index .Data "Projects"}}
+    {{if $projects}}
+      {{range $projects}}
       <article class="proj-card">
         <div class="proj-card-header">
           <span class="proj-name">{{if .NameZH}}{{.NameZH}}{{else}}{{.NameEN}}{{end}}</span>
@@ -164,6 +165,25 @@
     {{end}}
   </div>
 </section>
+
+{{/* ── 友情链接 ── */}}
+{{$links := index .Data "Links"}}
+{{if $links}}
+<section class="mtf-section-white" style="padding-top:2.5rem;padding-bottom:3rem">
+  <h2 class="section-title" style="font-size:1.3rem">友情链接</h2>
+  <div style="display:flex;flex-wrap:wrap;gap:.8rem 1.2rem;justify-content:center;margin-top:1rem">
+    {{range $links}}
+    <a href="{{.URL}}" target="_blank" rel="noopener"
+       style="display:inline-flex;align-items:center;gap:.45rem;padding:.45rem .9rem;border-radius:8px;background:rgba(255,255,255,0.7);border:1px solid rgba(0,0,0,0.08);color:var(--text);text-decoration:none;font-size:.9rem;transition:box-shadow .15s"
+       onmouseover="this.style.boxShadow='0 2px 12px rgba(59,130,246,0.15)'"
+       onmouseout="this.style.boxShadow=''">
+      {{if .Icon}}<img src="{{.Icon}}" alt="" style="width:16px;height:16px;object-fit:contain;flex-shrink:0">{{end}}
+      {{.Name}}
+    </a>
+    {{end}}
+  </div>
+</section>
+{{end}}
 
 </div>
 {{end}}

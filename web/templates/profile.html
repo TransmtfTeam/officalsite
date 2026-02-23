@@ -36,12 +36,16 @@
       <hr style="border:none;border-top:1px solid rgba(0,0,0,0.07);margin:1rem 0">
       <p style="font-size:.85rem;color:var(--text2);margin-bottom:.8rem">修改密码（留空表示不修改）</p>
       <div class="form-group">
+        <label class="form-label">当前密码</label>
+        <input class="form-control" type="password" name="current_password" autocomplete="current-password">
+      </div>
+      <div class="form-group">
         <label class="form-label">新密码（至少 8 位）</label>
-        <input class="form-control" type="password" name="new_password" minlength="8">
+        <input class="form-control" type="password" name="new_password" minlength="8" autocomplete="new-password">
       </div>
       <div class="form-group">
         <label class="form-label">确认新密码</label>
-        <input class="form-control" type="password" name="confirm_password">
+        <input class="form-control" type="password" name="confirm_password" autocomplete="new-password">
       </div>
       <button class="btn btn-primary" type="submit">保存资料</button>
     </div>

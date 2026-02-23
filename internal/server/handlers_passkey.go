@@ -368,6 +368,18 @@ func (h *Handler) AdminDeletePasskey(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	pkID := r.PathValue("pkid")
 	ctx := r.Context()
+
+	targetUser, err := h.st.GetUserByID(ctx, userID)
+	if err != nil {
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=User+not+found", http.StatusFound)
+		return
+	}
+	cur := h.currentUser(r)
+	if targetUser.IsAdmin() && !h.isSystemAdminUser(cur) {
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=Cannot+modify+admin+account", http.StatusFound)
+		return
+	}
+
 	creds, err := h.st.GetPasskeyCredentialsByUserID(ctx, userID)
 	if err != nil {
 		http.Redirect(w, r, "/admin/users/"+userID+"?flash=Delete+failed", http.StatusFound)

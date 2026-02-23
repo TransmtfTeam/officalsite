@@ -151,20 +151,31 @@ CREATE TABLE IF NOT EXISTS client_announcements (
 CREATE TABLE IF NOT EXISTS custom_roles (
     name        TEXT PRIMARY KEY,
     label       TEXT NOT NULL DEFAULT '',
+    permissions TEXT NOT NULL DEFAULT '',
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Compatibility migrations for already-initialized databases.
+CREATE TABLE IF NOT EXISTS friend_links (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL DEFAULT '',
+    url        TEXT NOT NULL DEFAULT '',
+    icon       TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT NOT NULL DEFAULT '';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_pending_secret TEXT NOT NULL DEFAULT '';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE oidc_states ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '10 minutes');
+ALTER TABLE custom_roles ADD COLUMN IF NOT EXISTS permissions TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_auth_codes_expires ON auth_codes(expires_at);
 CREATE INDEX IF NOT EXISTS idx_access_tokens_hash ON access_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_projects_sort ON projects(sort_order, created_at);
+CREATE INDEX IF NOT EXISTS idx_friend_links_sort ON friend_links(sort_order, created_at);
 CREATE INDEX IF NOT EXISTS idx_oidc_states_expires ON oidc_states(expires_at);
 CREATE INDEX IF NOT EXISTS idx_user_identities_lookup ON user_identities(provider, subject);
 CREATE INDEX IF NOT EXISTS idx_login_2fa_expires ON login_2fa_challenges(expires_at);

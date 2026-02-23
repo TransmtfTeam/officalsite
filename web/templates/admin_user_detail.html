@@ -25,6 +25,9 @@
     {{with .Data}}
     {{$user := index . "User"}}
     {{$isSysAdmin := index . "IsSystemAdmin"}}
+    {{$curIsSysAdmin := index . "CurrentIsSysAdmin"}}
+    {{/* canModify is true when the target is not an admin, or the viewer is the system admin */}}
+    {{$canModify := or (not $user.IsAdmin) $curIsSysAdmin}}
 
     <div style="margin-bottom:.5rem">
       <a href="/admin/users" style="color:var(--text2);font-size:.9rem">← 用户列表</a>
@@ -63,6 +66,7 @@
     </div>
 
     {{/* ── Reset password ── */}}
+    {{if $canModify}}
     <div class="detail-section">
       <div class="detail-section-title">重置密码</div>
       <form method="POST" action="/admin/users/{{$user.ID}}/reset-password" style="display:flex;gap:.8rem;align-items:flex-end">
@@ -74,9 +78,15 @@
         <button class="btn btn-ghost btn-sm" type="submit">重置密码</button>
       </form>
     </div>
+    {{else}}
+    <div class="detail-section">
+      <div class="detail-section-title">重置密码</div>
+      <p style="font-size:.88rem;color:var(--text2)">仅系统管理员可修改其他管理员的密码。</p>
+    </div>
+    {{end}}
 
     {{/* ── 2FA management ── */}}
-    {{if $user.TOTPEnabled}}
+    {{if and $user.TOTPEnabled $canModify}}
     <div class="detail-section">
       <div class="detail-section-title">两步验证管理</div>
       <p style="font-size:.88rem;color:var(--text2);margin-bottom:.8rem">
@@ -122,10 +132,12 @@
           <div class="passkey-name">{{.Name}}</div>
           <div class="passkey-date">注册于 {{.CreatedAt.Format "2006-01-02"}}</div>
         </div>
+        {{if $canModify}}
         <form method="POST" action="/admin/users/{{$user.ID}}/passkeys/{{.ID}}/delete">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           <button class="btn btn-danger btn-sm" type="submit">删除</button>
         </form>
+        {{end}}
       </div>
       {{end}}
       {{else}}

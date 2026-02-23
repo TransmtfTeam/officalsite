@@ -1064,9 +1064,10 @@ func (s *Store) DeleteWebAuthnSession(ctx context.Context, id string) error {
 
 
 type CustomRole struct {
-	Name      string
-	Label     string
-	CreatedAt time.Time
+	Name        string
+	Label       string
+	Permissions []string // e.g. ["manage_projects","manage_clients"]
+	CreatedAt   time.Time
 }
 
 var defaultRoles = map[string]bool{"user": true, "member": true, "admin": true}
@@ -1074,7 +1075,7 @@ var defaultRoles = map[string]bool{"user": true, "member": true, "admin": true}
 func IsDefaultRole(name string) bool { return defaultRoles[name] }
 
 func (s *Store) ListCustomRoles(ctx context.Context) ([]*CustomRole, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT name,label,created_at FROM custom_roles ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT name,label,permissions,created_at FROM custom_roles ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -1082,21 +1083,38 @@ func (s *Store) ListCustomRoles(ctx context.Context) ([]*CustomRole, error) {
 	var out []*CustomRole
 	for rows.Next() {
 		r := &CustomRole{}
-		if err := rows.Scan(&r.Name, &r.Label, &r.CreatedAt); err != nil {
+		var perms string
+		if err := rows.Scan(&r.Name, &r.Label, &perms, &r.CreatedAt); err != nil {
 			return nil, err
 		}
+		r.Permissions = splitFields(perms)
 		out = append(out, r)
 	}
 	return out, rows.Err()
 }
 
-func (s *Store) CreateCustomRole(ctx context.Context, name, label string) error {
+func (s *Store) GetCustomRole(ctx context.Context, name string) (*CustomRole, error) {
+	r := &CustomRole{}
+	var perms string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT name,label,permissions,created_at FROM custom_roles WHERE name=$1`, name).
+		Scan(&r.Name, &r.Label, &perms, &r.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	r.Permissions = splitFields(perms)
+	return r, nil
+}
+
+func (s *Store) CreateCustomRole(ctx context.Context, name, label string, permissions []string) error {
 	if IsDefaultRole(name) {
 		return errors.New("cannot create a role with a reserved name")
 	}
+	perms := strings.Join(permissions, " ")
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO custom_roles(name,label) VALUES($1,$2) ON CONFLICT(name) DO UPDATE SET label=EXCLUDED.label`,
-		name, label)
+		`INSERT INTO custom_roles(name,label,permissions) VALUES($1,$2,$3)
+		 ON CONFLICT(name) DO UPDATE SET label=EXCLUDED.label, permissions=EXCLUDED.permissions`,
+		name, label, perms)
 	return err
 }
 
@@ -1105,6 +1123,67 @@ func (s *Store) DeleteCustomRole(ctx context.Context, name string) error {
 		return errors.New("cannot delete a default role")
 	}
 	_, err := s.db.ExecContext(ctx, `DELETE FROM custom_roles WHERE name=$1`, name)
+	return err
+}
+
+
+// ── Friend Links ────────────────────────────────────────────────────────────
+
+type FriendLink struct {
+	ID        string
+	Name      string
+	URL       string
+	Icon      string
+	SortOrder int
+	CreatedAt time.Time
+}
+
+func (s *Store) ListFriendLinks(ctx context.Context) ([]*FriendLink, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id,name,url,icon,sort_order,created_at FROM friend_links ORDER BY sort_order ASC, created_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*FriendLink
+	for rows.Next() {
+		l := &FriendLink{}
+		if err := rows.Scan(&l.ID, &l.Name, &l.URL, &l.Icon, &l.SortOrder, &l.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetFriendLink(ctx context.Context, id string) (*FriendLink, error) {
+	l := &FriendLink{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id,name,url,icon,sort_order,created_at FROM friend_links WHERE id=$1`, id).
+		Scan(&l.ID, &l.Name, &l.URL, &l.Icon, &l.SortOrder, &l.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return l, nil
+}
+
+func (s *Store) CreateFriendLink(ctx context.Context, name, url, icon string, sortOrder int) error {
+	id := uuid.New().String()
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO friend_links(id,name,url,icon,sort_order) VALUES($1,$2,$3,$4,$5)`,
+		id, name, url, icon, sortOrder)
+	return err
+}
+
+func (s *Store) UpdateFriendLink(ctx context.Context, id, name, url, icon string, sortOrder int) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE friend_links SET name=$1,url=$2,icon=$3,sort_order=$4 WHERE id=$5`,
+		name, url, icon, sortOrder, id)
+	return err
+}
+
+func (s *Store) DeleteFriendLink(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM friend_links WHERE id=$1`, id)
 	return err
 }
 
@@ -1127,6 +1206,16 @@ func splitLines(s string) []string {
 	for _, l := range strings.Split(s, "\n") {
 		if t := strings.TrimSpace(l); t != "" {
 			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func splitFields(s string) []string {
+	var out []string
+	for _, f := range strings.Fields(s) {
+		if f != "" {
+			out = append(out, f)
 		}
 	}
 	return out

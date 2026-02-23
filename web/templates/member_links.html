@@ -1,0 +1,95 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="panel-wrap">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">成员导航</div>
+      <a class="sidebar-link" href="/member/projects">项目管理</a>
+      <a class="sidebar-link active" href="/member/links">友情链接</a>
+      {{if .CurrentUser}}{{if .CurrentUser.IsAdmin}}<a class="sidebar-link" href="/admin">管理后台</a>{{end}}{{end}}
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">快速入口</div>
+      <a class="sidebar-link" href="/">返回首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
+    </div>
+  </aside>
+
+  <main class="panel-content">
+    <h1 class="panel-title">友情链接管理</h1>
+    <p class="panel-sub">添加在首页底部展示的友情链接，支持图标。</p>
+
+    {{if .Flash}}
+    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+    {{end}}
+
+    <div class="form-panel">
+      <p class="form-panel-title">新增链接</p>
+      <form method="POST" action="/member/links">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">名称</label>
+            <input class="form-control" type="text" name="name" placeholder="Example" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">链接 URL</label>
+            <input class="form-control" type="url" name="url" placeholder="https://example.com" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">图标 URL（可选，favicon 等）</label>
+            <input class="form-control" type="url" name="icon" placeholder="https://example.com/favicon.ico">
+          </div>
+          <div class="form-group">
+            <label class="form-label">排序值（小值靠前）</label>
+            <input class="form-control" type="number" name="sort_order" value="0">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">添加链接</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>名称</th>
+            <th>链接</th>
+            <th>排序</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Data}}
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:.5rem">
+                {{if .Icon}}
+                <img src="{{.Icon}}" alt="" style="width:16px;height:16px;object-fit:contain">
+                {{end}}
+                <strong>{{.Name}}</strong>
+              </div>
+            </td>
+            <td><a href="{{.URL}}" target="_blank" rel="noopener" style="font-size:.85rem;word-break:break-all">{{.URL}}</a></td>
+            <td style="font-size:.85rem">{{.SortOrder}}</td>
+            <td style="white-space:nowrap">
+              <a class="btn btn-ghost btn-sm" href="/member/links/{{.ID}}/edit">编辑</a>
+              <form method="POST" action="/member/links/{{.ID}}/delete" style="display:inline-block;margin-left:.4rem">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button class="btn btn-danger btn-sm" type="submit"
+                  onclick="return confirm('确认删除该链接？')">删除</button>
+              </form>
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="4" style="color:var(--text2);text-align:center;padding:2rem">暂无友情链接</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+{{end}}

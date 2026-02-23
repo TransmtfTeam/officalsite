@@ -13,9 +13,11 @@ import (
 	"time"
 )
 
-// Sender sends a plain-text email.
+// Sender sends emails. SendHTML sends a multipart message with both plain-text
+// and HTML bodies; if htmlBody is empty it falls back to plain-text only.
 type Sender interface {
 	Send(to, subject, body string) error
+	SendHTML(to, subject, textBody, htmlBody string) error
 }
 
 // New returns a Sender based on the email_provider setting.
@@ -43,7 +45,8 @@ func New(settings map[string]string) Sender {
 
 type noopSender struct{}
 
-func (noopSender) Send(_, _, _ string) error { return nil }
+func (noopSender) Send(_, _, _ string) error                { return nil }
+func (noopSender) SendHTML(_, _, _, _ string) error         { return nil }
 
 
 type smtpSender struct {
@@ -51,17 +54,25 @@ type smtpSender struct {
 }
 
 func (s *smtpSender) Send(to, subject, body string) error {
+	return s.SendHTML(to, subject, body, "")
+}
+
+func (s *smtpSender) SendHTML(to, subject, textBody, htmlBody string) error {
 	port := s.port
 	if port == "" {
 		port = "587"
 	}
 	addr := net.JoinHostPort(s.host, port)
-	msg := buildMessage(s.from, to, subject, body)
+	var msg []byte
+	if htmlBody != "" {
+		msg = buildMixedMessage(s.from, to, subject, textBody, htmlBody)
+	} else {
+		msg = buildMessage(s.from, to, subject, textBody)
+	}
 
 	if port == "465" {
 		return s.sendViaTLS(addr, to, msg)
 	}
-	// STARTTLS path (port 587, 25, etc.)
 	var auth smtp.Auth
 	if s.user != "" {
 		auth = smtp.PlainAuth("", s.user, s.pass, s.host)
@@ -107,16 +118,24 @@ type resendSender struct {
 }
 
 func (s *resendSender) Send(to, subject, body string) error {
-	payload, err := json.Marshal(map[string]any{
+	return s.SendHTML(to, subject, body, "")
+}
+
+func (s *resendSender) SendHTML(to, subject, textBody, htmlBody string) error {
+	payload := map[string]any{
 		"from":    s.from,
 		"to":      []string{to},
 		"subject": subject,
-		"text":    body,
-	})
+		"text":    textBody,
+	}
+	if htmlBody != "" {
+		payload["html"] = htmlBody
+	}
+	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest(http.MethodPost, "https://api.resend.com/emails", bytes.NewReader(payload))
+	req, err := http.NewRequest(http.MethodPost, "https://api.resend.com/emails", bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
@@ -135,7 +154,7 @@ func (s *resendSender) Send(to, subject, body string) error {
 }
 
 
-// buildMessage constructs a minimal RFC 5322 message with base64-encoded UTF-8 body.
+// buildMessage constructs a minimal RFC 5322 plain-text message.
 func buildMessage(from, to, subject, body string) []byte {
 	encSubject := mime.QEncoding.Encode("utf-8", subject)
 	b64body := base64.StdEncoding.EncodeToString([]byte(body))
@@ -148,7 +167,6 @@ func buildMessage(from, to, subject, body string) []byte {
 	buf.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
 	buf.WriteString("Content-Transfer-Encoding: base64\r\n")
 	buf.WriteString("\r\n")
-	// RFC 2045 搂6.8: base64 lines must not exceed 76 characters.
 	for len(b64body) > 0 {
 		n := 76
 		if n > len(b64body) {
@@ -159,4 +177,48 @@ func buildMessage(from, to, subject, body string) []byte {
 		b64body = b64body[n:]
 	}
 	return buf.Bytes()
+}
+
+// buildMixedMessage builds a multipart/alternative message with text and HTML parts.
+func buildMixedMessage(from, to, subject, textBody, htmlBody string) []byte {
+	const boundary = "==_TMTF_BOUNDARY_=="
+	encSubject := mime.QEncoding.Encode("utf-8", subject)
+
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "From: %s\r\n", from)
+	fmt.Fprintf(&buf, "To: %s\r\n", to)
+	fmt.Fprintf(&buf, "Subject: %s\r\n", encSubject)
+	buf.WriteString("MIME-Version: 1.0\r\n")
+	fmt.Fprintf(&buf, "Content-Type: multipart/alternative; boundary=%q\r\n", boundary)
+	buf.WriteString("\r\n")
+
+	// Plain-text part
+	fmt.Fprintf(&buf, "--%s\r\n", boundary)
+	buf.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
+	buf.WriteString("Content-Transfer-Encoding: base64\r\n")
+	buf.WriteString("\r\n")
+	writeBase64(&buf, textBody)
+
+	// HTML part
+	fmt.Fprintf(&buf, "--%s\r\n", boundary)
+	buf.WriteString("Content-Type: text/html; charset=utf-8\r\n")
+	buf.WriteString("Content-Transfer-Encoding: base64\r\n")
+	buf.WriteString("\r\n")
+	writeBase64(&buf, htmlBody)
+
+	fmt.Fprintf(&buf, "--%s--\r\n", boundary)
+	return buf.Bytes()
+}
+
+func writeBase64(buf *bytes.Buffer, s string) {
+	b64 := base64.StdEncoding.EncodeToString([]byte(s))
+	for len(b64) > 0 {
+		n := 76
+		if n > len(b64) {
+			n = len(b64)
+		}
+		buf.WriteString(b64[:n])
+		buf.WriteString("\r\n")
+		b64 = b64[n:]
+	}
 }

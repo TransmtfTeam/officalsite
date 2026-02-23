@@ -170,6 +170,10 @@ func (h *Handler) ensureCSRFCookie(w http.ResponseWriter, r *http.Request) strin
 func (h *Handler) verifyCSRFToken(r *http.Request) bool {
 	cookieTok := h.csrfTokenFromRequest(r)
 	formTok := r.FormValue("csrf_token")
+	return h.verifyCSRFValue(cookieTok, formTok)
+}
+
+func (h *Handler) verifyCSRFValue(cookieTok, formTok string) bool {
 	if !isValidCSRFToken(cookieTok) || !isValidCSRFToken(formTok) {
 		return false
 	}
@@ -186,6 +190,13 @@ func (h *Handler) currentUser(r *http.Request) *store.User {
 		return u
 	}
 	return nil
+}
+
+func (h *Handler) isSystemAdminUser(u *store.User) bool {
+	if u == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(u.Email), strings.TrimSpace(h.cfg.AdminEmail))
 }
 
 
@@ -241,6 +252,55 @@ func (h *Handler) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(w, r)
 	}
+}
+
+// requirePermission allows access if the user is admin OR has the given permission
+// via their custom role. The built-in "member" role implies manage_projects,
+// manage_clients, and manage_announcements.
+func (h *Handler) requirePermission(perm string) func(http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			u := h.currentUser(r)
+			if u == nil {
+				http.Redirect(w, r, "/login?next="+r.URL.RequestURI(), http.StatusFound)
+				return
+			}
+			if !h.userHasPermission(r.Context(), u, perm) {
+				h.renderError(w, r, http.StatusForbidden, "Forbidden", "insufficient permissions")
+				return
+			}
+			next(w, r)
+		}
+	}
+}
+
+// userHasPermission returns true if the user is admin, a member with an implied
+// permission, or has a custom role that explicitly includes the permission.
+func (h *Handler) userHasPermission(ctx context.Context, u *store.User, perm string) bool {
+	if u.IsAdmin() {
+		return true
+	}
+	// Member role implies these three permissions.
+	memberImplied := map[string]bool{
+		"manage_projects":      true,
+		"manage_clients":       true,
+		"manage_announcements": true,
+	}
+	if u.IsMember() && memberImplied[perm] {
+		return true
+	}
+	// Custom role: check explicitly assigned permissions.
+	if !store.IsDefaultRole(u.Role) {
+		role, err := h.st.GetCustomRole(ctx, u.Role)
+		if err == nil && role != nil {
+			for _, p := range role.Permissions {
+				if p == perm {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 
@@ -383,46 +443,52 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	mux.HandleFunc("POST /login/2fa/passkey/finish", h.PasskeyLoginFinish)
 
 	// Member panel
-	mux.HandleFunc("GET /member/projects",              h.requireMember(h.MemberProjects))
-	mux.HandleFunc("POST /member/projects",             h.requireMember(h.MemberProjectCreate))
-	mux.HandleFunc("GET /member/projects/{id}/edit",    h.requireMember(h.MemberProjectEdit))
-	mux.HandleFunc("POST /member/projects/{id}/edit",   h.requireMember(h.MemberProjectUpdate))
-	mux.HandleFunc("POST /member/projects/{id}/delete", h.requireMember(h.MemberProjectDelete))
+	mux.HandleFunc("GET /member/projects",              h.requirePermission("manage_projects")(h.MemberProjects))
+	mux.HandleFunc("POST /member/projects",             h.requirePermission("manage_projects")(h.MemberProjectCreate))
+	mux.HandleFunc("GET /member/projects/{id}/edit",    h.requirePermission("manage_projects")(h.MemberProjectEdit))
+	mux.HandleFunc("POST /member/projects/{id}/edit",   h.requirePermission("manage_projects")(h.MemberProjectUpdate))
+	mux.HandleFunc("POST /member/projects/{id}/delete", h.requirePermission("manage_projects")(h.MemberProjectDelete))
+	mux.HandleFunc("GET /member/links",                 h.requirePermission("manage_projects")(h.MemberLinks))
+	mux.HandleFunc("POST /member/links",                h.requirePermission("manage_projects")(h.MemberLinkCreate))
+	mux.HandleFunc("GET /member/links/{id}/edit",       h.requirePermission("manage_projects")(h.MemberLinkEdit))
+	mux.HandleFunc("POST /member/links/{id}/edit",      h.requirePermission("manage_projects")(h.MemberLinkUpdate))
+	mux.HandleFunc("POST /member/links/{id}/delete",    h.requirePermission("manage_projects")(h.MemberLinkDelete))
 
-	// Admin panel - user management (admin-only)
+	// Admin panel - user management (admin-only or manage_users permission)
 	mux.HandleFunc("GET /admin",                                         h.requireAdmin(h.AdminDashboard))
-	mux.HandleFunc("GET /admin/users",                                   h.requireAdmin(h.AdminUsers))
-	mux.HandleFunc("POST /admin/users",                                  h.requireAdmin(h.AdminUserCreate))
-	mux.HandleFunc("POST /admin/users/{id}/update",                      h.requireAdmin(h.AdminUserUpdate))
-	mux.HandleFunc("POST /admin/users/{id}/delete",                      h.requireAdmin(h.AdminUserDelete))
-	mux.HandleFunc("GET /admin/users/{id}",                              h.requireAdmin(h.AdminUserDetail))
-	mux.HandleFunc("POST /admin/users/{id}/reset-password",              h.requireAdmin(h.AdminUserResetPassword))
-	mux.HandleFunc("POST /admin/users/{id}/disable-2fa",                 h.requireAdmin(h.AdminUserDisable2FA))
-	mux.HandleFunc("POST /admin/users/{id}/sessions/{sid}/revoke",       h.requireAdmin(h.AdminUserRevokeSession))
-	mux.HandleFunc("POST /admin/users/{id}/tokens/{tid}/revoke",         h.requireAdmin(h.AdminUserRevokeToken))
-	mux.HandleFunc("POST /admin/users/{id}/passkeys/{pkid}/delete",      h.requireAdmin(h.AdminDeletePasskey))
+	mux.HandleFunc("GET /admin/users",                                   h.requirePermission("manage_users")(h.AdminUsers))
+	mux.HandleFunc("POST /admin/users",                                  h.requirePermission("manage_users")(h.AdminUserCreate))
+	mux.HandleFunc("POST /admin/users/{id}/update",                      h.requirePermission("manage_users")(h.AdminUserUpdate))
+	mux.HandleFunc("POST /admin/users/{id}/delete",                      h.requirePermission("manage_users")(h.AdminUserDelete))
+	mux.HandleFunc("GET /admin/users/{id}",                              h.requirePermission("manage_users")(h.AdminUserDetail))
+	mux.HandleFunc("POST /admin/users/{id}/reset-password",              h.requirePermission("manage_users")(h.AdminUserResetPassword))
+	mux.HandleFunc("POST /admin/users/{id}/disable-2fa",                 h.requirePermission("manage_users")(h.AdminUserDisable2FA))
+	mux.HandleFunc("POST /admin/users/{id}/sessions/{sid}/revoke",       h.requirePermission("manage_users")(h.AdminUserRevokeSession))
+	mux.HandleFunc("POST /admin/users/{id}/tokens/{tid}/revoke",         h.requirePermission("manage_users")(h.AdminUserRevokeToken))
+	mux.HandleFunc("POST /admin/users/{id}/passkeys/{pkid}/delete",      h.requirePermission("manage_users")(h.AdminDeletePasskey))
 
-	// Admin panel - client management (member and above)
-	mux.HandleFunc("GET /admin/clients",                   h.requireMember(h.AdminClients))
-	mux.HandleFunc("GET /admin/clients/new",               h.requireMember(h.AdminClientCreatePage))
-	mux.HandleFunc("POST /admin/clients",                  h.requireMember(h.AdminClientCreate))
-	mux.HandleFunc("GET /admin/clients/{id}",              h.requireMember(h.AdminClientDetail))
-	mux.HandleFunc("POST /admin/clients/{id}/update",      h.requireMember(h.AdminClientUpdate))
-	mux.HandleFunc("POST /admin/clients/{id}/reset-secret", h.requireMember(h.AdminClientResetSecret))
-	mux.HandleFunc("POST /admin/clients/{id}/delete",      h.requireMember(h.AdminClientDelete))
+	// Admin panel - client management (manage_clients permission)
+	mux.HandleFunc("GET /admin/clients",                   h.requirePermission("manage_clients")(h.AdminClients))
+	mux.HandleFunc("GET /admin/clients/new",               h.requirePermission("manage_clients")(h.AdminClientCreatePage))
+	mux.HandleFunc("POST /admin/clients",                  h.requirePermission("manage_clients")(h.AdminClientCreate))
+	mux.HandleFunc("GET /admin/clients/{id}",              h.requirePermission("manage_clients")(h.AdminClientDetail))
+	mux.HandleFunc("POST /admin/clients/{id}/update",      h.requirePermission("manage_clients")(h.AdminClientUpdate))
+	mux.HandleFunc("POST /admin/clients/{id}/reset-secret", h.requirePermission("manage_clients")(h.AdminClientResetSecret))
+	mux.HandleFunc("POST /admin/clients/{id}/delete",      h.requirePermission("manage_clients")(h.AdminClientDelete))
 
-	// Admin panel - providers / roles / announcements / settings (admin-only)
-	mux.HandleFunc("GET /admin/providers",                          h.requireAdmin(h.AdminProviders))
-	mux.HandleFunc("POST /admin/providers",                         h.requireAdmin(h.AdminProviderCreate))
-	mux.HandleFunc("POST /admin/providers/{id}/toggle",             h.requireAdmin(h.AdminProviderToggle))
-	mux.HandleFunc("POST /admin/providers/{id}/delete",             h.requireAdmin(h.AdminProviderDelete))
-	mux.HandleFunc("GET /admin/roles",                              h.requireAdmin(h.AdminRoles))
-	mux.HandleFunc("POST /admin/roles",                             h.requireAdmin(h.AdminRoleCreate))
-	mux.HandleFunc("POST /admin/roles/{name}/delete",               h.requireAdmin(h.AdminRoleDelete))
-	mux.HandleFunc("GET /admin/announcements",                      h.requireAdmin(h.AdminAnnouncements))
-	mux.HandleFunc("POST /admin/announcements/{clientid}/save",     h.requireMember(h.AdminAnnouncementSave))
-	mux.HandleFunc("GET /admin/settings",                           h.requireAdmin(h.AdminSettings))
-	mux.HandleFunc("POST /admin/settings",                          h.requireAdmin(h.AdminSettingsSave))
+	// Admin panel - providers / roles / announcements / settings
+	mux.HandleFunc("GET /admin/providers",                          h.requirePermission("manage_providers")(h.AdminProviders))
+	mux.HandleFunc("POST /admin/providers",                         h.requirePermission("manage_providers")(h.AdminProviderCreate))
+	mux.HandleFunc("POST /admin/providers/{id}/toggle",             h.requirePermission("manage_providers")(h.AdminProviderToggle))
+	mux.HandleFunc("POST /admin/providers/{id}/delete",             h.requirePermission("manage_providers")(h.AdminProviderDelete))
+	mux.HandleFunc("GET /admin/roles",                              h.requirePermission("manage_roles")(h.AdminRoles))
+	mux.HandleFunc("POST /admin/roles",                             h.requirePermission("manage_roles")(h.AdminRoleCreate))
+	mux.HandleFunc("POST /admin/roles/{name}/delete",               h.requirePermission("manage_roles")(h.AdminRoleDelete))
+	mux.HandleFunc("GET /admin/announcements",                      h.requirePermission("manage_announcements")(h.AdminAnnouncements))
+	mux.HandleFunc("POST /admin/announcements/{clientid}/save",     h.requirePermission("manage_announcements")(h.AdminAnnouncementSave))
+	mux.HandleFunc("GET /admin/settings",                           h.requirePermission("manage_settings")(h.AdminSettings))
+	mux.HandleFunc("POST /admin/settings",                          h.requirePermission("manage_settings")(h.AdminSettingsSave))
+	mux.HandleFunc("POST /admin/settings/upload-icon",              h.requirePermission("manage_settings")(h.AdminSettingsUploadIcon))
 
 	// Public API
 	mux.HandleFunc("GET /api/announcement/{clientid}", h.AnnouncementAPI)

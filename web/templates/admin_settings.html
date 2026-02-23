@@ -28,6 +28,27 @@
     <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
     {{end}}
 
+    {{/* ── Icon upload — separate multipart form, must NOT be nested ── */}}
+    <div class="form-panel" style="margin-bottom:1.2rem">
+      <p class="form-panel-title">站点图标（favicon）</p>
+      {{with .Data}}{{$iconURL := index . "site_icon_url"}}
+      {{if $iconURL}}
+      <div style="display:flex;align-items:center;gap:.8rem;margin-bottom:.8rem">
+        <img src="{{$iconURL}}" alt="当前图标" style="width:40px;height:40px;object-fit:contain;border-radius:6px;border:1px solid rgba(0,0,0,0.1)">
+        <span style="font-size:.82rem;color:var(--text2)">当前图标</span>
+      </div>
+      {{end}}
+      {{end}}
+      <p style="font-size:.82rem;color:var(--text2);margin:0 0 .6rem">直接上传图片文件（PNG / JPG / SVG / ICO，最大 512 KB）：</p>
+      <form method="POST" action="/admin/settings/upload-icon" enctype="multipart/form-data"
+            style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <input type="file" name="icon_file" accept="image/*" class="form-control" style="flex:1;min-width:200px;max-width:360px">
+        <button class="btn btn-primary btn-sm" type="submit">上传图标</button>
+      </form>
+    </div>
+
+    {{/* ── Main settings form ── */}}
     <form method="POST" action="/admin/settings">
       <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
 
@@ -46,9 +67,10 @@
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">站点图标 URL（favicon）</label>
+          <label class="form-label">站点图标 URL（也可通过上方直接上传）</label>
           <input class="form-control" type="url" name="site_icon_url"
-            value="{{with .Data}}{{index . "site_icon_url"}}{{end}}" placeholder="https://example.com/favicon.ico">
+            value="{{with .Data}}{{index . "site_icon_url"}}{{end}}"
+            placeholder="https://example.com/favicon.ico 或上传后自动填入">
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -68,57 +90,85 @@
         <p class="form-panel-title">邮件服务（注册通知等）</p>
         <div class="form-group">
           <label class="form-label">邮件发送方式</label>
-          <select class="form-control" name="email_provider" style="max-width:240px">
+          <select class="form-control" name="email_provider" id="email-provider-select" style="max-width:240px"
+                  onchange="updateEmailSections()">
             <option value="" {{if eq (index .Data "email_provider") ""}}selected{{end}}>不发送</option>
             <option value="smtp" {{if eq (index .Data "email_provider") "smtp"}}selected{{end}}>SMTP</option>
             <option value="resend" {{if eq (index .Data "email_provider") "resend"}}selected{{end}}>Resend</option>
           </select>
         </div>
 
-        <p style="font-size:.85rem;font-weight:600;color:var(--text2);margin:.8rem 0 .5rem">SMTP 设置</p>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">SMTP 主机</label>
-            <input class="form-control" type="text" name="smtp_host"
-              value="{{with .Data}}{{index . "smtp_host"}}{{end}}" placeholder="smtp.example.com">
+        <div id="smtp-section">
+          <p style="font-size:.85rem;font-weight:600;color:var(--text2);margin:.8rem 0 .5rem">SMTP 设置</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">SMTP 主机</label>
+              <input class="form-control" type="text" name="smtp_host"
+                value="{{with .Data}}{{index . "smtp_host"}}{{end}}" placeholder="smtp.example.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">端口</label>
+              <input class="form-control" type="text" name="smtp_port"
+                value="{{with .Data}}{{index . "smtp_port"}}{{end}}" placeholder="587">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">用户名</label>
+              <input class="form-control" type="text" name="smtp_user"
+                value="{{with .Data}}{{index . "smtp_user"}}{{end}}" placeholder="user@example.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">密码</label>
+              <input class="form-control" type="password" name="smtp_pass"
+                placeholder="（留空不修改）">
+            </div>
           </div>
           <div class="form-group">
-            <label class="form-label">端口</label>
-            <input class="form-control" type="text" name="smtp_port"
-              value="{{with .Data}}{{index . "smtp_port"}}{{end}}" placeholder="587">
+            <label class="form-label">发件人地址</label>
+            <input class="form-control" type="text" name="smtp_from"
+              value="{{with .Data}}{{index . "smtp_from"}}{{end}}" placeholder="noreply@example.com">
           </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">用户名</label>
-            <input class="form-control" type="text" name="smtp_user"
-              value="{{with .Data}}{{index . "smtp_user"}}{{end}}" placeholder="user@example.com">
-          </div>
-          <div class="form-group">
-            <label class="form-label">密码</label>
-            <input class="form-control" type="password" name="smtp_pass"
-              placeholder="（留空不修改）">
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">发件人地址</label>
-          <input class="form-control" type="text" name="smtp_from"
-            value="{{with .Data}}{{index . "smtp_from"}}{{end}}" placeholder="noreply@example.com">
         </div>
 
-        <p style="font-size:.85rem;font-weight:600;color:var(--text2);margin:.8rem 0 .5rem">Resend 设置</p>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Resend API Key</label>
-            <input class="form-control" type="password" name="resend_api_key"
-              placeholder="re_xxx（留空不修改）">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Resend 发件人</label>
-            <input class="form-control" type="text" name="resend_from"
-              value="{{with .Data}}{{index . "resend_from"}}{{end}}" placeholder="noreply@example.com">
+        <div id="resend-section">
+          <p style="font-size:.85rem;font-weight:600;color:var(--text2);margin:.8rem 0 .5rem">Resend 设置</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Resend API Key</label>
+              <input class="form-control" type="password" name="resend_api_key"
+                placeholder="re_xxx（留空不修改）">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Resend 发件人</label>
+              <input class="form-control" type="text" name="resend_from"
+                value="{{with .Data}}{{index . "resend_from"}}{{end}}" placeholder="noreply@example.com">
+            </div>
           </div>
         </div>
+
+        {{/* Email template customization */}}
+        <details style="margin-top:1rem">
+          <summary style="font-size:.85rem;font-weight:600;color:var(--text2);cursor:pointer;user-select:none">
+            邮件模版自定义（不推荐修改，留空使用与站点风格一致的默认模版）
+          </summary>
+          <div style="margin-top:.8rem;padding:.8rem;border-radius:8px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.3);margin-bottom:.8rem">
+            <p style="font-size:.82rem;color:#92400e;margin:0">
+              ⚠️ 默认模版已与站点风格保持一致，不建议修改。如需自定义，可填写 HTML 内容，
+              支持变量：<code>{{"{{"}}SiteName{{"}}"}}</code>、<code>{{"{{"}}Name{{"}}"}}</code>、<code>{{"{{"}}ProfileURL{{"}}"}}</code>、<code>{{"{{"}}NewPassword{{"}}"}}</code>。
+            </p>
+          </div>
+          <div class="form-group">
+            <label class="form-label">欢迎邮件模版（HTML，留空使用默认）</label>
+            <textarea class="form-control" name="email_tpl_welcome" rows="6"
+              placeholder="留空使用默认模版...">{{with .Data}}{{index . "email_tpl_welcome"}}{{end}}</textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">密码重置邮件模版（HTML，留空使用默认）</label>
+            <textarea class="form-control" name="email_tpl_password_reset" rows="6"
+              placeholder="留空使用默认模版...">{{with .Data}}{{index . "email_tpl_password_reset"}}{{end}}</textarea>
+          </div>
+        </details>
       </div>
 
       <div class="form-panel">
@@ -139,4 +189,13 @@
     </form>
   </main>
 </div>
+
+<script>
+function updateEmailSections() {
+  var val = document.getElementById('email-provider-select').value;
+  document.getElementById('smtp-section').style.display = (val === 'smtp') ? '' : 'none';
+  document.getElementById('resend-section').style.display = (val === 'resend') ? '' : 'none';
+}
+updateEmailSections();
+</script>
 {{end}}

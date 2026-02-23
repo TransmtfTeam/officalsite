@@ -14,9 +14,14 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusNotFound, "Not Found", r.URL.Path)
 		return
 	}
-	projects, _ := h.st.ListProjects(r.Context())
+	ctx := r.Context()
+	projects, _ := h.st.ListProjects(ctx)
+	links, _ := h.st.ListFriendLinks(ctx)
 	d := h.pageData(r, "MTF - Team TransMTF")
-	d.Data = projects
+	d.Data = map[string]any{
+		"Projects": projects,
+		"Links":    links,
+	}
 	h.render(w, "home", d)
 }
 
@@ -184,6 +189,7 @@ func (h *Handler) ProfilePost(w http.ResponseWriter, r *http.Request) {
 	avatar := strings.TrimSpace(r.FormValue("avatar_url"))
 	newPass := r.FormValue("new_password")
 	confirm := r.FormValue("confirm_password")
+	currentPass := r.FormValue("current_password")
 
 	fail := func(msg string) {
 		d := h.pageData(r, "Profile")
@@ -207,15 +213,12 @@ func (h *Handler) ProfilePost(w http.ResponseWriter, r *http.Request) {
 		fail("Display name cannot be empty")
 		return
 	}
-	if err := h.st.UpdateUser(ctx, u.ID, name, u.Role, u.Active); err != nil {
-		fail("Save failed: " + err.Error())
-		return
-	}
-	if avatar != "" {
-		_ = h.st.UpdateUserAvatar(ctx, u.ID, avatar)
-	}
-
+	// Validate password fields BEFORE any writes to avoid partial updates.
 	if newPass != "" {
+		if !h.st.VerifyPassword(u, currentPass) {
+			fail("当前密码不正确")
+			return
+		}
 		if len(newPass) < 8 {
 			fail("New password must be at least 8 characters")
 			return
@@ -224,6 +227,16 @@ func (h *Handler) ProfilePost(w http.ResponseWriter, r *http.Request) {
 			fail("Passwords do not match")
 			return
 		}
+	}
+
+	if err := h.st.UpdateUser(ctx, u.ID, name, u.Role, u.Active); err != nil {
+		fail("Save failed: " + err.Error())
+		return
+	}
+	if avatar != "" {
+		_ = h.st.UpdateUserAvatar(ctx, u.ID, avatar)
+	}
+	if newPass != "" {
 		if err := h.st.UpdatePassword(ctx, u.ID, newPass); err != nil {
 			fail("Password update failed")
 			return

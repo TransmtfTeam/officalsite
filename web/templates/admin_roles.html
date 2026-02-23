@@ -23,12 +23,15 @@
   <main class="panel-content">
     <h1 class="panel-title">角色管理</h1>
     <p class="panel-sub">
-      三个内置角色（user / member / admin）不可删除。可以在此创建自定义角色。
+      三个内置角色（user / member / admin）不可删除。可以在此创建自定义角色并分配站点权限。
     </p>
 
     {{if .Flash}}
     <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
     {{end}}
+
+    {{with .Data}}
+    {{$perms := index . "Permissions"}}
 
     <div class="form-panel">
       <p class="form-panel-title">创建自定义角色</p>
@@ -44,29 +47,62 @@
             <input class="form-control" type="text" name="label" placeholder="编辑员">
           </div>
         </div>
-        <button class="btn btn-primary btn-sm" type="submit">创建角色</button>
+        <div class="form-group" style="margin-top:.4rem">
+          <label class="form-label">站点权限</label>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.5rem .8rem;margin-top:.4rem">
+            {{range $perms}}
+            <label style="display:flex;align-items:flex-start;gap:.5rem;cursor:pointer;padding:.45rem .6rem;border-radius:8px;border:1px solid rgba(0,0,0,0.08);background:rgba(255,255,255,0.5)">
+              <input type="checkbox" name="permissions" value="{{index . "name"}}" style="margin-top:.15rem;flex-shrink:0">
+              <span>
+                <span style="font-size:.88rem;font-weight:600;color:var(--text)">{{index . "label"}}</span><br>
+                <span style="font-size:.78rem;color:var(--text2)">{{index . "desc"}}</span>
+              </span>
+            </label>
+            {{end}}
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit" style="margin-top:.8rem">创建角色</button>
       </form>
     </div>
 
     <div class="card">
       <p style="font-size:.85rem;font-weight:600;color:var(--text2);margin-bottom:.8rem">内置角色</p>
       <table class="data-table" style="margin-bottom:1.5rem">
-        <thead><tr><th>角色名</th><th>说明</th></tr></thead>
+        <thead><tr><th>角色名</th><th>说明</th><th>权限</th></tr></thead>
         <tbody>
-          <tr><td><span class="role-badge role-user">user</span></td><td style="font-size:.88rem;color:var(--text2)">普通注册用户</td></tr>
-          <tr><td><span class="role-badge role-member">member</span></td><td style="font-size:.88rem;color:var(--text2)">团队成员，可管理应用</td></tr>
-          <tr><td><span class="role-badge role-admin">admin</span></td><td style="font-size:.88rem;color:var(--text2)">管理员，完整权限</td></tr>
+          <tr>
+            <td><span class="role-badge role-user">user</span></td>
+            <td style="font-size:.88rem;color:var(--text2)">普通注册用户</td>
+            <td style="font-size:.8rem;color:var(--text2)">登录、个人资料、OIDC 授权</td>
+          </tr>
+          <tr>
+            <td><span class="role-badge role-member">member</span></td>
+            <td style="font-size:.88rem;color:var(--text2)">团队成员</td>
+            <td style="font-size:.8rem;color:var(--text2)">管理项目 · 管理应用 · 管理公告</td>
+          </tr>
+          <tr>
+            <td><span class="role-badge role-admin">admin</span></td>
+            <td style="font-size:.88rem;color:var(--text2)">管理员</td>
+            <td style="font-size:.8rem;color:var(--text2)">全部权限</td>
+          </tr>
         </tbody>
       </table>
 
       <p style="font-size:.85rem;font-weight:600;color:var(--text2);margin-bottom:.8rem">自定义角色</p>
       <table class="data-table">
-        <thead><tr><th>角色名</th><th>标签</th><th>创建时间</th><th>操作</th></tr></thead>
+        <thead><tr><th>角色名</th><th>标签</th><th>已分配权限</th><th>创建时间</th><th>操作</th></tr></thead>
         <tbody>
-          {{range .Data}}
+          {{range index . "Roles"}}
           <tr>
             <td><span class="role-badge role-user">{{.Name}}</span></td>
             <td>{{if .Label}}{{.Label}}{{else}}<span style="color:var(--text2)">（无）</span>{{end}}</td>
+            <td style="font-size:.8rem">
+              {{if .Permissions}}
+                {{range .Permissions}}<span class="proj-tag">{{.}}</span> {{end}}
+              {{else}}
+                <span style="color:var(--text2)">（无权限）</span>
+              {{end}}
+            </td>
             <td>{{.CreatedAt.Format "2006-01-02"}}</td>
             <td>
               <form method="POST" action="/admin/roles/{{.Name}}/delete">
@@ -77,11 +113,12 @@
             </td>
           </tr>
           {{else}}
-          <tr><td colspan="4" style="color:var(--text2);text-align:center;padding:1.5rem">暂无自定义角色</td></tr>
+          <tr><td colspan="5" style="color:var(--text2);text-align:center;padding:1.5rem">暂无自定义角色</td></tr>
           {{end}}
         </tbody>
       </table>
     </div>
+    {{end}}
   </main>
 </div>
 {{end}}

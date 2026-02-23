@@ -29,4 +29,5 @@ document.addEventListener('DOMContentLoaded', function() {
     var totpModal = document.getElementById('totp-setup-modal');
     if (totpModal) totpModal.classList.add('open');
   }
+
 });
