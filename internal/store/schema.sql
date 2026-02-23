@@ -155,7 +155,6 @@ CREATE TABLE IF NOT EXISTS custom_roles (
 );
 
 -- Compatibility migrations for already-initialized databases.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_clients_name ON oauth_clients(name);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT NOT NULL DEFAULT '';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_pending_secret TEXT NOT NULL DEFAULT '';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT false;
