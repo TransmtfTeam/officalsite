@@ -249,7 +249,7 @@ func (h *Handler) PasskeyLoginBegin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	options, session, err := wa.BeginAuthentication(wau)
+	options, session, err := wa.BeginLogin(wau)
 	if err != nil {
 		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -322,7 +322,7 @@ func (h *Handler) PasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	credential, err := wa.FinishAuthentication(wau, session, r)
+	credential, err := wa.FinishLogin(wau, session, r)
 	if err != nil {
 		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "passkey verification failed: " + err.Error()})
 		return
