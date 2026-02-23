@@ -1,0 +1,53 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="panel-wrap">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">管理导航</div>
+      <a class="sidebar-link" href="/admin">概览</a>
+      <a class="sidebar-link" href="/admin/users">用户</a>
+      <a class="sidebar-link" href="/admin/clients">应用</a>
+      <a class="sidebar-link" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/roles">角色</a>
+      <a class="sidebar-link active" href="/admin/announcements">公告</a>
+      <a class="sidebar-link" href="/admin/settings">设置</a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">快速入口</div>
+      <a class="sidebar-link" href="/">返回首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
+    </div>
+  </aside>
+
+  <main class="panel-content">
+    <h1 class="panel-title">应用公告管理</h1>
+    <p class="panel-sub">为每个应用设置公告，用户登录该应用时可见。公告通过 <code class="mono">/api/announcement/{clientid}</code> 公开访问。</p>
+
+    {{if .Flash}}
+    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+    {{end}}
+
+    {{range .Data}}
+    <div class="form-panel" style="margin-bottom:1.2rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.8rem">
+        <p class="form-panel-title" style="margin:0">{{.Name}}</p>
+        <code class="mono" style="font-size:.78rem;color:var(--text2)">{{.ClientID}}</code>
+      </div>
+      <form method="POST" action="/admin/announcements/{{.ClientID}}/save">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-group" style="margin-bottom:.6rem">
+          <textarea class="form-control" name="content" rows="2"
+            placeholder="输入公告内容（留空则清除）">{{.Announcement}}</textarea>
+        </div>
+        <button class="btn btn-ghost btn-sm" type="submit">保存</button>
+      </form>
+    </div>
+    {{else}}
+    <div class="card" style="text-align:center;padding:2rem;color:var(--text2)">
+      暂无应用，请先<a href="/admin/clients/new">创建应用</a>。
+    </div>
+    {{end}}
+  </main>
+</div>
+{{end}}

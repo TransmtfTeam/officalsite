@@ -243,13 +243,13 @@ func (h *Handler) OIDCProviderLogin(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 	provider, err := h.st.GetOIDCProviderBySlug(r.Context(), slug)
 	if err != nil || !provider.Enabled {
-		h.renderError(w, r, http.StatusNotFound, "登录方式不存在", slug)
+        h.renderError(w, r, http.StatusNotFound, "Provider not found", slug)
 		return
 	}
 
 	doc, err := fetchRPDiscovery(provider.IssuerURL)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadGateway, "无法获取登录配置", err.Error())
+		h.renderError(w, r, http.StatusBadGateway, "Unable to load login configuration", err.Error())
 		return
 	}
 
@@ -262,12 +262,12 @@ func (h *Handler) OIDCProviderLogin(w http.ResponseWriter, r *http.Request) {
 		scopes = []string{"openid", "email", "profile"}
 	}
 	if !containsScope(scopes, "openid") {
-		h.renderError(w, r, http.StatusBadRequest, "登录配置错误", "provider scopes must include openid")
+		h.renderError(w, r, http.StatusBadRequest, "Invalid provider configuration", "provider scopes must include openid")
 		return
 	}
 
 	if err := h.st.CreateOIDCState(r.Context(), state, slug, nonce, verifier, next); err != nil {
-		h.renderError(w, r, http.StatusInternalServerError, "状态创建失败", err.Error())
+        h.renderError(w, r, http.StatusInternalServerError, "State creation failed", err.Error())
 		return
 	}
 
@@ -293,51 +293,51 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 
 	if errCode := r.URL.Query().Get("error"); errCode != "" {
 		desc := r.URL.Query().Get("error_description")
-		h.renderError(w, r, http.StatusBadRequest, "登录被拒绝", errCode+": "+desc)
+        h.renderError(w, r, http.StatusBadRequest, "Login denied", errCode+": "+desc)
 		return
 	}
 
 	code := r.URL.Query().Get("code")
 	if strings.TrimSpace(code) == "" {
-		h.renderError(w, r, http.StatusBadRequest, "登录失败", "missing code")
+		h.renderError(w, r, http.StatusBadRequest, "Login failed", "missing code")
 		return
 	}
 	stateVal := r.URL.Query().Get("state")
 	if strings.TrimSpace(stateVal) == "" {
-		h.renderError(w, r, http.StatusBadRequest, "登录失败", "missing state")
+		h.renderError(w, r, http.StatusBadRequest, "Login failed", "missing state")
 		return
 	}
 	st, err := h.st.ConsumeOIDCState(r.Context(), stateVal)
 	if err != nil || st.Provider != slug {
-		h.renderError(w, r, http.StatusBadRequest, "登录状态无效", "请重新发起登录")
+        h.renderError(w, r, http.StatusBadRequest, "Invalid login state", "Please start login again")
 		return
 	}
 
 	provider, err := h.st.GetOIDCProviderBySlug(r.Context(), slug)
 	if err != nil || !provider.Enabled {
-		h.renderError(w, r, http.StatusNotFound, "登录方式不存在", slug)
+        h.renderError(w, r, http.StatusNotFound, "Provider not found", slug)
 		return
 	}
 
 	doc, err := fetchRPDiscovery(provider.IssuerURL)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadGateway, "无法获取登录配置", err.Error())
+		h.renderError(w, r, http.StatusBadGateway, "Unable to load login configuration", err.Error())
 		return
 	}
 
 	tok, err := rpExchangeCode(doc.TokenEndpoint, provider, code, h.cfg.Issuer+"/auth/oidc/"+slug+"/callback", st.Verifier)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadGateway, "Token 交换失败", err.Error())
+		h.renderError(w, r, http.StatusBadGateway, "Token exchange failed", err.Error())
 		return
 	}
 	if tok.IDToken == "" {
-		h.renderError(w, r, http.StatusBadGateway, "登录失败", "缺少 id_token")
+		h.renderError(w, r, http.StatusBadGateway, "Login failed", "missing id_token")
 		return
 	}
 
 	idClaims, err := verifyProviderIDToken(tok.IDToken, doc, provider.ClientID, st.Nonce)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadGateway, "ID Token 校验失败", err.Error())
+		h.renderError(w, r, http.StatusBadGateway, "ID Token verification failed", err.Error())
 		return
 	}
 
@@ -364,7 +364,7 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 		usub, uemail, uverified, uname, upic, uiErr := rpUserInfo(doc.UserinfoEndpoint, tok.AccessToken)
 		if uiErr == nil {
 			if subject != "" && usub != "" && usub != subject {
-				h.renderError(w, r, http.StatusBadGateway, "登录失败", "userinfo sub mismatch")
+				h.renderError(w, r, http.StatusBadGateway, "Login failed", "userinfo sub mismatch")
 				return
 			}
 			if subject == "" {
@@ -386,7 +386,7 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if subject == "" {
-		h.renderError(w, r, http.StatusBadGateway, "获取用户信息失败", "missing sub")
+		h.renderError(w, r, http.StatusBadGateway, "Failed to fetch user info", "missing sub")
 		return
 	}
 
@@ -415,7 +415,7 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 			}
 			u, err = h.st.CreateUser(ctx, createEmail, store.RandomHex(32), name, "user")
 			if err != nil {
-				h.renderError(w, r, http.StatusInternalServerError, "创建账号失败", err.Error())
+				h.renderError(w, r, http.StatusInternalServerError, "Failed to create user", err.Error())
 				return
 			}
 			if avatar != "" {
@@ -424,13 +424,13 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := h.st.LinkIdentity(ctx, u.ID, slug, subject); err != nil {
-			h.renderError(w, r, http.StatusInternalServerError, "身份绑定失败", err.Error())
+			h.renderError(w, r, http.StatusInternalServerError, "Failed to link identity", err.Error())
 			return
 		}
 	}
 
 	if !u.Active {
-		h.renderError(w, r, http.StatusForbidden, "账号已停用", "请联系管理员")
+        h.renderError(w, r, http.StatusForbidden, "Account disabled", "Please contact administrator")
 		return
 	}
 	if name != "" && strings.TrimSpace(u.DisplayName) == "" {
@@ -447,7 +447,7 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 
 	sid, err := h.st.CreateSession(ctx, u.ID)
 	if err != nil {
-		h.renderError(w, r, http.StatusInternalServerError, "会话创建失败", err.Error())
+		h.renderError(w, r, http.StatusInternalServerError, "Failed to create session", err.Error())
 		return
 	}
 	h.setSessionCookie(w, sid)

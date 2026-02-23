@@ -1,0 +1,223 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="panel-wrap">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">管理导航</div>
+      <a class="sidebar-link" href="/admin">概览</a>
+      <a class="sidebar-link" href="/admin/users">用户</a>
+      <a class="sidebar-link active" href="/admin/users">用户详情</a>
+      <a class="sidebar-link" href="/admin/clients">应用</a>
+      <a class="sidebar-link" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/roles">角色</a>
+      <a class="sidebar-link" href="/admin/announcements">公告</a>
+      <a class="sidebar-link" href="/admin/settings">设置</a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">快速入口</div>
+      <a class="sidebar-link" href="/">返回首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
+    </div>
+  </aside>
+
+  <main class="panel-content">
+    {{with .Data}}
+    {{$user := index . "User"}}
+    {{$isSysAdmin := index . "IsSystemAdmin"}}
+
+    <div style="margin-bottom:.5rem">
+      <a href="/admin/users" style="color:var(--text2);font-size:.9rem">← 用户列表</a>
+    </div>
+
+    {{if $.Flash}}
+    <div class="flash {{if $.IsError}}flash-err{{else}}flash-ok{{end}}">{{$.Flash}}</div>
+    {{end}}
+
+    <h1 class="panel-title">{{$user.DisplayName}}</h1>
+    {{if $isSysAdmin}}<span class="role-badge role-admin" style="margin-bottom:1rem;display:inline-block">系统管理员</span>{{end}}
+
+    {{/* ── Basic info ── */}}
+    <div class="detail-section">
+      <div class="detail-section-title">账户信息</div>
+      <div class="detail-row"><div class="detail-key">用户 ID</div><div class="detail-val mono">{{$user.ID}}</div></div>
+      <div class="detail-row"><div class="detail-key">邮箱</div><div class="detail-val">{{$user.Email}}</div></div>
+      <div class="detail-row"><div class="detail-key">显示名称</div><div class="detail-val">{{$user.DisplayName}}</div></div>
+      <div class="detail-row">
+        <div class="detail-key">角色</div>
+        <div class="detail-val">
+          <span class="role-badge {{if eq $user.Role "admin"}}role-admin{{else if eq $user.Role "member"}}role-member{{else}}role-user{{end}}">
+            {{$user.Role}}
+          </span>
+        </div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">状态</div>
+        <div class="detail-val">{{if $user.Active}}<span style="color:#16a34a">启用</span>{{else}}<span style="color:#dc2626">停用</span>{{end}}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">两步验证</div>
+        <div class="detail-val">{{if $user.TOTPEnabled}}<span style="color:#16a34a">已启用</span>{{else}}<span style="color:var(--text2)">未启用</span>{{end}}</div>
+      </div>
+      <div class="detail-row"><div class="detail-key">注册时间</div><div class="detail-val">{{$user.CreatedAt.Format "2006-01-02 15:04:05"}}</div></div>
+    </div>
+
+    {{/* ── Reset password ── */}}
+    <div class="detail-section">
+      <div class="detail-section-title">重置密码</div>
+      <form method="POST" action="/admin/users/{{$user.ID}}/reset-password" style="display:flex;gap:.8rem;align-items:flex-end">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-group" style="flex:1;margin-bottom:0">
+          <label class="form-label">新密码（至少 8 位）</label>
+          <input class="form-control" type="password" name="new_password" minlength="8" required>
+        </div>
+        <button class="btn btn-ghost btn-sm" type="submit">重置密码</button>
+      </form>
+    </div>
+
+    {{/* ── 2FA management ── */}}
+    {{if $user.TOTPEnabled}}
+    <div class="detail-section">
+      <div class="detail-section-title">两步验证管理</div>
+      <p style="font-size:.88rem;color:var(--text2);margin-bottom:.8rem">
+        强制关闭用户的 TOTP 两步验证（用于账户恢复）。
+      </p>
+      <form method="POST" action="/admin/users/{{$user.ID}}/disable-2fa">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <button class="btn btn-ghost btn-sm" type="submit"
+          onclick="return confirm('确认关闭该用户的 2FA？')">关闭 2FA</button>
+      </form>
+    </div>
+    {{end}}
+
+    {{/* ── External identities ── */}}
+    {{$identities := index . "Identities"}}
+    {{if $identities}}
+    <div class="detail-section">
+      <div class="detail-section-title">外部登录账号</div>
+      <table class="data-table">
+        <thead><tr><th>提供商</th><th>Subject</th><th>关联时间</th></tr></thead>
+        <tbody>
+          {{range $identities}}
+          <tr>
+            <td>{{.Provider}}</td>
+            <td class="mono" style="font-size:.8rem">{{.Subject}}</td>
+            <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{end}}
+
+    {{/* ── Passkeys ── */}}
+    {{$passkeys := index . "Passkeys"}}
+    <div class="detail-section">
+      <div class="detail-section-title">Passkey（{{len $passkeys}} 个）</div>
+      {{if $passkeys}}
+      {{range $passkeys}}
+      <div class="passkey-item">
+        <div class="passkey-icon">🔑</div>
+        <div class="passkey-info">
+          <div class="passkey-name">{{.Name}}</div>
+          <div class="passkey-date">注册于 {{.CreatedAt.Format "2006-01-02"}}</div>
+        </div>
+        <form method="POST" action="/admin/users/{{$user.ID}}/passkeys/{{.ID}}/delete">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <button class="btn btn-danger btn-sm" type="submit">删除</button>
+        </form>
+      </div>
+      {{end}}
+      {{else}}
+      <p style="font-size:.88rem;color:var(--text2)">未注册任何 Passkey</p>
+      {{end}}
+    </div>
+
+    {{/* ── Sessions ── */}}
+    {{$sessions := index . "Sessions"}}
+    <div class="detail-section">
+      <div class="detail-section-title">活跃会话（{{len $sessions}} 个）</div>
+      {{if $sessions}}
+      <table class="data-table">
+        <thead><tr><th>会话 ID</th><th>创建时间</th><th>过期时间</th><th>操作</th></tr></thead>
+        <tbody>
+          {{range $sessions}}
+          <tr>
+            <td class="mono" style="font-size:.75rem">{{slice .ID 0 8}}…</td>
+            <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+            <td>{{.ExpiresAt.Format "2006-01-02 15:04"}}</td>
+            <td>
+              <form method="POST" action="/admin/users/{{$user.ID}}/sessions/{{.ID}}/revoke">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button class="btn btn-danger btn-sm" type="submit">撤销</button>
+              </form>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{else}}
+      <p style="font-size:.88rem;color:var(--text2)">无活跃会话</p>
+      {{end}}
+    </div>
+
+    {{/* ── Access Tokens ── */}}
+    {{$ats := index . "AccessTokens"}}
+    {{if $ats}}
+    <div class="detail-section">
+      <div class="detail-section-title">Access Token（{{len $ats}} 个）</div>
+      <table class="data-table">
+        <thead><tr><th>ID</th><th>Client</th><th>Scopes</th><th>过期</th><th>操作</th></tr></thead>
+        <tbody>
+          {{range $ats}}
+          <tr>
+            <td class="mono" style="font-size:.75rem">{{slice .ID 0 8}}…</td>
+            <td class="mono" style="font-size:.75rem">{{.ClientID}}</td>
+            <td style="font-size:.8rem">{{range .Scopes}}<span class="proj-tag">{{.}}</span> {{end}}</td>
+            <td style="font-size:.8rem">{{.ExpiresAt.Format "01-02 15:04"}}</td>
+            <td>
+              <form method="POST" action="/admin/users/{{$user.ID}}/tokens/{{.ID}}/revoke">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <input type="hidden" name="type" value="access">
+                <button class="btn btn-danger btn-sm" type="submit">撤销</button>
+              </form>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{end}}
+
+    {{/* ── Refresh Tokens ── */}}
+    {{$rts := index . "RefreshTokens"}}
+    {{if $rts}}
+    <div class="detail-section">
+      <div class="detail-section-title">Refresh Token（{{len $rts}} 个）</div>
+      <table class="data-table">
+        <thead><tr><th>ID</th><th>Client</th><th>Scopes</th><th>过期</th><th>操作</th></tr></thead>
+        <tbody>
+          {{range $rts}}
+          <tr>
+            <td class="mono" style="font-size:.75rem">{{slice .ID 0 8}}…</td>
+            <td class="mono" style="font-size:.75rem">{{.ClientID}}</td>
+            <td style="font-size:.8rem">{{range .Scopes}}<span class="proj-tag">{{.}}</span> {{end}}</td>
+            <td style="font-size:.8rem">{{.ExpiresAt.Format "01-02 15:04"}}</td>
+            <td>
+              <form method="POST" action="/admin/users/{{$user.ID}}/tokens/{{.ID}}/revoke">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <input type="hidden" name="type" value="refresh">
+                <button class="btn btn-danger btn-sm" type="submit">撤销</button>
+              </form>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{end}}
+
+    {{end}}
+  </main>
+</div>
+{{end}}

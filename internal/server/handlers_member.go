@@ -10,7 +10,7 @@ import (
 
 func (h *Handler) MemberProjects(w http.ResponseWriter, r *http.Request) {
 	projects, _ := h.st.ListProjects(r.Context())
-	d := h.pageData(r, "项目管理")
+	d := h.pageData(r, "Project Management")
 	d.Data = projects
 	h.render(w, "member_projects", d)
 }
@@ -27,11 +27,11 @@ func (h *Handler) MemberProjectCreate(w http.ResponseWriter, r *http.Request) {
 
 	p := projectFromForm(r)
 	ctx := r.Context()
-	d := h.pageData(r, "项目管理")
+	d := h.pageData(r, "Project Management")
 	if err := h.st.CreateProject(ctx, p); err != nil {
 		projects, _ := h.st.ListProjects(ctx)
 		d.Data = projects
-		d.Flash = "创建失败: " + err.Error()
+		d.Flash = "Create failed: " + err.Error()
 		d.IsError = true
 		h.render(w, "member_projects", d)
 		return
@@ -39,7 +39,7 @@ func (h *Handler) MemberProjectCreate(w http.ResponseWriter, r *http.Request) {
 
 	projects, _ := h.st.ListProjects(ctx)
 	d.Data = projects
-	d.Flash = "项目已创建"
+    d.Flash = "Project created"
 	h.render(w, "member_projects", d)
 }
 
@@ -47,10 +47,10 @@ func (h *Handler) MemberProjectEdit(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	p, err := h.st.GetProject(r.Context(), id)
 	if err != nil {
-		h.renderError(w, r, http.StatusNotFound, "项目不存在", id)
+        h.renderError(w, r, http.StatusNotFound, "Project not found", id)
 		return
 	}
-	d := h.pageData(r, "编辑项目")
+	d := h.pageData(r, "Edit Project")
 	d.Data = p
 	h.render(w, "member_project_edit", d)
 }
@@ -69,16 +69,16 @@ func (h *Handler) MemberProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	p := projectFromForm(r)
 	p.ID = id
 	ctx := r.Context()
-	d := h.pageData(r, "编辑项目")
+	d := h.pageData(r, "Edit Project")
 	if err := h.st.UpdateProject(ctx, p); err != nil {
 		d.Data = p
-		d.Flash = "保存失败: " + err.Error()
+		d.Flash = "Save failed: " + err.Error()
 		d.IsError = true
 		h.render(w, "member_project_edit", d)
 		return
 	}
 	d.Data = p
-	d.Flash = "保存成功"
+	d.Flash = "Saved"
 	h.render(w, "member_project_edit", d)
 }
 

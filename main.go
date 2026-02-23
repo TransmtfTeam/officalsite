@@ -73,9 +73,9 @@ func main() {
 var tmplFuncs = template.FuncMap{
 	"scopeLabel": func(s string) string {
 		switch s {
-		case "openid":  return "确认您的身份"
-		case "email":   return "读取您的邮箱地址"
-		case "profile": return "读取您的公开资料（昵称、头像、角色）"
+		case "openid":  return "Confirm your identity"
+		case "email":   return "Read your email address"
+		case "profile": return "Read your public profile (display name, avatar, role)"
 		default:        return s
 		}
 	},
@@ -94,7 +94,9 @@ func parseTemplates() (map[string]*template.Template, error) {
 	names := []string{
 		"home", "login", "login_2fa", "register", "consent", "profile", "error",
 		"tos", "privacy",
-		"admin_dashboard", "admin_users", "admin_clients", "admin_providers", "admin_settings",
+		"admin_dashboard", "admin_users", "admin_user_detail",
+		"admin_clients", "admin_client_create", "admin_client_created", "admin_client_detail", "admin_client_secret",
+		"admin_providers", "admin_roles", "admin_announcements", "admin_settings",
 		"member_projects", "member_project_edit",
 	}
 

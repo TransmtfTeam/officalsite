@@ -19,7 +19,6 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
-// ── Models ─────────────────────────────────────────────────────
 
 type User struct {
 	ID                string
@@ -39,9 +38,12 @@ func (u *User) IsAdmin()  bool { return u.Role == "admin" }
 func (u *User) IsMember() bool { return u.Role == "member" || u.Role == "admin" }
 func (u *User) RoleLabel() string {
 	switch u.Role {
-	case "admin":  return "管理员"
-	case "member": return "成员"
-	default:       return "用户"
+	case "admin":
+		return "Administrator"
+	case "member":
+		return "Member"
+	default:
+		return "User"
 	}
 }
 
@@ -101,7 +103,6 @@ type Project struct {
 	UpdatedAt time.Time
 }
 
-// ── External OIDC Provider ───────────────────────────────────────
 
 type OIDCProvider struct {
 	ID           string
@@ -116,7 +117,6 @@ type OIDCProvider struct {
 	CreatedAt    time.Time
 }
 
-// ── User Identity (external provider link) ───────────────────────
 
 type UserIdentity struct {
 	ID        string
@@ -126,7 +126,6 @@ type UserIdentity struct {
 	CreatedAt time.Time
 }
 
-// ── OIDC RP login state ──────────────────────────────────────────
 
 type OIDCState struct {
 	State     string
@@ -144,7 +143,6 @@ type Login2FAChallenge struct {
 	ExpiresAt time.Time
 }
 
-// ── Store ───────────────────────────────────────────────────────
 
 type Store struct{ db *sql.DB }
 
@@ -165,7 +163,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 	return err
 }
 
-// ── Settings ────────────────────────────────────────────────────
 
 func (s *Store) GetSetting(ctx context.Context, key string) string {
 	var v string
@@ -205,93 +202,41 @@ func (s *Store) EnsureDefaults(ctx context.Context) error {
 	return nil
 }
 
-const defaultTOS = `<h3 style="margin-bottom:.8rem">服务条款</h3>
-<p style="color:#888;margin-bottom:1.5rem">最后更新：2025 年</p>
+const defaultTOS = `<h3 style="margin-bottom:.8rem">Terms of Service</h3>
+<p style="color:#888;margin-bottom:1.5rem">Last updated: 2025</p>
 
-<h4>1. 接受条款</h4>
-<p>使用 Team TransMTF 提供的任何服务（包括但不限于网站、身份认证系统及相关 API），即表示您同意遵守本服务条款。若您不同意，请停止使用本服务。</p>
+<h4>1. Acceptance</h4>
+<p>By using Team TransMTF services, you agree to these terms.</p>
 
-<h4>2. 服务说明</h4>
-<p>Team TransMTF 是一个面向跨性别群体及盟友的开放社区平台，提供：</p>
-<ul>
-  <li>用户账号与身份管理服务（OIDC / OAuth2）</li>
-  <li>团队项目信息展示</li>
-  <li>社区资源导航</li>
-</ul>
+<h4>2. Account and Security</h4>
+<p>Keep your credentials secure. Do not share accounts or misuse the service.</p>
 
-<h4>3. 账号责任</h4>
-<p>您有责任保管好自己的账号凭据。禁止共享账号或冒充他人。若发现账号被盗用，请立即联系我们。</p>
+<h4>3. Conduct</h4>
+<p>No harassment, discrimination, illegal content, or attempts to disrupt the service.</p>
 
-<h4>4. 行为准则</h4>
-<p>使用本服务时，您同意不从事以下行为：</p>
-<ul>
-  <li>骚扰、歧视或伤害其他用户（尤其是跨性别群体成员）</li>
-  <li>传播仇恨言论、虚假信息或违法内容</li>
-  <li>尝试破解、滥用或干扰服务正常运行</li>
-  <li>通过自动化手段批量注册账号或滥用 API</li>
-</ul>
+<h4>4. Service Changes</h4>
+<p>We may update or discontinue parts of the service when necessary.</p>
 
-<h4>5. 第三方登录</h4>
-<p>若您选择使用第三方账号（如 Twitter/X、Google 等）登录，您同时受到该平台服务条款的约束。我们仅获取必要的身份信息（用户 ID、邮箱、昵称）。</p>
+<h4>5. Contact</h4>
+<p>For questions, contact <a href="mailto:contact@transmtf.com">contact@transmtf.com</a>.</p>`
 
-<h4>6. 服务变更与终止</h4>
-<p>我们保留随时修改或终止服务的权利，并会提前通过站内公告通知用户。</p>
+const defaultPrivacy = `<h3 style="margin-bottom:.8rem">Privacy Policy</h3>
+<p style="color:#888;margin-bottom:1.5rem">Last updated: 2025</p>
 
-<h4>7. 免责声明</h4>
-<p>本服务按"现状"提供，不对服务的持续可用性、准确性或适用性作任何明示或暗示的保证。</p>
+<h4>1. Data We Collect</h4>
+<p>We may collect account data, session data, and OAuth2/OIDC authorization data.</p>
 
-<h4>8. 联系我们</h4>
-<p>如有任何疑问，请通过 <a href="mailto:contact@transmtf.com">contact@transmtf.com</a> 联系我们。</p>`
+<h4>2. Why We Use It</h4>
+<p>To authenticate users, secure accounts, deliver platform features, and send essential notices.</p>
 
-const defaultPrivacy = `<h3 style="margin-bottom:.8rem">隐私政策</h3>
-<p style="color:#888;margin-bottom:1.5rem">最后更新：2025 年</p>
+<h4>3. Sharing</h4>
+<p>We do not sell personal data. We share only with your authorization or legal requirement.</p>
 
-<h4>1. 我们收集的信息</h4>
-<p>在您注册或使用本服务时，我们可能收集以下信息：</p>
-<ul>
-  <li><strong>账号信息</strong>：邮箱地址、显示名称、头像 URL</li>
-  <li><strong>身份验证信息</strong>：经过 bcrypt 哈希处理的密码（明文密码从不存储）</li>
-  <li><strong>第三方身份</strong>：使用外部 OIDC 登录时，我们存储提供商名称与您在该平台的用户 ID（subject）</li>
-  <li><strong>会话信息</strong>：登录状态（存储于数据库，7 天有效期）</li>
-  <li><strong>OAuth2 授权记录</strong>：您授权给第三方应用的令牌信息</li>
-</ul>
+<h4>4. Security</h4>
+<p>Passwords and tokens use secure hashing/signing mechanisms.</p>
 
-<h4>2. 信息使用方式</h4>
-<p>收集到的信息仅用于：</p>
-<ul>
-  <li>验证您的身份并维持登录状态</li>
-  <li>向您授权的第三方应用提供身份信息（通过 OIDC / OAuth2 标准协议）</li>
-  <li>显示您的个人资料（昵称、头像）</li>
-  <li>发送与账号安全相关的必要通知</li>
-</ul>
-
-<h4>3. 信息共享</h4>
-<p>我们不会出售您的个人信息。以下情况除外：</p>
-<ul>
-  <li><strong>您主动授权的应用</strong>：当您通过 OIDC 授权第三方应用时，该应用将根据您授权的 Scope 获取相应信息（如邮箱、昵称）</li>
-  <li><strong>法律要求</strong>：在法律明确要求的情况下配合相关机构</li>
-</ul>
-
-<h4>4. 数据安全</h4>
-<ul>
-  <li>密码使用 bcrypt 单向哈希，无法还原明文</li>
-  <li>访问令牌以 SHA-256 哈希形式存储，明文仅在签发时传输一次</li>
-  <li>会话 Cookie 使用 HMAC-SHA256 签名，防止伪造</li>
-  <li>数据库存储在 Docker 隔离网络中，不直接对外暴露</li>
-</ul>
-
-<h4>5. 数据保留</h4>
-<ul>
-  <li>会话在 7 天后自动过期</li>
-  <li>访问令牌有效期为 1 小时，刷新令牌有效期为 30 天</li>
-  <li>删除账号后，相关数据将被级联删除</li>
-</ul>
-
-<h4>6. 您的权利</h4>
-<p>您有权：查看您的个人信息、修改显示名称与头像、删除账号（请联系管理员）、撤销对第三方应用的授权（在个人资料页面操作）。</p>
-
-<h4>7. 联系我们</h4>
-<p>如有任何隐私相关问题，请通过 <a href="mailto:contact@transmtf.com">contact@transmtf.com</a> 联系我们。</p>`
+<h4>5. Contact</h4>
+<p>For privacy questions, contact <a href="mailto:contact@transmtf.com">contact@transmtf.com</a>.</p>`
 
 func (s *Store) GetAllSettings(ctx context.Context) map[string]string {
 	rows, err := s.db.QueryContext(ctx, `SELECT key,value FROM settings`)
@@ -308,7 +253,6 @@ func (s *Store) GetAllSettings(ctx context.Context) map[string]string {
 	return m
 }
 
-// ── Users ────────────────────────────────────────────────────────
 
 const userCols = `id,email,password_hash,display_name,avatar_url,role,active,totp_secret,totp_pending_secret,totp_enabled,created_at`
 
@@ -430,7 +374,6 @@ func (s *Store) VerifyPassword(u *User, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(u.PassHash), []byte(password)) == nil
 }
 
-// ── Sessions ─────────────────────────────────────────────────────
 
 func (s *Store) CreateSession(ctx context.Context, userID string) (string, error) {
 	id := uuid.New().String()
@@ -459,7 +402,6 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	return err
 }
 
-// ── OAuth Clients ─────────────────────────────────────────────────
 
 func (s *Store) CreateClient(ctx context.Context, name, description string, redirectURIs, scopes []string) (clientID, secret string, err error) {
 	id := uuid.New().String()
@@ -530,7 +472,6 @@ func (s *Store) VerifyClientSecret(c *OAuthClient, secret string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(c.SecretHash), []byte(secret)) == nil
 }
 
-// ── Auth Codes ────────────────────────────────────────────────────
 
 func (s *Store) CreateAuthCode(ctx context.Context, code, clientID, userID, redirectURI string, scopes []string, challenge, method, nonce string) error {
 	_, err := s.db.ExecContext(ctx,
@@ -569,7 +510,6 @@ func (s *Store) ConsumeAuthCode(ctx context.Context, code string) (*AuthCode, er
 	return ac, nil
 }
 
-// ── Tokens ───────────────────────────────────────────────────────
 
 func (s *Store) CreateAccessToken(ctx context.Context, userID, clientID string, scopes []string) (string, error) {
 	raw := RandomHex(32)
@@ -631,7 +571,6 @@ func (s *Store) RevokeRefreshToken(ctx context.Context, raw string) error {
 	return err
 }
 
-// ── Projects ─────────────────────────────────────────────────────
 
 const projCols = `id,slug,name_zh,name_en,desc_zh,desc_en,status,url,tags,featured,sort_order,created_at,updated_at`
 
@@ -689,14 +628,12 @@ func (s *Store) CountProjects(ctx context.Context) int {
 	return n
 }
 
-// ── UpdateUserAvatar ─────────────────────────────────────────────
 
 func (s *Store) UpdateUserAvatar(ctx context.Context, id, avatarURL string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE users SET avatar_url=$1, updated_at=now() WHERE id=$2`, avatarURL, id)
 	return err
 }
 
-// ── OIDC Provider CRUD ───────────────────────────────────────────
 
 func (s *Store) CreateOIDCProvider(ctx context.Context, name, slug, icon, clientID, clientSecret, issuerURL, scopes string) error {
 	id := uuid.New().String()
@@ -776,7 +713,6 @@ func (s *Store) CountOIDCProviders(ctx context.Context) int {
 	return n
 }
 
-// ── User Identity ────────────────────────────────────────────────
 
 func (s *Store) LinkIdentity(ctx context.Context, userID, provider, subject string) error {
 	id := uuid.New().String()
@@ -797,7 +733,6 @@ func (s *Store) GetUserByIdentity(ctx context.Context, provider, subject string)
 	return s.GetUserByID(ctx, userID)
 }
 
-// ── OIDC State ───────────────────────────────────────────────────
 
 func (s *Store) CreateOIDCState(ctx context.Context, state, provider, nonce, verifier, redirect string) error {
 	_, err := s.db.ExecContext(ctx,
@@ -883,7 +818,296 @@ func (s *Store) DeleteLogin2FAChallenge(ctx context.Context, id string) error {
 	return err
 }
 
-// ── Helpers ──────────────────────────────────────────────────────
+
+type Session struct {
+	ID        string
+	UserID    string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+}
+
+func (s *Store) GetSessionsByUserID(ctx context.Context, userID string) ([]*Session, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id,user_id,created_at,expires_at FROM sessions WHERE user_id=$1 AND expires_at > now() ORDER BY created_at DESC`,
+		userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Session
+	for rows.Next() {
+		sess := &Session{}
+		if err := rows.Scan(&sess.ID, &sess.UserID, &sess.CreatedAt, &sess.ExpiresAt); err != nil {
+			return nil, err
+		}
+		out = append(out, sess)
+	}
+	return out, rows.Err()
+}
+
+
+func (s *Store) GetUserIdentitiesByUserID(ctx context.Context, userID string) ([]*UserIdentity, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id,user_id,provider,subject,created_at FROM user_identities WHERE user_id=$1 ORDER BY created_at DESC`,
+		userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*UserIdentity
+	for rows.Next() {
+		id := &UserIdentity{}
+		if err := rows.Scan(&id.ID, &id.UserID, &id.Provider, &id.Subject, &id.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+
+func (s *Store) GetAccessTokensByUserID(ctx context.Context, userID string) ([]*AccessToken, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id,user_id,client_id,scopes,expires_at FROM access_tokens WHERE user_id=$1 AND expires_at > now() ORDER BY expires_at DESC`,
+		userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*AccessToken
+	for rows.Next() {
+		t := &AccessToken{}
+		var scopes string
+		if err := rows.Scan(&t.ID, &t.UserID, &t.ClientID, &scopes, &t.ExpiresAt); err != nil {
+			return nil, err
+		}
+		t.Scopes = strings.Fields(scopes)
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetRefreshTokensByUserID(ctx context.Context, userID string) ([]*RefreshToken, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id,user_id,client_id,scopes,expires_at FROM refresh_tokens WHERE user_id=$1 AND expires_at > now() ORDER BY expires_at DESC`,
+		userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*RefreshToken
+	for rows.Next() {
+		t := &RefreshToken{}
+		var scopes string
+		if err := rows.Scan(&t.ID, &t.UserID, &t.ClientID, &scopes, &t.ExpiresAt); err != nil {
+			return nil, err
+		}
+		t.Scopes = strings.Fields(scopes)
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) RevokeAccessTokenByID(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM access_tokens WHERE id=$1`, id)
+	return err
+}
+
+func (s *Store) RevokeRefreshTokenByID(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM refresh_tokens WHERE id=$1`, id)
+	return err
+}
+
+
+func (s *Store) UpdateClient(ctx context.Context, id, name, description string, redirectURIs, scopes []string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE oauth_clients SET name=$1,description=$2,redirect_uris=$3,scopes=$4 WHERE id=$5`,
+		name, description, strings.Join(redirectURIs, "\n"), strings.Join(scopes, " "), id)
+	return err
+}
+
+func (s *Store) ResetClientSecret(ctx context.Context, id string) (string, error) {
+	secret := RandomHex(32)
+	h, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	_, err = s.db.ExecContext(ctx, `UPDATE oauth_clients SET client_secret_hash=$1 WHERE id=$2`, string(h), id)
+	return secret, err
+}
+
+
+func (s *Store) GetClientAnnouncement(ctx context.Context, clientID string) string {
+	var v string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT ca.content
+		FROM client_announcements ca
+		JOIN oauth_clients oc ON oc.id = ca.client_id
+		WHERE oc.client_id = $1
+	`, clientID).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		// Backward compatibility for old rows keyed by oauth_clients.client_id.
+		_ = s.db.QueryRowContext(ctx, `SELECT content FROM client_announcements WHERE client_id=$1`, clientID).Scan(&v)
+	}
+	return v
+}
+
+func (s *Store) SetClientAnnouncement(ctx context.Context, clientID, content string) error {
+	res, err := s.db.ExecContext(ctx, `
+		INSERT INTO client_announcements(client_id,content)
+		SELECT id,$2 FROM oauth_clients WHERE client_id=$1
+		ON CONFLICT(client_id) DO UPDATE SET content=EXCLUDED.content, updated_at=now()
+	`, clientID, content)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+
+type PasskeyCredential struct {
+	ID           string
+	UserID       string
+	CredentialID string // base64url encoded
+	Credential   string // JSON encoded webauthn.Credential
+	Name         string
+	CreatedAt    time.Time
+}
+
+func (s *Store) CreatePasskeyCredential(ctx context.Context, userID, credentialID, credentialData, name string) error {
+	id := uuid.New().String()
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO passkey_credentials(id,user_id,credential_id,credential,name) VALUES($1,$2,$3,$4,$5)`,
+		id, userID, credentialID, credentialData, name)
+	return err
+}
+
+func (s *Store) GetPasskeyCredentialsByUserID(ctx context.Context, userID string) ([]*PasskeyCredential, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id,user_id,credential_id,credential,name,created_at FROM passkey_credentials WHERE user_id=$1 ORDER BY created_at DESC`,
+		userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*PasskeyCredential
+	for rows.Next() {
+		c := &PasskeyCredential{}
+		if err := rows.Scan(&c.ID, &c.UserID, &c.CredentialID, &c.Credential, &c.Name, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetPasskeyCredentialByCredentialID(ctx context.Context, credentialID string) (*PasskeyCredential, error) {
+	c := &PasskeyCredential{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id,user_id,credential_id,credential,name,created_at FROM passkey_credentials WHERE credential_id=$1`,
+		credentialID).Scan(&c.ID, &c.UserID, &c.CredentialID, &c.Credential, &c.Name, &c.CreatedAt)
+	return c, err
+}
+
+func (s *Store) UpdatePasskeyCredential(ctx context.Context, credentialID, credentialData string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE passkey_credentials SET credential=$1 WHERE credential_id=$2`,
+		credentialData, credentialID)
+	return err
+}
+
+func (s *Store) DeletePasskeyCredential(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM passkey_credentials WHERE id=$1`, id)
+	return err
+}
+
+func (s *Store) CountPasskeysByUserID(ctx context.Context, userID string) int {
+	var n int
+	s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM passkey_credentials WHERE user_id=$1`, userID).Scan(&n)
+	return n
+}
+
+
+func (s *Store) CreateWebAuthnSession(ctx context.Context, id, data string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO webauthn_sessions(id,data,expires_at) VALUES($1,$2,$3)`,
+		id, data, time.Now().Add(5*time.Minute))
+	return err
+}
+
+func (s *Store) GetWebAuthnSession(ctx context.Context, id string) (string, error) {
+	var data string
+	var exp time.Time
+	err := s.db.QueryRowContext(ctx,
+		`SELECT data,expires_at FROM webauthn_sessions WHERE id=$1`, id).Scan(&data, &exp)
+	if err != nil {
+		return "", err
+	}
+	if time.Now().After(exp) {
+		s.db.ExecContext(ctx, `DELETE FROM webauthn_sessions WHERE id=$1`, id)
+		return "", errors.New("webauthn session expired")
+	}
+	return data, nil
+}
+
+func (s *Store) DeleteWebAuthnSession(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM webauthn_sessions WHERE id=$1`, id)
+	return err
+}
+
+
+type CustomRole struct {
+	Name      string
+	Label     string
+	CreatedAt time.Time
+}
+
+var defaultRoles = map[string]bool{"user": true, "member": true, "admin": true}
+
+func IsDefaultRole(name string) bool { return defaultRoles[name] }
+
+func (s *Store) ListCustomRoles(ctx context.Context) ([]*CustomRole, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT name,label,created_at FROM custom_roles ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*CustomRole
+	for rows.Next() {
+		r := &CustomRole{}
+		if err := rows.Scan(&r.Name, &r.Label, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) CreateCustomRole(ctx context.Context, name, label string) error {
+	if IsDefaultRole(name) {
+		return errors.New("cannot create a role with a reserved name")
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO custom_roles(name,label) VALUES($1,$2) ON CONFLICT(name) DO UPDATE SET label=EXCLUDED.label`,
+		name, label)
+	return err
+}
+
+func (s *Store) DeleteCustomRole(ctx context.Context, name string) error {
+	if IsDefaultRole(name) {
+		return errors.New("cannot delete a default role")
+	}
+	_, err := s.db.ExecContext(ctx, `DELETE FROM custom_roles WHERE name=$1`, name)
+	return err
+}
+
 
 func RandomHex(n int) string {
 	b := make([]byte, n)

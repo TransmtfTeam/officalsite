@@ -126,7 +126,36 @@ CREATE TABLE IF NOT EXISTS login_2fa_challenges (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS passkey_credentials (
+    id            TEXT PRIMARY KEY,
+    user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    credential_id TEXT UNIQUE NOT NULL,   -- base64url encoded
+    credential    TEXT NOT NULL,           -- JSON encoded webauthn.Credential
+    name          TEXT NOT NULL DEFAULT 'Passkey',
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS webauthn_sessions (
+    id         TEXT PRIMARY KEY,
+    data       TEXT NOT NULL,             -- JSON encoded webauthn.SessionData
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS client_announcements (
+    client_id  TEXT PRIMARY KEY REFERENCES oauth_clients(id) ON DELETE CASCADE,
+    content    TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS custom_roles (
+    name        TEXT PRIMARY KEY,
+    label       TEXT NOT NULL DEFAULT '',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Compatibility migrations for already-initialized databases.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_clients_name ON oauth_clients(name);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT NOT NULL DEFAULT '';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_pending_secret TEXT NOT NULL DEFAULT '';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT false;
@@ -140,3 +169,5 @@ CREATE INDEX IF NOT EXISTS idx_projects_sort ON projects(sort_order, created_at)
 CREATE INDEX IF NOT EXISTS idx_oidc_states_expires ON oidc_states(expires_at);
 CREATE INDEX IF NOT EXISTS idx_user_identities_lookup ON user_identities(provider, subject);
 CREATE INDEX IF NOT EXISTS idx_login_2fa_expires ON login_2fa_challenges(expires_at);
+CREATE INDEX IF NOT EXISTS idx_passkey_user ON passkey_credentials(user_id);
+CREATE INDEX IF NOT EXISTS idx_webauthn_sessions_expires ON webauthn_sessions(expires_at);

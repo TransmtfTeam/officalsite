@@ -22,7 +22,6 @@ import (
 	"transmtf.com/oidc/internal/store"
 )
 
-// ── Context keys ─────────────────────────────────────────────────
 
 type ctxKey int
 
@@ -31,7 +30,6 @@ const (
 	ctxCSRF
 )
 
-// ── Handler ──────────────────────────────────────────────────────
 
 type Handler struct {
 	cfg    *config.Config
@@ -40,7 +38,6 @@ type Handler struct {
 	tmpls  map[string]*template.Template
 }
 
-// ── Session cookie ────────────────────────────────────────────────
 
 const cookieName = "tmtf_session"
 const csrfCookieName = "tmtf_csrf"
@@ -191,7 +188,6 @@ func (h *Handler) currentUser(r *http.Request) *store.User {
 	return nil
 }
 
-// ── Auth middleware ───────────────────────────────────────────────
 
 func (h *Handler) sessionMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -247,7 +243,6 @@ func (h *Handler) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// ── Template data ─────────────────────────────────────────────────
 
 type PageData struct {
 	Title       string
@@ -257,6 +252,7 @@ type PageData struct {
 	CSRFToken   string
 	// site config (loaded for every page)
 	SiteName     string
+	SiteIconURL  string
 	Issuer       string
 	ContactEmail string
 	AnnZH        string
@@ -283,6 +279,7 @@ func (h *Handler) pageData(r *http.Request, title string) PageData {
 		CurrentUser:  h.currentUser(r),
 		CSRFToken:    csrf,
 		SiteName:     name,
+		SiteIconURL:  cfg["site_icon_url"],
 		Issuer:       h.cfg.Issuer,
 		ContactEmail: orDefault(cfg["contact_email"], "contact@transmtf.com"),
 		AnnZH:        cfg["ann_zh"],
@@ -310,7 +307,6 @@ func (h *Handler) renderError(w http.ResponseWriter, r *http.Request, status int
 	h.render(w, "error", d)
 }
 
-// ── JSON helpers (for OIDC endpoints) ────────────────────────────
 
 func jsonResp(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -331,7 +327,6 @@ func bearerToken(r *http.Request) string {
 	return ""
 }
 
-// ── Routing + server creation ─────────────────────────────────────
 
 func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[string]*template.Template, static http.Handler) http.Handler {
 	h := &Handler{cfg: cfg, st: st, keys: keys, tmpls: tmpls}
@@ -354,7 +349,7 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	mux.HandleFunc("GET /tos",       h.TOSPage)
 	mux.HandleFunc("GET /privacy",   h.PrivacyPage)
 
-	// OIDC RP — external provider login
+	// OIDC RP - external provider login
 	mux.HandleFunc("GET /auth/oidc/{slug}",          h.OIDCProviderLogin)
 	mux.HandleFunc("GET /auth/oidc/{slug}/callback", h.OIDCProviderCallback)
 
@@ -377,6 +372,15 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	mux.HandleFunc("POST /profile/2fa/start",  h.requireLogin(h.Profile2FAStart))
 	mux.HandleFunc("POST /profile/2fa/enable", h.requireLogin(h.Profile2FAEnable))
 	mux.HandleFunc("POST /profile/2fa/disable", h.requireLogin(h.Profile2FADisable))
+	// TOTP QR code image
+	mux.HandleFunc("GET /profile/2fa/qr", h.requireLogin(h.Profile2FAQR))
+	// Passkey registration
+	mux.HandleFunc("GET /profile/passkey/register/begin",   h.requireLogin(h.PasskeyRegisterBegin))
+	mux.HandleFunc("POST /profile/passkey/register/finish", h.requireLogin(h.PasskeyRegisterFinish))
+	mux.HandleFunc("POST /profile/passkey/{id}/delete",     h.requireLogin(h.PasskeyDeleteCredential))
+	// Passkey login (2FA step) - under /login/2fa/ so the 2FA challenge cookie (path=/login/2fa) is included
+	mux.HandleFunc("GET /login/2fa/passkey/begin",  h.PasskeyLoginBegin)
+	mux.HandleFunc("POST /login/2fa/passkey/finish", h.PasskeyLoginFinish)
 
 	// Member panel
 	mux.HandleFunc("GET /member/projects",              h.requireMember(h.MemberProjects))
@@ -385,27 +389,48 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	mux.HandleFunc("POST /member/projects/{id}/edit",   h.requireMember(h.MemberProjectUpdate))
 	mux.HandleFunc("POST /member/projects/{id}/delete", h.requireMember(h.MemberProjectDelete))
 
-	// Admin panel
-	mux.HandleFunc("GET /admin",                           h.requireAdmin(h.AdminDashboard))
-	mux.HandleFunc("GET /admin/users",                     h.requireAdmin(h.AdminUsers))
-	mux.HandleFunc("POST /admin/users",                    h.requireAdmin(h.AdminUserCreate))
-	mux.HandleFunc("POST /admin/users/{id}/update",        h.requireAdmin(h.AdminUserUpdate))
-	mux.HandleFunc("POST /admin/users/{id}/delete",        h.requireAdmin(h.AdminUserDelete))
-	mux.HandleFunc("GET /admin/clients",                   h.requireAdmin(h.AdminClients))
-	mux.HandleFunc("POST /admin/clients",                  h.requireAdmin(h.AdminClientCreate))
-	mux.HandleFunc("POST /admin/clients/{id}/delete",      h.requireAdmin(h.AdminClientDelete))
-	mux.HandleFunc("GET /admin/providers",                 h.requireAdmin(h.AdminProviders))
-	mux.HandleFunc("POST /admin/providers",                h.requireAdmin(h.AdminProviderCreate))
-	mux.HandleFunc("POST /admin/providers/{id}/toggle",    h.requireAdmin(h.AdminProviderToggle))
-	mux.HandleFunc("POST /admin/providers/{id}/delete",    h.requireAdmin(h.AdminProviderDelete))
-	mux.HandleFunc("GET /admin/settings",                  h.requireAdmin(h.AdminSettings))
-	mux.HandleFunc("POST /admin/settings",                 h.requireAdmin(h.AdminSettingsSave))
+	// Admin panel - user management (admin-only)
+	mux.HandleFunc("GET /admin",                                         h.requireAdmin(h.AdminDashboard))
+	mux.HandleFunc("GET /admin/users",                                   h.requireAdmin(h.AdminUsers))
+	mux.HandleFunc("POST /admin/users",                                  h.requireAdmin(h.AdminUserCreate))
+	mux.HandleFunc("POST /admin/users/{id}/update",                      h.requireAdmin(h.AdminUserUpdate))
+	mux.HandleFunc("POST /admin/users/{id}/delete",                      h.requireAdmin(h.AdminUserDelete))
+	mux.HandleFunc("GET /admin/users/{id}",                              h.requireAdmin(h.AdminUserDetail))
+	mux.HandleFunc("POST /admin/users/{id}/reset-password",              h.requireAdmin(h.AdminUserResetPassword))
+	mux.HandleFunc("POST /admin/users/{id}/disable-2fa",                 h.requireAdmin(h.AdminUserDisable2FA))
+	mux.HandleFunc("POST /admin/users/{id}/sessions/{sid}/revoke",       h.requireAdmin(h.AdminUserRevokeSession))
+	mux.HandleFunc("POST /admin/users/{id}/tokens/{tid}/revoke",         h.requireAdmin(h.AdminUserRevokeToken))
+	mux.HandleFunc("POST /admin/users/{id}/passkeys/{pkid}/delete",      h.requireAdmin(h.AdminDeletePasskey))
+
+	// Admin panel - client management (member and above)
+	mux.HandleFunc("GET /admin/clients",                   h.requireMember(h.AdminClients))
+	mux.HandleFunc("GET /admin/clients/new",               h.requireMember(h.AdminClientCreatePage))
+	mux.HandleFunc("POST /admin/clients",                  h.requireMember(h.AdminClientCreate))
+	mux.HandleFunc("GET /admin/clients/{id}",              h.requireMember(h.AdminClientDetail))
+	mux.HandleFunc("POST /admin/clients/{id}/update",      h.requireMember(h.AdminClientUpdate))
+	mux.HandleFunc("POST /admin/clients/{id}/reset-secret", h.requireMember(h.AdminClientResetSecret))
+	mux.HandleFunc("POST /admin/clients/{id}/delete",      h.requireMember(h.AdminClientDelete))
+
+	// Admin panel - providers / roles / announcements / settings (admin-only)
+	mux.HandleFunc("GET /admin/providers",                          h.requireAdmin(h.AdminProviders))
+	mux.HandleFunc("POST /admin/providers",                         h.requireAdmin(h.AdminProviderCreate))
+	mux.HandleFunc("POST /admin/providers/{id}/toggle",             h.requireAdmin(h.AdminProviderToggle))
+	mux.HandleFunc("POST /admin/providers/{id}/delete",             h.requireAdmin(h.AdminProviderDelete))
+	mux.HandleFunc("GET /admin/roles",                              h.requireAdmin(h.AdminRoles))
+	mux.HandleFunc("POST /admin/roles",                             h.requireAdmin(h.AdminRoleCreate))
+	mux.HandleFunc("POST /admin/roles/{name}/delete",               h.requireAdmin(h.AdminRoleDelete))
+	mux.HandleFunc("GET /admin/announcements",                      h.requireAdmin(h.AdminAnnouncements))
+	mux.HandleFunc("POST /admin/announcements/{clientid}/save",     h.requireMember(h.AdminAnnouncementSave))
+	mux.HandleFunc("GET /admin/settings",                           h.requireAdmin(h.AdminSettings))
+	mux.HandleFunc("POST /admin/settings",                          h.requireAdmin(h.AdminSettingsSave))
+
+	// Public API
+	mux.HandleFunc("GET /api/announcement/{clientid}", h.AnnouncementAPI)
 
 	// Wrap with security middlewares.
 	return h.securityHeadersMiddleware(h.sessionMiddleware(mux))
 }
 
-// ── Misc ─────────────────────────────────────────────────────────
 
 func isErrNoRows(err error) bool { return errors.Is(err, sql.ErrNoRows) }
 

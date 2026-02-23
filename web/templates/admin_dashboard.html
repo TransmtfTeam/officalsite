@@ -9,6 +9,8 @@
       <a class="sidebar-link" href="/admin/users">用户</a>
       <a class="sidebar-link" href="/admin/clients">应用</a>
       <a class="sidebar-link" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/roles">角色</a>
+      <a class="sidebar-link" href="/admin/announcements">公告</a>
       <a class="sidebar-link" href="/admin/settings">设置</a>
     </div>
     <div class="sidebar-section">
@@ -64,8 +66,18 @@
         <a class="btn btn-ghost btn-sm" href="/admin/providers" style="margin-top:1rem">进入</a>
       </div>
       <div class="info-card">
+        <div class="info-card-title">角色管理</div>
+        <div class="info-card-body">创建自定义角色，补充内置 user / member / admin。</div>
+        <a class="btn btn-ghost btn-sm" href="/admin/roles" style="margin-top:1rem">进入</a>
+      </div>
+      <div class="info-card">
+        <div class="info-card-title">应用公告</div>
+        <div class="info-card-body">为每个 OIDC 应用设置公告，用户登录时可见。</div>
+        <a class="btn btn-ghost btn-sm" href="/admin/announcements" style="margin-top:1rem">进入</a>
+      </div>
+      <div class="info-card">
         <div class="info-card-title">站点设置</div>
-        <div class="info-card-body">维护网站名称、公告、条款与隐私政策。</div>
+        <div class="info-card-body">维护网站名称、图标、邮件服务与法律文本。</div>
         <a class="btn btn-ghost btn-sm" href="/admin/settings" style="margin-top:1rem">进入</a>
       </div>
     </div>

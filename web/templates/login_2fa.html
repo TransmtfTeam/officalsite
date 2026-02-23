@@ -13,19 +13,64 @@
     {{end}}
 
     {{with .Data}}
-    <p style="font-size:.9rem;color:#a0a0b8;margin-bottom:1rem;text-align:center">
+    <p style="font-size:.9rem;color:var(--text2);margin-bottom:1rem;text-align:center">
       账号：<strong>{{index . "Email"}}</strong>
     </p>
-    {{end}}
 
+    {{$hasTOTP := index . "HasTOTP"}}
+    {{$hasPasskey := index . "HasPasskey"}}
+
+    {{if and $hasTOTP $hasPasskey}}
+    <div class="tab-group">
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="tab-totp" type="button">认证器</button>
+        <button class="tab-btn" data-tab="tab-passkey" type="button">Passkey</button>
+      </div>
+
+      <div id="tab-totp" class="tab-panel active">
+        <form method="POST" action="/login/2fa">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <div class="form-group">
+            <label class="form-label">认证器验证码</label>
+            <input class="form-control" type="text" name="totp_code" inputmode="numeric"
+              autocomplete="one-time-code" placeholder="123456" required autofocus>
+          </div>
+          <button class="btn btn-primary" style="width:100%;justify-content:center" type="submit">验证并登录</button>
+        </form>
+      </div>
+
+      <div id="tab-passkey" class="tab-panel">
+        <p style="font-size:.88rem;color:var(--text2);margin-bottom:1rem;text-align:center">
+          使用已注册的 Passkey（指纹/面容/安全密钥）验证身份。
+        </p>
+        <div id="passkey-login-msg"></div>
+        <button id="passkey-login-btn" class="btn btn-primary" style="width:100%;justify-content:center" type="button">
+          使用 Passkey 验证
+        </button>
+      </div>
+    </div>
+
+    {{else if $hasTOTP}}
     <form method="POST" action="/login/2fa">
       <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
       <div class="form-group">
         <label class="form-label">认证器验证码</label>
-        <input class="form-control" type="text" name="totp_code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required autofocus>
+        <input class="form-control" type="text" name="totp_code" inputmode="numeric"
+          autocomplete="one-time-code" placeholder="123456" required autofocus>
       </div>
-      <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.5rem" type="submit">验证并登录</button>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" type="submit">验证并登录</button>
     </form>
+
+    {{else if $hasPasskey}}
+    <p style="font-size:.88rem;color:var(--text2);margin-bottom:1rem;text-align:center">
+      使用已注册的 Passkey（指纹/面容/安全密钥）验证身份。
+    </p>
+    <div id="passkey-login-msg"></div>
+    <button id="passkey-login-btn" class="btn btn-primary" style="width:100%;justify-content:center" type="button">
+      使用 Passkey 验证
+    </button>
+    {{end}}
+    {{end}}
 
     <p class="auth-footer-link"><a href="/login">返回登录页</a></p>
   </div>

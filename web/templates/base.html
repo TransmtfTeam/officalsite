@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{.Title}} - {{.SiteName}}</title>
   <link rel="stylesheet" href="/static/css/app.css">
+  {{if .SiteIconURL}}<link rel="icon" href="{{.SiteIconURL}}">{{end}}
 </head>
 <body>
 <nav class="nav">
@@ -12,10 +13,11 @@
   <div class="nav-links">
     {{if .CurrentUser}}
       {{if .CurrentUser.IsMember}}
-        <a href="/member/projects">项目管理</a>
+        <a href="/member/projects">项目</a>
+        <a href="/admin/clients">应用</a>
       {{end}}
       {{if .CurrentUser.IsAdmin}}
-        <a href="/admin">管理后台</a>
+        <a href="/admin">管理</a>
       {{end}}
       <a href="/profile">{{.CurrentUser.DisplayName}}</a>
       <form method="POST" action="/logout" class="nav-inline-form">
@@ -30,13 +32,9 @@
 </nav>
 
 {{if .AnnZH}}
-<div style="background:rgba(85,205,252,.12);border-bottom:1px solid rgba(85,205,252,.2);text-align:center;padding:.6rem 1rem;font-size:.85rem;color:var(--blue);margin-top:60px">
-  {{.AnnZH}}
-</div>
+<div class="ann-bar">{{.AnnZH}}</div>
 {{else if .AnnEN}}
-<div style="background:rgba(85,205,252,.12);border-bottom:1px solid rgba(85,205,252,.2);text-align:center;padding:.6rem 1rem;font-size:.85rem;color:var(--blue);margin-top:60px">
-  {{.AnnEN}}
-</div>
+<div class="ann-bar">{{.AnnEN}}</div>
 {{end}}
 
 {{block "content" .}}{{end}}
@@ -49,6 +47,8 @@
     <a href="/privacy" style="color:#666">隐私政策</a>
   </p>
 </footer>
+<script src="/static/js/passkey.js"></script>
+<script src="/static/js/profile.js"></script>
 </body>
 </html>
 {{end}}

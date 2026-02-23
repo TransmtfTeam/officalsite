@@ -9,11 +9,14 @@
       <a class="sidebar-link" href="/admin/users">用户</a>
       <a class="sidebar-link" href="/admin/clients">应用</a>
       <a class="sidebar-link active" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/roles">角色</a>
+      <a class="sidebar-link" href="/admin/announcements">公告</a>
       <a class="sidebar-link" href="/admin/settings">设置</a>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-title">快速入口</div>
       <a class="sidebar-link" href="/">返回首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
     </div>
   </aside>
 
@@ -42,8 +45,8 @@
             <input class="form-control" type="text" name="slug" placeholder="twitter" pattern="[a-z0-9\-]+" required>
           </div>
           <div class="form-group">
-            <label class="form-label">图标（可选）</label>
-            <input class="form-control" type="text" name="icon" placeholder="X">
+            <label class="form-label">图标（可选，emoji 或留空）</label>
+            <input class="form-control" type="text" name="icon" placeholder="𝕏 / G / 🔑">
           </div>
         </div>
         <div class="form-row">
@@ -72,20 +75,20 @@
 
     <details class="card" style="margin-bottom:1.5rem;cursor:pointer">
       <summary style="font-size:.9rem;font-weight:600;padding:.2rem 0">常见配置示例</summary>
-      <div style="margin-top:1rem;font-size:.82rem;color:#888;display:flex;flex-direction:column;gap:.8rem">
+      <div style="margin-top:1rem;font-size:.82rem;color:var(--text2);display:flex;flex-direction:column;gap:.8rem">
         <div>
-          <strong style="color:#b0b0c8">X (x.com)</strong><br>
+          <strong style="color:var(--text)">X (x.com)</strong><br>
           Issuer: <code>https://twitter.com</code><br>
           Scopes: <code>openid email profile</code><br>
           Callback: <code>{{.Issuer}}/auth/oidc/twitter/callback</code>
         </div>
         <div>
-          <strong style="color:#b0b0c8">Google</strong><br>
+          <strong style="color:var(--text)">Google</strong><br>
           Issuer: <code>https://accounts.google.com</code><br>
           Scopes: <code>openid email profile</code>
         </div>
         <div>
-          <strong style="color:#b0b0c8">Keycloak / Authentik / Dex</strong><br>
+          <strong style="color:var(--text)">Keycloak / Authentik / Dex</strong><br>
           使用各自的 OIDC Issuer 地址，例如：<code>https://auth.example.com/realms/master</code>
         </div>
       </div>
@@ -110,9 +113,9 @@
             <td style="font-size:.8rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{.IssuerURL}}</td>
             <td>
               {{if .Enabled}}
-              <span style="color:#6ef;font-size:.82rem">已启用</span>
+              <span style="color:#16a34a;font-size:.82rem">已启用</span>
               {{else}}
-              <span style="color:#888;font-size:.82rem">已停用</span>
+              <span style="color:var(--text2);font-size:.82rem">已停用</span>
               {{end}}
             </td>
             <td style="white-space:nowrap">
@@ -129,7 +132,7 @@
             </td>
           </tr>
           {{else}}
-          <tr><td colspan="5" style="color:#666;text-align:center;padding:2rem">尚未配置任何外部登录提供商</td></tr>
+          <tr><td colspan="5" style="color:var(--text2);text-align:center;padding:2rem">尚未配置任何外部登录提供商</td></tr>
           {{end}}
         </tbody>
       </table>

@@ -9,11 +9,14 @@
       <a class="sidebar-link" href="/admin/users">用户</a>
       <a class="sidebar-link" href="/admin/clients">应用</a>
       <a class="sidebar-link" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/roles">角色</a>
+      <a class="sidebar-link" href="/admin/announcements">公告</a>
       <a class="sidebar-link active" href="/admin/settings">设置</a>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-title">快速入口</div>
       <a class="sidebar-link" href="/">返回首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
     </div>
   </aside>
 
@@ -33,21 +36,87 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">站点名称</label>
-            <input class="form-control" type="text" name="site_name" value="{{with .Data}}{{index . "site_name"}}{{end}}" placeholder="Team TransMTF">
+            <input class="form-control" type="text" name="site_name"
+              value="{{with .Data}}{{index . "site_name"}}{{end}}" placeholder="Team TransMTF">
           </div>
           <div class="form-group">
             <label class="form-label">联系邮箱</label>
-            <input class="form-control" type="email" name="contact_email" value="{{with .Data}}{{index . "contact_email"}}{{end}}" placeholder="contact@transmtf.com">
+            <input class="form-control" type="email" name="contact_email"
+              value="{{with .Data}}{{index . "contact_email"}}{{end}}" placeholder="contact@transmtf.com">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">站点图标 URL（favicon）</label>
+          <input class="form-control" type="url" name="site_icon_url"
+            value="{{with .Data}}{{index . "site_icon_url"}}{{end}}" placeholder="https://example.com/favicon.ico">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">中文公告（全站显示在页顶）</label>
+            <textarea class="form-control" name="ann_zh" rows="2"
+              placeholder="站点公告...">{{with .Data}}{{index . "ann_zh"}}{{end}}</textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">English Announcement</label>
+            <textarea class="form-control" name="ann_en" rows="2"
+              placeholder="Site announcement...">{{with .Data}}{{index . "ann_en"}}{{end}}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-panel">
+        <p class="form-panel-title">邮件服务（注册通知等）</p>
+        <div class="form-group">
+          <label class="form-label">邮件发送方式</label>
+          <select class="form-control" name="email_provider" style="max-width:240px">
+            <option value="" {{if eq (index .Data "email_provider") ""}}selected{{end}}>不发送</option>
+            <option value="smtp" {{if eq (index .Data "email_provider") "smtp"}}selected{{end}}>SMTP</option>
+            <option value="resend" {{if eq (index .Data "email_provider") "resend"}}selected{{end}}>Resend</option>
+          </select>
+        </div>
+
+        <p style="font-size:.85rem;font-weight:600;color:var(--text2);margin:.8rem 0 .5rem">SMTP 设置</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">SMTP 主机</label>
+            <input class="form-control" type="text" name="smtp_host"
+              value="{{with .Data}}{{index . "smtp_host"}}{{end}}" placeholder="smtp.example.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">端口</label>
+            <input class="form-control" type="text" name="smtp_port"
+              value="{{with .Data}}{{index . "smtp_port"}}{{end}}" placeholder="587">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">中文公告</label>
-            <textarea class="form-control" name="ann_zh" rows="2" placeholder="站点公告...">{{with .Data}}{{index . "ann_zh"}}{{end}}</textarea>
+            <label class="form-label">用户名</label>
+            <input class="form-control" type="text" name="smtp_user"
+              value="{{with .Data}}{{index . "smtp_user"}}{{end}}" placeholder="user@example.com">
           </div>
           <div class="form-group">
-            <label class="form-label">English Announcement</label>
-            <textarea class="form-control" name="ann_en" rows="2" placeholder="Site announcement...">{{with .Data}}{{index . "ann_en"}}{{end}}</textarea>
+            <label class="form-label">密码</label>
+            <input class="form-control" type="password" name="smtp_pass"
+              placeholder="（留空不修改）">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">发件人地址</label>
+          <input class="form-control" type="text" name="smtp_from"
+            value="{{with .Data}}{{index . "smtp_from"}}{{end}}" placeholder="noreply@example.com">
+        </div>
+
+        <p style="font-size:.85rem;font-weight:600;color:var(--text2);margin:.8rem 0 .5rem">Resend 设置</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Resend API Key</label>
+            <input class="form-control" type="password" name="resend_api_key"
+              placeholder="re_xxx（留空不修改）">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Resend 发件人</label>
+            <input class="form-control" type="text" name="resend_from"
+              value="{{with .Data}}{{index . "resend_from"}}{{end}}" placeholder="noreply@example.com">
           </div>
         </div>
       </div>
@@ -56,11 +125,13 @@
         <p class="form-panel-title">法律文本（支持 HTML）</p>
         <div class="form-group">
           <label class="form-label">服务条款内容（/tos）</label>
-          <textarea class="form-control" name="tos_content" rows="8" placeholder="请输入服务条款内容...">{{with .Data}}{{index . "tos_content"}}{{end}}</textarea>
+          <textarea class="form-control" name="tos_content" rows="8"
+            placeholder="请输入服务条款内容...">{{with .Data}}{{index . "tos_content"}}{{end}}</textarea>
         </div>
         <div class="form-group">
           <label class="form-label">隐私政策内容（/privacy）</label>
-          <textarea class="form-control" name="privacy_content" rows="8" placeholder="请输入隐私政策内容...">{{with .Data}}{{index . "privacy_content"}}{{end}}</textarea>
+          <textarea class="form-control" name="privacy_content" rows="8"
+            placeholder="请输入隐私政策内容...">{{with .Data}}{{index . "privacy_content"}}{{end}}</textarea>
         </div>
       </div>
 

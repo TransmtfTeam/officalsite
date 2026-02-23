@@ -1,0 +1,52 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="panel-wrap">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">管理导航</div>
+      {{if .CurrentUser.IsAdmin}}
+      <a class="sidebar-link" href="/admin">概览</a>
+      <a class="sidebar-link" href="/admin/users">用户</a>
+      {{end}}
+      <a class="sidebar-link active" href="/admin/clients">应用</a>
+      {{if .CurrentUser.IsAdmin}}
+      <a class="sidebar-link" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/roles">角色</a>
+      <a class="sidebar-link" href="/admin/announcements">公告</a>
+      <a class="sidebar-link" href="/admin/settings">设置</a>
+      {{end}}
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">快速入口</div>
+      <a class="sidebar-link" href="/">返回首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
+    </div>
+  </aside>
+
+  <main class="panel-content">
+    <h1 class="panel-title">应用创建成功</h1>
+    <p class="panel-sub">请立即保存以下凭证，Client Secret 只显示一次。</p>
+
+    {{with .Data}}
+    <div class="detail-section">
+      <div class="detail-section-title">🎉 {{index . "Name"}} 已创建</div>
+      <div class="detail-row">
+        <div class="detail-key">Client ID</div>
+        <div class="detail-val mono">{{index . "NewClientID"}}</div>
+      </div>
+    </div>
+
+    <div class="secret-box">
+      <p style="font-weight:600;margin-bottom:.6rem">⚠️ Client Secret（仅显示一次，请立即复制保存）</p>
+      <div class="secret-val">{{index . "NewSecret"}}</div>
+    </div>
+
+    <div style="margin-top:1.5rem;display:flex;gap:.8rem">
+      <a class="btn btn-primary" href="/admin/clients/{{index . "NewInternalID"}}">查看应用详情</a>
+      <a class="btn btn-ghost" href="/admin/clients">返回列表</a>
+    </div>
+    {{end}}
+  </main>
+</div>
+{{end}}

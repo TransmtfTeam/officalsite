@@ -1,0 +1,87 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="panel-wrap">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">管理导航</div>
+      <a class="sidebar-link" href="/admin">概览</a>
+      <a class="sidebar-link" href="/admin/users">用户</a>
+      <a class="sidebar-link" href="/admin/clients">应用</a>
+      <a class="sidebar-link" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link active" href="/admin/roles">角色</a>
+      <a class="sidebar-link" href="/admin/announcements">公告</a>
+      <a class="sidebar-link" href="/admin/settings">设置</a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">快速入口</div>
+      <a class="sidebar-link" href="/">返回首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
+    </div>
+  </aside>
+
+  <main class="panel-content">
+    <h1 class="panel-title">角色管理</h1>
+    <p class="panel-sub">
+      三个内置角色（user / member / admin）不可删除。可以在此创建自定义角色。
+    </p>
+
+    {{if .Flash}}
+    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+    {{end}}
+
+    <div class="form-panel">
+      <p class="form-panel-title">创建自定义角色</p>
+      <form method="POST" action="/admin/roles">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">角色名（仅小写字母、数字、-）</label>
+            <input class="form-control" type="text" name="name" placeholder="editor" required pattern="[a-z0-9\-]+">
+          </div>
+          <div class="form-group">
+            <label class="form-label">显示标签（可选）</label>
+            <input class="form-control" type="text" name="label" placeholder="编辑员">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">创建角色</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <p style="font-size:.85rem;font-weight:600;color:var(--text2);margin-bottom:.8rem">内置角色</p>
+      <table class="data-table" style="margin-bottom:1.5rem">
+        <thead><tr><th>角色名</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><span class="role-badge role-user">user</span></td><td style="font-size:.88rem;color:var(--text2)">普通注册用户</td></tr>
+          <tr><td><span class="role-badge role-member">member</span></td><td style="font-size:.88rem;color:var(--text2)">团队成员，可管理应用</td></tr>
+          <tr><td><span class="role-badge role-admin">admin</span></td><td style="font-size:.88rem;color:var(--text2)">管理员，完整权限</td></tr>
+        </tbody>
+      </table>
+
+      <p style="font-size:.85rem;font-weight:600;color:var(--text2);margin-bottom:.8rem">自定义角色</p>
+      <table class="data-table">
+        <thead><tr><th>角色名</th><th>标签</th><th>创建时间</th><th>操作</th></tr></thead>
+        <tbody>
+          {{range .Data}}
+          <tr>
+            <td><span class="role-badge role-user">{{.Name}}</span></td>
+            <td>{{if .Label}}{{.Label}}{{else}}<span style="color:var(--text2)">（无）</span>{{end}}</td>
+            <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+            <td>
+              <form method="POST" action="/admin/roles/{{.Name}}/delete">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button class="btn btn-danger btn-sm" type="submit"
+                  onclick="return confirm('确认删除角色 {{.Name}}？')">删除</button>
+              </form>
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="4" style="color:var(--text2);text-align:center;padding:1.5rem">暂无自定义角色</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+{{end}}

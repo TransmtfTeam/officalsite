@@ -1,44 +1,147 @@
 {{template "base" .}}
 
 {{define "content"}}
-<section class="page-hero">
+<div style="background:#fff;padding-top:60px">
+
+<!-- ── Hero ──────────────────────────────────────────────────── -->
+<section class="page-hero" style="padding-top:100px;min-height:92vh">
   <div class="hero-left">
-    <p class="hero-greeting">你好，欢迎来到</p>
-    <h1 class="hero-big">Team TransMTF</h1>
-    <p class="hero-trans">一个面向跨性别群体与盟友的开放社区。</p>
-    <p class="hero-desc">
-      我们提供公开官网、标准 OIDC/OAuth2 身份服务、成员项目展示与统一用户中心。
+    <p class="hero-greeting">了解我们</p>
+    <p class="hero-prefix">什么是</p>
+    <h1 class="hero-big">
+      <span class="hc-1">跨</span><span class="hc-2">性</span><span class="hc-3">别</span><span class="hc-4">女</span><span class="hc-5">性</span>
+    </h1>
+    <p class="hero-also">MTF &middot; Male-to-Female &middot; 跨女</p>
+    <p class="hero-trans">Trans Women Are Women. 跨性别女性是女性。</p>
+    <p class="hero-desc" style="margin-bottom:2rem">
+      跨性别女性（MTF）是出生时被指派为男性，但性别认同为女性的人。
+      性别认同是每个人对自身性别的内心感受，与生理特征、社会性别表达无关。
     </p>
-    <div style="margin-top:1.5rem;display:flex;gap:.8rem;flex-wrap:wrap">
+    <div style="display:flex;gap:.8rem;flex-wrap:wrap">
       {{if .CurrentUser}}
       <a class="btn btn-primary" href="/profile">进入用户中心</a>
       {{else}}
-      <a class="btn btn-primary" href="/login">立即登录</a>
+      <a class="btn btn-primary" href="/login">登录账号</a>
       <a class="btn btn-ghost" href="/register">创建账号</a>
       {{end}}
     </div>
   </div>
 
   <div class="hero-right">
-    <div class="hero-blob-wrap card">
+    <div class="card" style="position:relative;overflow:hidden">
       <div class="hero-blob"></div>
-      <p class="hero-what-title">我们在做什么</p>
-      <p class="hero-desc">
-        1. 提供统一身份认证能力，支持标准 OIDC 流程。
+      <p class="hero-what-title">基本概念</p>
+      <p class="hero-desc" style="margin-bottom:.9rem">
+        <span class="em-blue">性别认同</span>是一个人对自身性别的内在感受，
+        与出生时被指派的性别（生理性别）可能一致，也可能不同。
+      </p>
+      <p class="hero-desc" style="margin-bottom:.9rem">
+        <span class="em-pink">跨性别（Transgender）</span>是一个总称，
+        指性别认同与出生时被指派性别不符的人群。
       </p>
       <p class="hero-desc">
-        2. 支持第三方登录（如 X、Google、Keycloak 等 OIDC 提供商）。
-      </p>
-      <p class="hero-desc">
-        3. 提供成员项目展示与持续迭代的社区基础设施。
+        <span class="em-purple">过渡（Transition）</span>是跨性别者通过
+        社会、医学或法律途径，使外界认知与自身性别认同一致的过程。
       </p>
     </div>
   </div>
 </section>
 
+<!-- ── 关键信息卡片 ────────────────────────────────────────── -->
+<section class="mtf-section">
+  <h2 class="section-title">关于跨性别女性</h2>
+  <p class="section-sub">每个人的故事都不同，但你并不孤单。</p>
+
+  <div class="cards-grid">
+    <article class="info-card">
+      <div class="info-card-icon">🌈</div>
+      <div class="info-card-title">什么是 MTF？</div>
+      <div class="info-card-body">
+        MTF（Male-to-Female）即指出生时被指派男性性别，但内心认同自己是女性的跨性别者。
+        这不是"选择"，而是性别认同的自然表达，被世界上主流医学组织广泛认可。
+      </div>
+    </article>
+
+    <article class="info-card">
+      <div class="info-card-icon">🏥</div>
+      <div class="info-card-title">医学与心理支持</div>
+      <div class="info-card-body">
+        跨性别身份已被 WHO、APA 等国际机构去病理化。激素替代疗法（HRT）、
+        社会过渡等方式已被证明能显著改善跨性别者的心理健康与生活质量。
+      </div>
+    </article>
+
+    <article class="info-card">
+      <div class="info-card-icon">🤝</div>
+      <div class="info-card-title">社区与支持</div>
+      <div class="info-card-body">
+        你不需要独自面对。这里有理解与接纳你的伙伴、资源与社区。
+        无论你处于探索阶段还是已经走上了过渡之路，欢迎加入我们。
+      </div>
+    </article>
+
+    <article class="info-card">
+      <div class="info-card-icon">⚖️</div>
+      <div class="info-card-title">权利与尊重</div>
+      <div class="info-card-body">
+        每一位跨性别女性都有权利被以正确的代词和名字称呼，被当作完整的人来尊重。
+        跨性别女性是女性——这是不需要争论的事实。
+      </div>
+    </article>
+
+    <article class="info-card">
+      <div class="info-card-icon">💊</div>
+      <div class="info-card-title">激素替代疗法（HRT）</div>
+      <div class="info-card-body">
+        HRT 通过引入雌激素、抗雄激素，使身体特征逐渐向女性方向发展，
+        帮助缓解性别焦虑，提升生活幸福感。需要在医生指导下进行。
+      </div>
+    </article>
+
+    <article class="info-card">
+      <div class="info-card-icon">✨</div>
+      <div class="info-card-title">过渡的多种方式</div>
+      <div class="info-card-body">
+        过渡可以是社会过渡（改名、着装、代词），医疗过渡（HRT、手术），
+        或法律过渡（更改证件性别）。没有"唯一正确"的过渡方式，一切以你的意愿和安全为优先。
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- ── 常见误区 ─────────────────────────────────────────────── -->
+<section class="mtf-section-white">
+  <h2 class="section-title">常见误区</h2>
+  <p class="section-sub">关于跨性别，有很多误解需要澄清。</p>
+  <div class="cards-grid">
+    <article class="info-card" style="border-left:4px solid #55CDFC">
+      <div class="info-card-title">❌ 误区：跨性别是一种"选择"</div>
+      <div class="info-card-body">
+        性别认同不是可以"选择"或"改变"的。跨性别身份是真实存在的，
+        科学研究表明其有神经生物学基础。
+      </div>
+    </article>
+    <article class="info-card" style="border-left:4px solid #F7A8B8">
+      <div class="info-card-title">❌ 误区：手术才是"真正的"跨性别</div>
+      <div class="info-card-body">
+        是否进行手术是个人选择，与跨性别身份无关。
+        一个没有做过任何手术的跨性别女性，依然是真实的女性。
+      </div>
+    </article>
+    <article class="info-card" style="border-left:4px solid #C884B0">
+      <div class="info-card-title">❌ 误区：跨性别是心理疾病</div>
+      <div class="info-card-body">
+        世界卫生组织（WHO）已于 2019 年将跨性别去病理化。
+        跨性别身份本身不是疾病，但被歧视带来的心理困扰需要社会支持。
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- ── 团队项目 ─────────────────────────────────────────────── -->
 <section class="section">
-  <h2 class="section-title">团队项目</h2>
-  <p class="section-sub">以下为公开展示的项目列表。</p>
+  <h2 class="section-title">社区项目</h2>
+  <p class="section-sub">我们正在建设的一些项目与资源。</p>
 
   <div class="cards-grid">
     {{if .Data}}
@@ -50,15 +153,17 @@
         </div>
         {{if .DescZH}}<p class="proj-desc">{{.DescZH}}</p>{{else if .DescEN}}<p class="proj-desc">{{.DescEN}}</p>{{end}}
         {{if .URL}}
-        <a class="proj-link" href="{{.URL}}" target="_blank" rel="noopener">访问项目</a>
+        <a class="proj-link" href="{{.URL}}" target="_blank" rel="noopener">访问项目 →</a>
         {{end}}
       </article>
       {{end}}
     {{else}}
     <article class="proj-card">
-      <p class="proj-desc">暂无公开项目，欢迎稍后再来查看。</p>
+      <p class="proj-desc">暂无公开项目，敬请期待。</p>
     </article>
     {{end}}
   </div>
 </section>
+
+</div>
 {{end}}

@@ -1,0 +1,211 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="panel-wrap">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">管理导航</div>
+      {{if .CurrentUser.IsAdmin}}
+      <a class="sidebar-link" href="/admin">概览</a>
+      <a class="sidebar-link" href="/admin/users">用户</a>
+      {{end}}
+      <a class="sidebar-link active" href="/admin/clients">应用</a>
+      {{if .CurrentUser.IsAdmin}}
+      <a class="sidebar-link" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/roles">角色</a>
+      <a class="sidebar-link" href="/admin/announcements">公告</a>
+      <a class="sidebar-link" href="/admin/settings">设置</a>
+      {{end}}
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">快速入口</div>
+      <a class="sidebar-link" href="/">返回首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
+    </div>
+  </aside>
+
+  <main class="panel-content">
+    {{with .Data}}
+    {{$client := index . "Client"}}
+    {{$ann    := index . "Announcement"}}
+
+    <div style="display:flex;align-items:center;gap:.8rem;margin-bottom:.5rem">
+      <a href="/admin/clients" style="color:var(--text2);font-size:.9rem">← 应用列表</a>
+    </div>
+
+    {{if $.Flash}}
+    <div class="flash {{if $.IsError}}flash-err{{else}}flash-ok{{end}}">{{$.Flash}}</div>
+    {{end}}
+
+    <h1 class="panel-title">{{$client.Name}}</h1>
+
+    {{/* ── Client info ── */}}
+    <div class="detail-section">
+      <div class="detail-section-title">基本信息</div>
+      <div class="detail-row">
+        <div class="detail-key">Client ID</div>
+        <div class="detail-val mono">{{$client.ClientID}}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">名称</div>
+        <div class="detail-val">{{$client.Name}}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">描述</div>
+        <div class="detail-val">{{if $client.Description}}{{$client.Description}}{{else}}<span style="color:var(--text2)">（无）</span>{{end}}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">Scopes</div>
+        <div class="detail-val">{{range $client.Scopes}}<span class="proj-tag">{{.}}</span> {{end}}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">Redirect URIs</div>
+        <div class="detail-val">{{range $client.RedirectURIs}}<div class="mono" style="font-size:.82rem">{{.}}</div>{{end}}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">创建时间</div>
+        <div class="detail-val">{{$client.CreatedAt.Format "2006-01-02 15:04"}}</div>
+      </div>
+    </div>
+
+    {{/* ── Integration guide ── */}}
+    <details class="detail-section" style="cursor:pointer">
+      <summary style="font-weight:600;font-size:.95rem;list-style:none;display:flex;align-items:center;justify-content:space-between">
+        接入指南 <span style="font-size:.8rem;color:var(--text2);font-weight:400">（填写到第三方服务的 OIDC / SSO 配置页）▾</span>
+      </summary>
+
+      <p style="font-size:.82rem;color:var(--text2);margin:.8rem 0 1rem">
+        将本服务作为 OIDC 身份提供商（IdP）接入 Cloudflare Access、Authentik、Grafana、GitLab 等系统时，按下表填写。
+        支持自动发现的系统只需填写 <strong>发现文档 URL</strong> 即可，其余 URL 会自动获取。
+      </p>
+
+      <table class="data-table" style="margin-bottom:1rem">
+        <thead>
+          <tr><th style="width:36%">字段</th><th>填写值</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>发现文档 URL<br><span style="font-size:.75rem;color:var(--text2)">OIDC Discovery / Well-Known</span></td>
+            <td><code class="mono">{{$.Issuer}}/.well-known/openid-configuration</code></td>
+          </tr>
+          <tr>
+            <td>身份验证 URL<br><span style="font-size:.75rem;color:var(--text2)">Authorization Endpoint</span></td>
+            <td><code class="mono">{{$.Issuer}}/oauth2/authorize</code></td>
+          </tr>
+          <tr>
+            <td>令牌 URL<br><span style="font-size:.75rem;color:var(--text2)">Token Endpoint</span></td>
+            <td><code class="mono">{{$.Issuer}}/oauth2/token</code></td>
+          </tr>
+          <tr>
+            <td>证书 URL<br><span style="font-size:.75rem;color:var(--text2)">JWKS URI / Certs Endpoint</span></td>
+            <td><code class="mono">{{$.Issuer}}/.well-known/jwks.json</code></td>
+          </tr>
+          <tr>
+            <td>Client ID</td>
+            <td><code class="mono">{{$client.ClientID}}</code></td>
+          </tr>
+          <tr>
+            <td>Client Secret</td>
+            <td><span style="color:var(--text2);font-size:.85rem">创建时一次性显示；如已丢失请重置</span></td>
+          </tr>
+          <tr>
+            <td>PKCE<br><span style="font-size:.75rem;color:var(--text2)">Code Challenge Method</span></td>
+            <td><code class="mono">S256</code> <span style="font-size:.82rem;color:var(--text2)">（已支持，推荐开启）</span></td>
+          </tr>
+          <tr>
+            <td>SCIM</td>
+            <td><span style="color:var(--text2);font-size:.85rem">不支持，保持关闭</span></td>
+          </tr>
+          <tr>
+            <td>电子邮件声明<br><span style="font-size:.75rem;color:var(--text2)">Email Claim</span></td>
+            <td><code class="mono">email</code></td>
+          </tr>
+          <tr>
+            <td>OIDC 范围<br><span style="font-size:.75rem;color:var(--text2)">Scopes</span></td>
+            <td><code class="mono">openid email profile</code></td>
+          </tr>
+          <tr>
+            <td>可用自定义声明<br><span style="font-size:.75rem;color:var(--text2)">Custom Claims from id_token</span></td>
+            <td>
+              <code class="mono">role</code> — 用户角色（user / member / admin）<br>
+              <code class="mono">name</code> — 显示名称（需要 profile scope）<br>
+              <code class="mono">picture</code> — 头像 URL（需要 profile scope）
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="background:#f8fafc;border:1px solid var(--glass-b);border-radius:10px;padding:.9rem 1rem;font-size:.82rem;color:var(--text2)">
+        <strong style="color:var(--text)">Cloudflare Access 填写示例：</strong><br>
+        身份验证 URL → <code>{{$.Issuer}}/oauth2/authorize</code><br>
+        令牌 URL → <code>{{$.Issuer}}/oauth2/token</code><br>
+        证书 URL → <code>{{$.Issuer}}/.well-known/jwks.json</code><br>
+        PKCE → <strong>开启</strong>（机密客户端也支持）&emsp;
+        SCIM → <strong>关闭</strong>&emsp;
+        电子邮件声明 → <code>email</code><br>
+        OIDC 范围 → <code>openid email profile</code>（在原有基础上追加）
+      </div>
+    </details>
+
+    {{/* ── Edit form ── */}}
+    <div class="detail-section">
+      <div class="detail-section-title">编辑信息</div>
+      <form method="POST" action="/admin/clients/{{$client.ID}}/update">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-group">
+          <label class="form-label">应用名称</label>
+          <input class="form-control" type="text" name="name" value="{{$client.Name}}" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">描述</label>
+          <input class="form-control" type="text" name="description" value="{{$client.Description}}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Redirect URIs（每行一个）</label>
+          <textarea class="form-control" name="redirect_uris" rows="4">{{range $client.RedirectURIs}}{{.}}
+{{end}}</textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Scopes（空格分隔）</label>
+          <input class="form-control" type="text" name="scopes" value="{{range $client.Scopes}}{{.}} {{end}}">
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">保存修改</button>
+      </form>
+    </div>
+
+    {{/* ── Announcement ── */}}
+    <div class="detail-section">
+      <div class="detail-section-title">应用公告</div>
+      <p style="font-size:.82rem;color:var(--text2);margin-bottom:.8rem">
+        公告可通过 <code class="mono">/api/announcement/{{$client.ClientID}}</code> 公开访问。
+      </p>
+      <form method="POST" action="/admin/announcements/{{$client.ClientID}}/save">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-group">
+          <textarea class="form-control" name="content" rows="3" placeholder="公告内容（留空则清除）">{{$ann}}</textarea>
+        </div>
+        <button class="btn btn-ghost btn-sm" type="submit">保存公告</button>
+      </form>
+    </div>
+
+    {{/* ── Danger zone ── */}}
+    <div class="detail-section" style="border-color:#fecaca">
+      <div class="detail-section-title">危险操作</div>
+      <div style="display:flex;gap:.8rem;flex-wrap:wrap">
+        <form method="POST" action="/admin/clients/{{$client.ID}}/reset-secret">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <button class="btn btn-ghost btn-sm" type="submit"
+            onclick="return confirm('重置后旧 Secret 立即失效，确认重置？')">重置 Client Secret</button>
+        </form>
+        <form method="POST" action="/admin/clients/{{$client.ID}}/delete">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <button class="btn btn-danger btn-sm" type="submit"
+            onclick="return confirm('删除后所有令牌将失效，确认删除？')">删除此应用</button>
+        </form>
+      </div>
+    </div>
+
+    {{end}}
+  </main>
+</div>
+{{end}}

@@ -1,0 +1,69 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="panel-wrap">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">管理导航</div>
+      {{if .CurrentUser.IsAdmin}}
+      <a class="sidebar-link" href="/admin">概览</a>
+      <a class="sidebar-link" href="/admin/users">用户</a>
+      {{end}}
+      <a class="sidebar-link active" href="/admin/clients">应用</a>
+      {{if .CurrentUser.IsAdmin}}
+      <a class="sidebar-link" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/roles">角色</a>
+      <a class="sidebar-link" href="/admin/announcements">公告</a>
+      <a class="sidebar-link" href="/admin/settings">设置</a>
+      {{end}}
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">快速入口</div>
+      <a class="sidebar-link" href="/">返回首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
+    </div>
+  </aside>
+
+  <main class="panel-content">
+    <div style="display:flex;align-items:center;gap:.8rem;margin-bottom:.5rem">
+      <a href="/admin/clients" style="color:var(--text2);font-size:.9rem">← 返回列表</a>
+    </div>
+    <h1 class="panel-title">新建应用</h1>
+    <p class="panel-sub">注册一个新的 OAuth2/OIDC 客户端。</p>
+
+    {{if .Flash}}
+    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+    {{end}}
+
+    <div class="form-panel">
+      <form method="POST" action="/admin/clients">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">应用名称 <span style="color:#dc2626">*</span></label>
+            <input class="form-control" type="text" name="name" required placeholder="My App">
+          </div>
+          <div class="form-group">
+            <label class="form-label">描述（可选）</label>
+            <input class="form-control" type="text" name="description" placeholder="用于...的登录服务">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Redirect URIs（每行一个）<span style="color:#dc2626">*</span></label>
+          <textarea class="form-control" name="redirect_uris" rows="4"
+            placeholder="https://app.example.com/callback&#10;https://app.example.com/auth/oidc/callback" required></textarea>
+          <p style="font-size:.78rem;color:var(--text2);margin-top:.25rem">必须是 HTTPS，或 localhost/127.0.0.1 的 HTTP</p>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Scopes（空格分隔）</label>
+          <input class="form-control" type="text" name="scopes" value="openid profile email">
+        </div>
+        <div style="display:flex;gap:.8rem">
+          <button class="btn btn-primary" type="submit">创建应用</button>
+          <a class="btn btn-ghost" href="/admin/clients">取消</a>
+        </div>
+      </form>
+    </div>
+  </main>
+</div>
+{{end}}

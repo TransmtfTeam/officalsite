@@ -1,4 +1,4 @@
-﻿package server
+package server
 
 import (
 	"crypto/sha256"
@@ -10,7 +10,6 @@ import (
 	"transmtf.com/oidc/internal/store"
 )
 
-// 鈹€鈹€ Discovery 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func (h *Handler) Discovery(w http.ResponseWriter, r *http.Request) {
 	iss := h.cfg.Issuer
@@ -37,7 +36,6 @@ func (h *Handler) JWKS(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, 200, h.keys.JWKSet())
 }
 
-// 鈹€鈹€ Authorize 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 type authRequest struct {
 	ClientID            string
@@ -68,7 +66,7 @@ func (h *Handler) Authorize(w http.ResponseWriter, r *http.Request) {
 		oidcError(w, 400, "invalid_client", "unknown client_id")
 		return
 	}
-	// Validate redirect_uri first 鈥?before any redirect-based error response
+	// Validate redirect_uri first - before any redirect-based error response
 	if !validRedirectURI(client.RedirectURIs, ar.RedirectURI) {
 		oidcError(w, 400, "invalid_request", "redirect_uri mismatch")
 		return
@@ -99,7 +97,7 @@ func (h *Handler) Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	d := h.pageData(r, "鎺堟潈")
+	d := h.pageData(r, "Authorize")
 	d.Data = map[string]any{
 		"Client":  client,
 		"Request": ar,
@@ -180,7 +178,6 @@ func (h *Handler) AuthorizeConsent(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redir, http.StatusFound)
 }
 
-// 鈹€鈹€ Token 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func (h *Handler) Token(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
@@ -283,7 +280,7 @@ func (h *Handler) tokenClientCredentials(w http.ResponseWriter, r *http.Request,
 		oidcError(w, 400, "invalid_scope", "requested scope is not allowed for this client")
 		return
 	}
-	// Remove openid 鈥?client_credentials cannot issue ID tokens (no user context)
+	// Remove openid - client_credentials cannot issue ID tokens (no user context)
 	var scopes []string
 	for _, s := range scopeReq {
 		if s != "openid" {
@@ -292,7 +289,7 @@ func (h *Handler) tokenClientCredentials(w http.ResponseWriter, r *http.Request,
 	}
 
 	ctx := r.Context()
-	// user_id is empty for client_credentials 鈥?no user is involved
+	// user_id is empty for client_credentials - no user is involved
 	at, err := h.st.CreateAccessToken(ctx, "", client.ClientID, scopes)
 	if err != nil {
 		oidcError(w, 500, "server_error", "could not create access token")
@@ -341,7 +338,6 @@ func (h *Handler) issueTokens(w http.ResponseWriter, r *http.Request, u *store.U
 	jsonResp(w, 200, resp)
 }
 
-// 鈹€鈹€ UserInfo 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func (h *Handler) UserInfo(w http.ResponseWriter, r *http.Request) {
 	raw := bearerToken(r)
@@ -386,7 +382,6 @@ func (h *Handler) UserInfo(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, 200, claims)
 }
 
-// 鈹€鈹€ Revoke 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
@@ -417,7 +412,6 @@ func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 }
 
-// 鈹€鈹€ Introspect 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func (h *Handler) Introspect(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
@@ -463,7 +457,6 @@ func (h *Handler) Introspect(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, 200, resp)
 }
 
-// 鈹€鈹€ Helpers 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func extractClientCreds(r *http.Request) (id, secret string) {
 	// Basic auth first

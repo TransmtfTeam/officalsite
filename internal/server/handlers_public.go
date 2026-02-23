@@ -1,13 +1,17 @@
 package server
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"strings"
+
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
-		h.renderError(w, r, http.StatusNotFound, "页面不存在", r.URL.Path)
+		h.renderError(w, r, http.StatusNotFound, "Not Found", r.URL.Path)
 		return
 	}
 	projects, _ := h.st.ListProjects(r.Context())
@@ -22,7 +26,7 @@ func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	providers, _ := h.st.ListEnabledOIDCProviders(r.Context())
-	d := h.pageData(r, "登录")
+    d := h.pageData(r, "Login")
 	d.Data = map[string]any{
 		"Next":      safeNextPath(r.URL.Query().Get("next"), ""),
 		"Providers": providers,
@@ -48,8 +52,8 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	u, err := h.st.GetUserByEmail(ctx, email)
 	if err != nil || !h.st.VerifyPassword(u, pass) || !u.Active {
 		providers, _ := h.st.ListEnabledOIDCProviders(ctx)
-		d := h.pageData(r, "登录")
-		d.Flash = "邮箱或密码错误"
+        d := h.pageData(r, "Login")
+		d.Flash = "Invalid email or password"
 		d.IsError = true
 		d.Data = map[string]any{"Next": next, "Providers": providers}
 		h.render(w, "login", d)
@@ -61,7 +65,7 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 
 	sid, err := h.st.CreateSession(ctx, u.ID)
 	if err != nil {
-		h.renderError(w, r, http.StatusInternalServerError, "服务器错误", err.Error())
+		h.renderError(w, r, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}
 	h.setSessionCookie(w, sid)
@@ -69,7 +73,7 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RegisterPage(w http.ResponseWriter, r *http.Request) {
-	d := h.pageData(r, "注册")
+    d := h.pageData(r, "Register")
 	h.render(w, "register", d)
 }
 
@@ -89,22 +93,22 @@ func (h *Handler) RegisterPost(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("display_name"))
 
 	fail := func(msg string) {
-		d := h.pageData(r, "注册")
+        d := h.pageData(r, "Register")
 		d.Flash = msg
 		d.IsError = true
 		h.render(w, "register", d)
 	}
 
 	if email == "" || pass == "" || name == "" {
-		fail("请填写所有字段")
+		fail("Please fill in all required fields")
 		return
 	}
 	if len(pass) < 8 {
-		fail("密码至少 8 位")
+		fail("Password must be at least 8 characters")
 		return
 	}
 	if pass != confirm {
-		fail("两次密码不一致")
+		fail("Passwords do not match")
 		return
 	}
 
@@ -112,9 +116,9 @@ func (h *Handler) RegisterPost(w http.ResponseWriter, r *http.Request) {
 	u, err := h.st.CreateUser(ctx, email, pass, name, "user")
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
-			fail("该邮箱已注册")
+			fail("Email already registered")
 		} else {
-			fail("注册失败: " + err.Error())
+			fail("Registration failed: " + err.Error())
 		}
 		return
 	}
@@ -123,6 +127,7 @@ func (h *Handler) RegisterPost(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		h.setSessionCookie(w, sid)
 	}
+	go h.sendWelcomeEmail(context.Background(), u.Email, u.DisplayName)
 	http.Redirect(w, r, "/profile", http.StatusFound)
 }
 
@@ -146,13 +151,20 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Profile(w http.ResponseWriter, r *http.Request) {
-	d := h.pageData(r, "个人资料")
-	if u := h.currentUser(r); u != nil && u.TOTPPendingSecret != "" {
-		d.Data = map[string]any{
-			"PendingSecret": u.TOTPPendingSecret,
-			"PendingURI":    buildTOTPUri(orDefault(h.st.GetSetting(r.Context(), "site_name"), "Team TransMTF"), u.Email, u.TOTPPendingSecret),
+	u := h.currentUser(r)
+	d := h.pageData(r, "Profile")
+	ctx := r.Context()
+	data := map[string]any{"Passkeys": nil}
+	if u != nil {
+		passkeys, _ := h.st.GetPasskeyCredentialsByUserID(ctx, u.ID)
+		data["Passkeys"] = passkeys
+		if u.TOTPPendingSecret != "" {
+			siteName := orDefault(h.st.GetSetting(ctx, "site_name"), "Team TransMTF")
+			data["PendingSecret"] = u.TOTPPendingSecret
+			data["PendingURI"] = buildTOTPUri(siteName, u.Email, u.TOTPPendingSecret)
 		}
 	}
+	d.Data = data
 	h.render(w, "profile", d)
 }
 
@@ -174,24 +186,29 @@ func (h *Handler) ProfilePost(w http.ResponseWriter, r *http.Request) {
 	confirm := r.FormValue("confirm_password")
 
 	fail := func(msg string) {
-		d := h.pageData(r, "个人资料")
+		d := h.pageData(r, "Profile")
 		d.Flash = msg
 		d.IsError = true
-		if u != nil && u.TOTPPendingSecret != "" {
-			d.Data = map[string]any{
-				"PendingSecret": u.TOTPPendingSecret,
-				"PendingURI":    buildTOTPUri(orDefault(h.st.GetSetting(r.Context(), "site_name"), "Team TransMTF"), u.Email, u.TOTPPendingSecret),
+		data := map[string]any{"Passkeys": nil}
+		if u != nil {
+			passkeys, _ := h.st.GetPasskeyCredentialsByUserID(r.Context(), u.ID)
+			data["Passkeys"] = passkeys
+			if u.TOTPPendingSecret != "" {
+				siteName := orDefault(h.st.GetSetting(r.Context(), "site_name"), "Team TransMTF")
+				data["PendingSecret"] = u.TOTPPendingSecret
+				data["PendingURI"] = buildTOTPUri(siteName, u.Email, u.TOTPPendingSecret)
 			}
 		}
+		d.Data = data
 		h.render(w, "profile", d)
 	}
 
 	if name == "" {
-		fail("显示名称不能为空")
+		fail("Display name cannot be empty")
 		return
 	}
 	if err := h.st.UpdateUser(ctx, u.ID, name, u.Role, u.Active); err != nil {
-		fail("保存失败: " + err.Error())
+		fail("Save failed: " + err.Error())
 		return
 	}
 	if avatar != "" {
@@ -200,38 +217,72 @@ func (h *Handler) ProfilePost(w http.ResponseWriter, r *http.Request) {
 
 	if newPass != "" {
 		if len(newPass) < 8 {
-			fail("新密码至少 8 位")
+			fail("New password must be at least 8 characters")
 			return
 		}
 		if newPass != confirm {
-			fail("两次密码不一致")
+			fail("Passwords do not match")
 			return
 		}
 		if err := h.st.UpdatePassword(ctx, u.ID, newPass); err != nil {
-			fail("密码修改失败")
+			fail("Password update failed")
 			return
 		}
 	}
 
-	d := h.pageData(r, "个人资料")
-	d.Flash = "保存成功"
-	if u != nil && u.TOTPPendingSecret != "" {
-		d.Data = map[string]any{
-			"PendingSecret": u.TOTPPendingSecret,
-			"PendingURI":    buildTOTPUri(orDefault(h.st.GetSetting(r.Context(), "site_name"), "Team TransMTF"), u.Email, u.TOTPPendingSecret),
+	d := h.pageData(r, "Profile")
+	d.Flash = "Saved"
+	data := map[string]any{"Passkeys": nil}
+	if u != nil {
+		passkeys, _ := h.st.GetPasskeyCredentialsByUserID(ctx, u.ID)
+		data["Passkeys"] = passkeys
+		if u.TOTPPendingSecret != "" {
+			siteName := orDefault(h.st.GetSetting(ctx, "site_name"), "Team TransMTF")
+			data["PendingSecret"] = u.TOTPPendingSecret
+			data["PendingURI"] = buildTOTPUri(siteName, u.Email, u.TOTPPendingSecret)
 		}
 	}
+	d.Data = data
 	h.render(w, "profile", d)
 }
 
 func (h *Handler) TOSPage(w http.ResponseWriter, r *http.Request) {
-	d := h.pageData(r, "服务条款")
+	d := h.pageData(r, "Terms of Service")
 	d.Data = h.st.GetSetting(r.Context(), "tos_content")
 	h.render(w, "tos", d)
 }
 
 func (h *Handler) PrivacyPage(w http.ResponseWriter, r *http.Request) {
-	d := h.pageData(r, "隐私政策")
+	d := h.pageData(r, "Privacy Policy")
 	d.Data = h.st.GetSetting(r.Context(), "privacy_content")
 	h.render(w, "privacy", d)
+}
+
+// Profile2FAQR serves the pending TOTP secret as a QR code PNG.
+func (h *Handler) Profile2FAQR(w http.ResponseWriter, r *http.Request) {
+	u := h.currentUser(r)
+	if u == nil || u.TOTPPendingSecret == "" {
+		http.NotFound(w, r)
+		return
+	}
+	siteName := orDefault(h.st.GetSetting(r.Context(), "site_name"), "Team TransMTF")
+	uri := buildTOTPUri(siteName, u.Email, u.TOTPPendingSecret)
+	png, err := qrcode.Encode(uri, qrcode.Medium, 256)
+	if err != nil {
+		http.Error(w, "qr generation failed", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(png)
+}
+
+// AnnouncementAPI returns the announcement text for a client (empty string, never 404).
+func (h *Handler) AnnouncementAPI(w http.ResponseWriter, r *http.Request) {
+	clientID := r.PathValue("clientid")
+	content := h.st.GetClientAnnouncement(r.Context(), clientID)
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Cache-Control", "no-store")
+	fmt.Fprint(w, content)
 }

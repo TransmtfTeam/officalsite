@@ -5,11 +5,17 @@
   <aside class="sidebar">
     <div class="sidebar-section">
       <div class="sidebar-title">管理导航</div>
+      {{if .CurrentUser.IsAdmin}}
       <a class="sidebar-link" href="/admin">概览</a>
       <a class="sidebar-link active" href="/admin/users">用户</a>
+      {{end}}
       <a class="sidebar-link" href="/admin/clients">应用</a>
+      {{if .CurrentUser.IsAdmin}}
       <a class="sidebar-link" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/roles">角色</a>
+      <a class="sidebar-link" href="/admin/announcements">公告</a>
       <a class="sidebar-link" href="/admin/settings">设置</a>
+      {{end}}
     </div>
     <div class="sidebar-section">
       <div class="sidebar-title">快速入口</div>
@@ -20,11 +26,14 @@
 
   <main class="panel-content">
     <h1 class="panel-title">用户管理</h1>
-    <p class="panel-sub">创建用户并管理角色、状态。</p>
+    <p class="panel-sub">创建用户并管理角色与状态。</p>
 
     {{if .Flash}}
     <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
     {{end}}
+
+    {{$d := .Data}}
+    {{$customRoles := index $d "CustomRoles"}}
 
     <div class="form-panel">
       <p class="form-panel-title">新增用户</p>
@@ -46,9 +55,12 @@
           <div class="form-group">
             <label class="form-label">角色</label>
             <select class="form-control" name="role">
-              <option value="user">user</option>
-              <option value="member">member</option>
-              <option value="admin">admin</option>
+              <option value="user">用户 (user)</option>
+              <option value="member">成员 (member)</option>
+              <option value="admin">管理员 (admin)</option>
+              {{range $customRoles}}
+              <option value="{{.Name}}">{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</option>
+              {{end}}
             </select>
           </div>
         </div>
@@ -68,39 +80,47 @@
           </tr>
         </thead>
         <tbody>
-          {{range .Data}}
+          {{range (index $d "Users")}}
+          {{$userRole := .Role}}
           <tr>
-            <td>{{.Email}}</td>
+            <td>
+              <a href="/admin/users/{{.ID}}" style="font-weight:500">{{.Email}}</a>
+            </td>
             <td>{{.DisplayName}}</td>
             <td>
               <span class="role-badge {{if eq .Role "admin"}}role-admin{{else if eq .Role "member"}}role-member{{else}}role-user{{end}}">
                 {{.Role}}
               </span>
             </td>
-            <td>{{if .Active}}启用{{else}}停用{{end}}</td>
+            <td>{{if .Active}}<span style="color:#16a34a">启用</span>{{else}}<span style="color:#dc2626">停用</span>{{end}}</td>
             <td>
-              <form method="POST" action="/admin/users/{{.ID}}/update" style="display:inline-block">
+              <form method="POST" action="/admin/users/{{.ID}}/update" style="display:inline-flex;align-items:center;gap:.4rem;flex-wrap:wrap">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <input class="form-control" type="text" name="display_name" value="{{.DisplayName}}" style="display:inline-block;width:auto;min-width:140px;margin-right:.4rem">
-                <select class="form-control" name="role" style="display:inline-block;width:auto;min-width:120px;margin-right:.4rem">
-                  <option value="user" {{if eq .Role "user"}}selected{{end}}>user</option>
-                  <option value="member" {{if eq .Role "member"}}selected{{end}}>member</option>
-                  <option value="admin" {{if eq .Role "admin"}}selected{{end}}>admin</option>
+                <input class="form-control" type="text" name="display_name" value="{{.DisplayName}}"
+                  style="width:130px">
+                <select class="form-control" name="role" style="width:120px">
+                  <option value="user" {{if eq $userRole "user"}}selected{{end}}>user</option>
+                  <option value="member" {{if eq $userRole "member"}}selected{{end}}>member</option>
+                  <option value="admin" {{if eq $userRole "admin"}}selected{{end}}>admin</option>
+                  {{range $customRoles}}
+                  <option value="{{.Name}}" {{if eq $userRole .Name}}selected{{end}}>{{.Name}}</option>
+                  {{end}}
                 </select>
-                <select class="form-control" name="active" style="display:inline-block;width:auto;min-width:100px;margin-right:.4rem">
+                <select class="form-control" name="active" style="width:80px">
                   <option value="1" {{if .Active}}selected{{end}}>启用</option>
-                  <option value="0" {{if eq .Active false}}selected{{end}}>停用</option>
+                  <option value="0" {{if not .Active}}selected{{end}}>停用</option>
                 </select>
                 <button class="btn btn-ghost btn-sm" type="submit">保存</button>
               </form>
-              <form method="POST" action="/admin/users/{{.ID}}/delete" style="display:inline-block;margin-left:.4rem">
+              <form method="POST" action="/admin/users/{{.ID}}/delete" style="display:inline-block;margin-left:.3rem">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button class="btn btn-danger btn-sm" type="submit">删除</button>
               </form>
+              <a class="btn btn-ghost btn-sm" href="/admin/users/{{.ID}}" style="margin-left:.3rem">详情</a>
             </td>
           </tr>
           {{else}}
-          <tr><td colspan="5" style="color:#666;text-align:center;padding:2rem">暂无用户数据</td></tr>
+          <tr><td colspan="5" style="color:var(--text2);text-align:center;padding:2rem">暂无用户数据</td></tr>
           {{end}}
         </tbody>
       </table>
