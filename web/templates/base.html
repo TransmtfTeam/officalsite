@@ -5,11 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{.Title}} - {{.SiteName}}</title>
   <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="manifest" href="/manifest.json">
   {{if .SiteIconURL}}<link rel="icon" href="{{.SiteIconURL}}">{{end}}
 </head>
 <body>
 <nav class="nav">
-  <a class="nav-brand" href="/">{{.SiteName}}</a>
+  <div style="display:flex;align-items:center;gap:.6rem">
+    <button class="sidebar-toggle" id="sidebar-toggle" aria-label="打开菜单" style="display:none">
+      <span class="hamburger-line"></span>
+      <span class="hamburger-line"></span>
+      <span class="hamburger-line"></span>
+    </button>
+    <a class="nav-brand" href="/">{{.SiteName}}</a>
+  </div>
   <div class="nav-links">
     {{if .CurrentUser}}
       {{if .CurrentUser.IsMember}}
@@ -30,6 +38,20 @@
     {{end}}
   </div>
 </nav>
+
+<div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+<div class="cdialog-overlay" id="cdialog-overlay">
+  <div class="cdialog">
+    <div class="cdialog-icon" id="cdialog-icon">⚠️</div>
+    <div class="cdialog-title" id="cdialog-title">确认操作</div>
+    <div class="cdialog-msg" id="cdialog-msg"></div>
+    <div class="cdialog-actions">
+      <button class="btn btn-ghost" id="cdialog-cancel">取消</button>
+      <button class="btn btn-danger" id="cdialog-confirm">确认</button>
+    </div>
+  </div>
+</div>
 
 {{if .AnnZH}}
 <div class="ann-bar">{{.AnnZH}}</div>

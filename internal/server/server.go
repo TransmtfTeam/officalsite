@@ -217,7 +217,7 @@ func (h *Handler) sessionMiddleware(next http.Handler) http.Handler {
 func (h *Handler) requireLogin(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.currentUser(r) == nil {
-			http.Redirect(w, r, "/login?next="+r.URL.RequestURI(), http.StatusFound)
+			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 			return
 		}
 		next(w, r)
@@ -228,7 +228,7 @@ func (h *Handler) requireMember(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u := h.currentUser(r)
 		if u == nil {
-			http.Redirect(w, r, "/login?next="+r.URL.RequestURI(), http.StatusFound)
+			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 			return
 		}
 		if !u.IsMember() {
@@ -243,7 +243,7 @@ func (h *Handler) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u := h.currentUser(r)
 		if u == nil {
-			http.Redirect(w, r, "/login?next="+r.URL.RequestURI(), http.StatusFound)
+			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 			return
 		}
 		if !u.IsAdmin() {
@@ -262,7 +262,7 @@ func (h *Handler) requirePermission(perm string) func(http.HandlerFunc) http.Han
 		return func(w http.ResponseWriter, r *http.Request) {
 			u := h.currentUser(r)
 			if u == nil {
-				http.Redirect(w, r, "/login?next="+r.URL.RequestURI(), http.StatusFound)
+				http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 				return
 			}
 			if !h.userHasPermission(r.Context(), u, perm) {
@@ -280,11 +280,12 @@ func (h *Handler) userHasPermission(ctx context.Context, u *store.User, perm str
 	if u.IsAdmin() {
 		return true
 	}
-	// Member role implies these three permissions.
+	// Member role implies these permissions.
 	memberImplied := map[string]bool{
 		"manage_projects":      true,
 		"manage_clients":       true,
 		"manage_announcements": true,
+		"manage_groups":        true,
 	}
 	if u.IsMember() && memberImplied[perm] {
 		return true
@@ -406,6 +407,10 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	mux.HandleFunc("POST /logout",   h.Logout)
 	mux.HandleFunc("GET /register",  h.RegisterPage)
 	mux.HandleFunc("POST /register", h.RegisterPost)
+	mux.HandleFunc("GET /forgot-password",  h.ForgotPasswordPage)
+	mux.HandleFunc("POST /forgot-password", h.ForgotPasswordPost)
+	mux.HandleFunc("GET /reset-password",   h.ResetPasswordPage)
+	mux.HandleFunc("POST /reset-password",  h.ResetPasswordPost)
 	mux.HandleFunc("GET /tos",       h.TOSPage)
 	mux.HandleFunc("GET /privacy",   h.PrivacyPage)
 
@@ -490,8 +495,24 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	mux.HandleFunc("POST /admin/settings",                          h.requirePermission("manage_settings")(h.AdminSettingsSave))
 	mux.HandleFunc("POST /admin/settings/upload-icon",              h.requirePermission("manage_settings")(h.AdminSettingsUploadIcon))
 
+	// Admin panel - group management
+	mux.HandleFunc("GET /admin/groups",                              h.requirePermission("manage_groups")(h.AdminGroups))
+	mux.HandleFunc("POST /admin/groups",                             h.requirePermission("manage_groups")(h.AdminGroupCreate))
+	mux.HandleFunc("GET /admin/groups/{id}",                         h.requirePermission("manage_groups")(h.AdminGroupDetail))
+	mux.HandleFunc("POST /admin/groups/{id}/delete",                 h.requirePermission("manage_groups")(h.AdminGroupDelete))
+	mux.HandleFunc("POST /admin/groups/{id}/add-member",             h.requirePermission("manage_groups")(h.AdminGroupAddMember))
+	mux.HandleFunc("POST /admin/groups/{id}/members/{uid}/remove",   h.requirePermission("manage_groups")(h.AdminGroupRemoveMember))
+	mux.HandleFunc("POST /admin/users/{id}/groups/add",              h.requirePermission("manage_groups")(h.AdminUserGroupAdd))
+	mux.HandleFunc("POST /admin/users/{id}/groups/{gid}/remove",     h.requirePermission("manage_groups")(h.AdminUserGroupRemove))
+
 	// Public API
 	mux.HandleFunc("GET /api/announcement/{clientid}", h.AnnouncementAPI)
+	mux.HandleFunc("GET /api/site-icon",               h.AdminSiteIcon)
+	mux.HandleFunc("GET /manifest.json",               h.PWAManifest)
+
+	// Email verification
+	mux.HandleFunc("GET /verify-email",         h.VerifyEmailPage)
+	mux.HandleFunc("POST /verify-email/resend", h.VerifyEmailResend)
 
 	// Wrap with security middlewares.
 	return h.securityHeadersMiddleware(h.sessionMiddleware(mux))
@@ -606,4 +627,61 @@ func isAllowedAbsoluteURL(raw string) bool {
 		return true
 	}
 	return false
+}
+
+// PWAManifest returns a minimal Web App Manifest using the site settings.
+func (h *Handler) PWAManifest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	siteName := orDefault(h.st.GetSetting(ctx, "site_name"), "Team TransMTF")
+	iconURL := h.st.GetSetting(ctx, "site_icon_url")
+
+	type iconEntry struct {
+		Src   string `json:"src"`
+		Sizes string `json:"sizes"`
+		Type  string `json:"type"`
+	}
+	type manifest struct {
+		Name            string      `json:"name"`
+		ShortName       string      `json:"short_name"`
+		StartURL        string      `json:"start_url"`
+		Display         string      `json:"display"`
+		BackgroundColor string      `json:"background_color"`
+		ThemeColor      string      `json:"theme_color"`
+		Icons           []iconEntry `json:"icons,omitempty"`
+		Lang            string      `json:"lang"`
+	}
+
+	m := manifest{
+		Name:            siteName,
+		ShortName:       siteName,
+		StartURL:        "/",
+		Display:         "standalone",
+		BackgroundColor: "#f8fafc",
+		ThemeColor:      "#55CDFC",
+		Lang:            "zh-CN",
+	}
+
+	if iconURL != "" {
+		// Detect MIME type from the icon URL.
+		mime := "image/png"
+		lower := strings.ToLower(iconURL)
+		if strings.HasPrefix(lower, "data:") {
+			// data:image/png;base64,... → extract the MIME type.
+			rest := strings.TrimPrefix(lower, "data:")
+			if semi := strings.IndexByte(rest, ';'); semi > 0 {
+				mime = rest[:semi]
+			}
+		} else if strings.HasSuffix(lower, ".svg") {
+			mime = "image/svg+xml"
+		} else if strings.HasSuffix(lower, ".jpg") || strings.HasSuffix(lower, ".jpeg") {
+			mime = "image/jpeg"
+		} else if strings.HasSuffix(lower, ".webp") {
+			mime = "image/webp"
+		}
+		m.Icons = []iconEntry{{Src: "/api/site-icon", Sizes: "512x512", Type: mime}}
+	}
+
+	w.Header().Set("Content-Type", "application/manifest+json")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	json.NewEncoder(w).Encode(m)
 }

@@ -58,7 +58,7 @@ func (k *Keys) SignIDToken(issuer, subject, audience, nonce string, scopes []str
 		"iat":            now.Unix(),
 		"exp":            now.Add(time.Hour).Unix(),
 		"auth_time":      now.Unix(),
-		"email_verified": true,
+		"email_verified": u.EmailVerified,
 	}
 	if nonce != "" {
 		claims["nonce"] = nonce

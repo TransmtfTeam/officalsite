@@ -208,6 +208,8 @@ func (h *Handler) AdminUserDetail(w http.ResponseWriter, r *http.Request) {
 	accessTokens, _ := h.st.GetAccessTokensByUserID(ctx, id)
 	refreshTokens, _ := h.st.GetRefreshTokensByUserID(ctx, id)
 	passkeys, _ := h.st.GetPasskeyCredentialsByUserID(ctx, id)
+	userGroups, _ := h.st.GetUserGroups(ctx, id)
+	allGroups, _ := h.st.ListUserGroups(ctx)
 
 	d := h.pageData(r, "User Details")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
@@ -220,6 +222,9 @@ func (h *Handler) AdminUserDetail(w http.ResponseWriter, r *http.Request) {
 		"AccessTokens":      accessTokens,
 		"RefreshTokens":     refreshTokens,
 		"Passkeys":          passkeys,
+		"UserGroups":        userGroups,
+		"AllGroups":         allGroups,
+		"CanManageGroups":   h.userHasPermission(ctx, h.currentUser(r), "manage_groups"),
 		"IsSystemAdmin":     h.isSystemAdminUser(u),
 		"CurrentIsSysAdmin": h.isSystemAdminUser(h.currentUser(r)),
 	}
@@ -354,6 +359,7 @@ var allPermissions = []map[string]string{
 	{"name": "manage_clients", "label": "管理应用", "desc": "OAuth2/OIDC 应用管理"},
 	{"name": "manage_announcements", "label": "管理公告", "desc": "各应用公告内容"},
 	{"name": "manage_users", "label": "管理用户", "desc": "查看及修改用户账户"},
+	{"name": "manage_groups", "label": "管理分组", "desc": "用户分组增删改"},
 	{"name": "manage_providers", "label": "管理登录方式", "desc": "外部 OIDC 提供商"},
 	{"name": "manage_roles", "label": "管理角色", "desc": "自定义角色增删改"},
 	{"name": "manage_settings", "label": "管理设置", "desc": "站点全局设置"},
@@ -556,6 +562,8 @@ func (h *Handler) AdminClientUpdate(w http.ResponseWriter, r *http.Request) {
 	desc := strings.TrimSpace(r.FormValue("description"))
 	urisRaw := r.FormValue("redirect_uris")
 	scopesRaw := r.FormValue("scopes")
+	baseAccess := strings.ToLower(strings.TrimSpace(r.FormValue("base_access")))
+	allowedGroupsRaw := r.FormValue("allowed_groups")
 
 	var uris []string
 	for _, l := range strings.Split(urisRaw, "\n") {
@@ -567,13 +575,52 @@ func (h *Handler) AdminClientUpdate(w http.ResponseWriter, r *http.Request) {
 	if len(scopes) == 0 {
 		scopes = []string{"openid", "profile", "email"}
 	}
+	if baseAccess == "" {
+		baseAccess = "user"
+	}
+	switch baseAccess {
+	case "legacy", "user", "member", "admin", "none":
+	default:
+		http.Redirect(w, r, "/admin/clients/"+id+"?flash=Invalid+base+access+policy", http.StatusFound)
+		return
+	}
+	allowedGroupsSet := map[string]bool{}
+	var allowedGroups []string
+	for _, g := range strings.Fields(strings.ToLower(allowedGroupsRaw)) {
+		if g == "" || allowedGroupsSet[g] {
+			continue
+		}
+		allowedGroupsSet[g] = true
+		allowedGroups = append(allowedGroups, g)
+	}
 
 	ctx := r.Context()
 	if name == "" {
 		http.Redirect(w, r, "/admin/clients/"+id+"?flash=Name+required", http.StatusFound)
 		return
 	}
-	if err := h.st.UpdateClient(ctx, id, name, desc, uris, scopes); err != nil {
+	// Validate custom groups exist to avoid silent misconfiguration.
+	groupSet := map[string]bool{}
+	groups, err := h.st.ListUserGroups(ctx)
+	if err != nil {
+		http.Redirect(w, r, "/admin/clients/"+id+"?flash=Group+lookup+failed", http.StatusFound)
+		return
+	}
+	for _, g := range groups {
+		groupSet[strings.ToLower(strings.TrimSpace(g.Name))] = true
+	}
+	for _, g := range allowedGroups {
+		switch g {
+		case "admin", "member", "user":
+			continue
+		default:
+			if !groupSet[g] {
+				http.Redirect(w, r, "/admin/clients/"+id+"?flash=Unknown+group:+"+g, http.StatusFound)
+				return
+			}
+		}
+	}
+	if err := h.st.UpdateClient(ctx, id, name, desc, uris, scopes, baseAccess, allowedGroups); err != nil {
 		msg := "Update failed"
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
             msg = "Client name already exists"
@@ -871,4 +918,207 @@ func (h *Handler) AdminProviderDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	_ = h.st.DeleteOIDCProvider(r.Context(), id)
 	http.Redirect(w, r, "/admin/providers", http.StatusFound)
+}
+
+// ── User Group Management ────────────────────────────────────────────────────
+
+func (h *Handler) AdminGroups(w http.ResponseWriter, r *http.Request) {
+	groups, _ := h.st.ListUserGroups(r.Context())
+	d := h.pageData(r, "分组管理")
+	if flash := r.URL.Query().Get("flash"); flash != "" {
+		d.Flash = flash
+	}
+	d.Data = groups
+	h.render(w, "admin_groups", d)
+}
+
+func (h *Handler) AdminGroupCreate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if !h.verifyCSRFToken(r) {
+		h.csrfFailed(w, r)
+		return
+	}
+	name := strings.TrimSpace(strings.ToLower(r.FormValue("name")))
+	label := strings.TrimSpace(r.FormValue("label"))
+	ctx := r.Context()
+
+	renderErr := func(msg string) {
+		groups, _ := h.st.ListUserGroups(ctx)
+		d := h.pageData(r, "分组管理")
+		d.Flash = msg
+		d.IsError = true
+		d.Data = groups
+		h.render(w, "admin_groups", d)
+	}
+
+	if name == "" {
+		renderErr("分组名称不能为空")
+		return
+	}
+	if name == "admin" || name == "member" || name == "user" {
+		renderErr("不能使用内置分组名称 (admin/member/user)")
+		return
+	}
+	if err := h.st.CreateUserGroup(ctx, name, label); err != nil {
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			renderErr("分组名称已存在")
+		} else {
+			renderErr("创建失败: " + err.Error())
+		}
+		return
+	}
+	http.Redirect(w, r, "/admin/groups?flash=分组已创建", http.StatusFound)
+}
+
+func (h *Handler) AdminGroupDetail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	ctx := r.Context()
+	g, err := h.st.GetUserGroupByID(ctx, id)
+	if err != nil {
+		h.renderError(w, r, http.StatusNotFound, "分组不存在", id)
+		return
+	}
+	members, _ := h.st.GetGroupMembers(ctx, id)
+	users, _ := h.st.ListUsers(ctx)
+	d := h.pageData(r, g.Label+" 分组")
+	if flash := r.URL.Query().Get("flash"); flash != "" {
+		d.Flash = flash
+	}
+	d.Data = map[string]any{
+		"Group":   g,
+		"Members": members,
+		"Users":   users,
+	}
+	h.render(w, "admin_group_detail", d)
+}
+
+func (h *Handler) AdminGroupDelete(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if !h.verifyCSRFToken(r) {
+		h.csrfFailed(w, r)
+		return
+	}
+	id := r.PathValue("id")
+	if err := h.st.DeleteUserGroup(r.Context(), id); err != nil {
+		http.Redirect(w, r, "/admin/groups?flash=删除失败:+"+err.Error(), http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, "/admin/groups?flash=分组已删除", http.StatusFound)
+}
+
+func (h *Handler) AdminGroupAddMember(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if !h.verifyCSRFToken(r) {
+		h.csrfFailed(w, r)
+		return
+	}
+	groupID := r.PathValue("id")
+	userID := r.FormValue("user_id")
+	if err := h.st.AddUserToGroup(r.Context(), userID, groupID); err != nil {
+		http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=添加失败:+"+err.Error(), http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=成员已添加", http.StatusFound)
+}
+
+func (h *Handler) AdminGroupRemoveMember(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if !h.verifyCSRFToken(r) {
+		h.csrfFailed(w, r)
+		return
+	}
+	groupID := r.PathValue("id")
+	userID := r.PathValue("uid")
+	if err := h.st.RemoveUserFromGroup(r.Context(), userID, groupID); err != nil {
+		http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=移除失败:+"+err.Error(), http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=成员已移除", http.StatusFound)
+}
+
+// AdminUserGroupAdd adds a user to a group from the user-detail page.
+func (h *Handler) AdminUserGroupAdd(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if !h.verifyCSRFToken(r) {
+		h.csrfFailed(w, r)
+		return
+	}
+	userID := r.PathValue("id")
+	groupID := r.FormValue("group_id")
+	if err := h.st.AddUserToGroup(r.Context(), userID, groupID); err != nil {
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=加入分组失败:+"+err.Error(), http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, "/admin/users/"+userID+"?flash=已加入分组", http.StatusFound)
+}
+
+// AdminUserGroupRemove removes a user from a group from the user-detail page.
+func (h *Handler) AdminUserGroupRemove(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if !h.verifyCSRFToken(r) {
+		h.csrfFailed(w, r)
+		return
+	}
+	userID := r.PathValue("id")
+	groupID := r.PathValue("gid")
+	if err := h.st.RemoveUserFromGroup(r.Context(), userID, groupID); err != nil {
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=移出分组失败:+"+err.Error(), http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, "/admin/users/"+userID+"?flash=已移出分组", http.StatusFound)
+}
+
+// AdminSiteIcon serves the site icon stored in settings (used for PWA manifest / email avatars).
+func (h *Handler) AdminSiteIcon(w http.ResponseWriter, r *http.Request) {
+	iconURL := h.st.GetSetting(r.Context(), "site_icon_url")
+	if iconURL == "" {
+		http.NotFound(w, r)
+		return
+	}
+	// Data URL: decode and serve directly.
+	const dataPrefix = "data:"
+	if strings.HasPrefix(iconURL, dataPrefix) {
+		// Format: data:<mime>;base64,<data>
+		rest := iconURL[len(dataPrefix):]
+		semi := strings.Index(rest, ";")
+		if semi < 0 {
+			http.NotFound(w, r)
+			return
+		}
+		mime := rest[:semi]
+		b64part := rest[semi+1:]
+		if !strings.HasPrefix(b64part, "base64,") {
+			http.NotFound(w, r)
+			return
+		}
+		decoded, err := base64.StdEncoding.DecodeString(b64part[7:])
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", mime)
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Write(decoded)
+		return
+	}
+	// Regular URL: redirect.
+	http.Redirect(w, r, iconURL, http.StatusFound)
 }

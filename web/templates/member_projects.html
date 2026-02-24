@@ -110,7 +110,9 @@
               <a class="btn btn-ghost btn-sm" href="/member/projects/{{.ID}}/edit">编辑</a>
               <form method="POST" action="/member/projects/{{.ID}}/delete" style="display:inline-block;margin-left:.4rem">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <button class="btn btn-danger btn-sm" type="submit">删除</button>
+                <button class="btn btn-danger btn-sm" type="submit"
+                  data-confirm="确认删除此项目吗？此操作不可撤销。"
+                  data-confirm-title="删除项目" data-confirm-icon="🗑️">删除</button>
               </form>
             </td>
           </tr>

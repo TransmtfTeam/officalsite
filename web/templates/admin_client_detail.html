@@ -9,6 +9,7 @@
       <a class="sidebar-link" href="/admin">概览</a>
       <a class="sidebar-link" href="/admin/users">用户</a>
       {{end}}
+      <a class="sidebar-link" href="/admin/groups">分组</a>
       <a class="sidebar-link active" href="/admin/clients">应用</a>
       {{if .CurrentUser.IsAdmin}}
       <a class="sidebar-link" href="/admin/providers">登录方式</a>
@@ -169,6 +170,29 @@
           <label class="form-label">Scopes（空格分隔）</label>
           <input class="form-control" type="text" name="scopes" value="{{range $client.Scopes}}{{.}} {{end}}">
         </div>
+        <div class="form-group">
+          <label class="form-label">基础访问权限</label>
+          <select class="form-control" name="base_access">
+            <option value="legacy" {{if eq $client.BaseAccess "legacy"}}selected{{end}}>兼容模式（有分组则仅按分组，无分组则全部可访问）</option>
+            <option value="user" {{if eq $client.BaseAccess "user"}}selected{{end}}>所有已登录用户</option>
+            <option value="member" {{if eq $client.BaseAccess "member"}}selected{{end}}>member 及以上</option>
+            <option value="admin" {{if eq $client.BaseAccess "admin"}}selected{{end}}>仅 admin</option>
+            <option value="none" {{if eq $client.BaseAccess "none"}}selected{{end}}>不启用基础权限（仅分组）</option>
+          </select>
+          <span style="font-size:.78rem;color:var(--text2)">
+            访问规则为「基础访问权限 OR 任意命中一个分组」。
+          </span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">可访问分组（空格分隔）</label>
+          <input class="form-control" type="text" name="allowed_groups"
+            value="{{range $client.AllowedGroups}}{{.}} {{end}}"
+            placeholder="member admin my-group">
+          <span style="font-size:.78rem;color:var(--text2)">
+            内置分组：<code>admin</code>（管理员）、<code>member</code>（成员及以上）、<code>user</code>（所有登录用户）；
+            自定义分组见「分组管理」页。多个分组满足任意一个即可。
+          </span>
+        </div>
         <button class="btn btn-primary btn-sm" type="submit">保存修改</button>
       </form>
     </div>
@@ -195,12 +219,12 @@
         <form method="POST" action="/admin/clients/{{$client.ID}}/reset-secret">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           <button class="btn btn-ghost btn-sm" type="submit"
-            onclick="return confirm('重置后旧 Secret 立即失效，确认重置？')">重置 Client Secret</button>
+            data-confirm="重置后旧 Secret 立即失效，所有使用旧 Secret 的应用都需要更新。" data-confirm-title="重置 Client Secret" data-confirm-icon="🔑">重置 Client Secret</button>
         </form>
         <form method="POST" action="/admin/clients/{{$client.ID}}/delete">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           <button class="btn btn-danger btn-sm" type="submit"
-            onclick="return confirm('删除后所有令牌将失效，确认删除？')">删除此应用</button>
+            data-confirm="删除后所有令牌将失效，此操作不可撤销。" data-confirm-title="删除应用" data-confirm-icon="⚠️">删除此应用</button>
         </form>
       </div>
     </div>

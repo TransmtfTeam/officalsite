@@ -97,13 +97,49 @@ func (h *Handler) Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	d := h.pageData(r, "Authorize")
+	// Check client access policy (base role policy OR group membership).
+	u := h.currentUser(r)
+	if !h.st.UserCanAccessClient(r.Context(), u, client.BaseAccess, client.AllowedGroups) {
+		d := h.pageData(r, "访问受限")
+		d.Flash = "您没有访问此应用的权限，请联系管理员。"
+		d.IsError = true
+		h.render(w, "error", d)
+		return
+	}
+
+	// Build display scopes: remove "role" if "profile" is already requested.
+	displayScopes := filterRedundantScopes(reqScopes)
+
+	d := h.pageData(r, "授权确认")
 	d.Data = map[string]any{
 		"Client":  client,
 		"Request": ar,
-		"Scopes":  reqScopes,
+		"Scopes":  displayScopes,
 	}
 	h.render(w, "consent", d)
+}
+
+// filterRedundantScopes removes scope items that are already implied by other scopes.
+// Specifically, "role" is implied by "profile" (profile already exposes the role claim).
+func filterRedundantScopes(scopes []string) []string {
+	hasProfile := false
+	for _, s := range scopes {
+		if s == "profile" {
+			hasProfile = true
+			break
+		}
+	}
+	if !hasProfile {
+		return scopes
+	}
+	out := make([]string, 0, len(scopes))
+	for _, s := range scopes {
+		if s == "role" {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 func (h *Handler) AuthorizeConsent(w http.ResponseWriter, r *http.Request) {
@@ -162,6 +198,12 @@ func (h *Handler) AuthorizeConsent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u := h.currentUser(r)
+	// Re-validate access policy on POST (don't trust only the GET check).
+	if !h.st.UserCanAccessClient(r.Context(), u, client.BaseAccess, client.AllowedGroups) {
+		oidcError(w, 403, "access_denied", "user does not satisfy client access policy")
+		return
+	}
+
 	code := store.RandomHex(24)
 	scopes := reqScopes
 
@@ -372,7 +414,7 @@ func (h *Handler) UserInfo(w http.ResponseWriter, r *http.Request) {
 		switch sc {
 		case "email":
 			claims["email"] = u.Email
-			claims["email_verified"] = true
+			claims["email_verified"] = u.EmailVerified
 		case "profile":
 			claims["name"] = u.DisplayName
 			claims["picture"] = u.AvatarURL

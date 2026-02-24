@@ -740,14 +740,66 @@ footer {
     gap: 2rem;
   }
   .hero-blob { display: none; }
-  .sidebar {
-    display: none;
-  }
   .panel-content {
     padding: 1.2rem;
   }
   .nav { padding: 0 1rem; }
+
+  /* Mobile sidebar: hidden by default, slides in as overlay */
+  .sidebar {
+    position: fixed;
+    left: -240px;
+    top: 60px;
+    z-index: 200;
+    height: calc(100vh - 60px);
+    width: 220px;
+    transition: left 0.25s ease;
+    box-shadow: none;
+  }
+  .sidebar.sidebar-open {
+    left: 0;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.12);
+  }
 }
+
+@media (min-width: 769px) {
+  .sidebar-toggle { display: none !important; }
+  .sidebar-backdrop { display: none !important; }
+}
+
+/* ── Sidebar toggle button (hamburger) ───────────────────── */
+.sidebar-toggle {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: .4rem;
+  border-radius: 8px;
+  transition: background .12s;
+}
+.sidebar-toggle:hover { background: rgba(0,0,0,0.06); }
+.hamburger-line {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px;
+  transition: all .2s;
+}
+
+/* ── Sidebar backdrop (mobile overlay click-to-close) ─────── */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  top: 60px;
+  background: rgba(0,0,0,0.3);
+  z-index: 199;
+}
+.sidebar-backdrop.active { display: block; }
 
 /* ── Modal ───────────────────────────────────────────────── */
 .modal {
@@ -814,4 +866,59 @@ footer {
   margin-top: .6rem;
   word-break: break-all;
   color: var(--text);
+}
+
+/* ── Confirm Dialog Modal ────────────────────────────────── */
+.cdialog-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(6px);
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.cdialog-overlay.active { display: flex; }
+.cdialog {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--glass-b, rgba(0,0,0,.08));
+  border-radius: 18px;
+  padding: 2rem 2rem 1.5rem;
+  max-width: 380px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0,0,0,.22);
+  animation: cdialog-in .15s ease;
+}
+@keyframes cdialog-in {
+  from { opacity:0; transform:scale(.93) translateY(10px); }
+  to   { opacity:1; transform:scale(1)  translateY(0); }
+}
+.cdialog-icon {
+  text-align: center;
+  font-size: 2.4rem;
+  margin-bottom: .7rem;
+}
+.cdialog-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  margin-bottom: .5rem;
+}
+.cdialog-msg {
+  font-size: .88rem;
+  color: var(--text2);
+  text-align: center;
+  line-height: 1.65;
+  margin-bottom: 1.5rem;
+}
+.cdialog-actions {
+  display: flex;
+  gap: .7rem;
+}
+.cdialog-actions .btn {
+  flex: 1;
+  justify-content: center;
 }

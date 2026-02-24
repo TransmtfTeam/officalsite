@@ -7,6 +7,7 @@
       <div class="sidebar-title">管理导航</div>
       <a class="sidebar-link" href="/admin">概览</a>
       <a class="sidebar-link" href="/admin/users">用户</a>
+      <a class="sidebar-link" href="/admin/groups">分组</a>
       <a class="sidebar-link" href="/admin/clients">应用</a>
       <a class="sidebar-link active" href="/admin/providers">登录方式</a>
       <a class="sidebar-link" href="/admin/roles">角色</a>
@@ -127,7 +128,9 @@
               </form>
               <form method="POST" action="/admin/providers/{{.ID}}/delete" style="display:inline-block;margin-left:.4rem">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <button class="btn btn-danger btn-sm" type="submit">删除</button>
+                <button class="btn btn-danger btn-sm" type="submit"
+                  data-confirm="确认删除此登录方式吗？使用该方式登录的用户将无法继续使用。"
+                  data-confirm-title="删除登录方式" data-confirm-icon="🗑️">删除</button>
               </form>
             </td>
           </tr>

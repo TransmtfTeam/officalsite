@@ -9,7 +9,13 @@
     <h2 class="auth-title">欢迎登录</h2>
 
     {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">
+      {{.Flash}}
+      {{with .Data}}{{if .UnverifiedEmail}}
+      <br><a href="/verify-email?email={{.UnverifiedEmail | urlEncode}}"
+        style="font-size:.85rem;text-decoration:underline">重新发送验证邮件</a>
+      {{end}}{{end}}
+    </div>
     {{end}}
 
     {{with .Data}}
@@ -17,7 +23,7 @@
     <div style="display:flex;flex-direction:column;gap:.6rem;margin-bottom:1.2rem">
       {{range .Providers}}
       <a class="btn btn-ghost" style="justify-content:center;gap:.6rem"
-         href="/auth/oidc/{{.Slug}}{{if $.Data}}{{with $.Data}}{{if .Next}}?next={{.Next}}{{end}}{{end}}{{end}}">
+         href="/auth/oidc/{{.Slug}}{{if $.Data}}{{with $.Data}}{{if .Next}}?next={{.Next | urlEncode}}{{end}}{{end}}{{end}}">
         {{if .Icon}}<span>{{.Icon}}</span>{{end}}
         使用 {{.Name}} 登录
       </a>
@@ -44,6 +50,9 @@
       </div>
       <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.5rem" type="submit">登录</button>
     </form>
+    <p style="text-align:right;font-size:.85rem;margin-top:.6rem">
+      <a href="/forgot-password">忘记密码？</a>
+    </p>
 
     <p class="auth-footer-link">还没有账号？<a href="/register">立即注册</a></p>
   </div>

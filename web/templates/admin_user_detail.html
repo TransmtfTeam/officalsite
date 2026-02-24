@@ -8,6 +8,7 @@
       <a class="sidebar-link" href="/admin">概览</a>
       <a class="sidebar-link" href="/admin/users">用户</a>
       <a class="sidebar-link active" href="/admin/users">用户详情</a>
+      <a class="sidebar-link" href="/admin/groups">分组</a>
       <a class="sidebar-link" href="/admin/clients">应用</a>
       <a class="sidebar-link" href="/admin/providers">登录方式</a>
       <a class="sidebar-link" href="/admin/roles">角色</a>
@@ -40,11 +41,14 @@
     <h1 class="panel-title">{{$user.DisplayName}}</h1>
     {{if $isSysAdmin}}<span class="role-badge role-admin" style="margin-bottom:1rem;display:inline-block">系统管理员</span>{{end}}
 
-    {{/* ── Basic info ── */}}
     <div class="detail-section">
       <div class="detail-section-title">账户信息</div>
       <div class="detail-row"><div class="detail-key">用户 ID</div><div class="detail-val mono">{{$user.ID}}</div></div>
       <div class="detail-row"><div class="detail-key">邮箱</div><div class="detail-val">{{$user.Email}}</div></div>
+      <div class="detail-row">
+        <div class="detail-key">邮箱验证</div>
+        <div class="detail-val">{{if $user.EmailVerified}}<span style="color:#16a34a">已验证</span>{{else}}<span style="color:#dc2626">未验证</span>{{end}}</div>
+      </div>
       <div class="detail-row"><div class="detail-key">显示名称</div><div class="detail-val">{{$user.DisplayName}}</div></div>
       <div class="detail-row">
         <div class="detail-key">角色</div>
@@ -63,6 +67,46 @@
         <div class="detail-val">{{if $user.TOTPEnabled}}<span style="color:#16a34a">已启用</span>{{else}}<span style="color:var(--text2)">未启用</span>{{end}}</div>
       </div>
       <div class="detail-row"><div class="detail-key">注册时间</div><div class="detail-val">{{$user.CreatedAt.Format "2006-01-02 15:04:05"}}</div></div>
+    </div>
+
+    {{/* ── User Groups ── */}}
+    {{$userGroups := index . "UserGroups"}}
+    {{$allGroups  := index . "AllGroups"}}
+    {{$canManageGroups := index . "CanManageGroups"}}
+    <div class="detail-section">
+      <div class="detail-section-title">所属分组</div>
+      {{if $userGroups}}
+      <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
+        {{range $userGroups}}
+        <span class="proj-tag" style="display:inline-flex;align-items:center;gap:.4rem">
+          {{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}
+          {{if $canManageGroups}}
+          <form method="POST" action="/admin/users/{{$user.ID}}/groups/{{.ID}}/remove" style="display:inline">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <button type="submit" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:.85rem;padding:0;line-height:1" title="移出分组">×</button>
+          </form>
+          {{end}}
+        </span>
+        {{end}}
+      </div>
+      {{else}}
+      <p style="font-size:.88rem;color:var(--text2);margin-bottom:.8rem">该用户不属于任何自定义分组</p>
+      {{end}}
+      {{if and $allGroups $canManageGroups}}
+      <form method="POST" action="/admin/users/{{$user.ID}}/groups/add" style="display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-group" style="margin-bottom:0;min-width:180px">
+          <label class="form-label">加入分组</label>
+          <select class="form-control" name="group_id" required>
+            <option value="">请选择</option>
+            {{range $allGroups}}
+            <option value="{{.ID}}">{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</option>
+            {{end}}
+          </select>
+        </div>
+        <button class="btn btn-ghost btn-sm" type="submit">添加</button>
+      </form>
+      {{end}}
     </div>
 
     {{/* ── Reset password ── */}}
@@ -95,7 +139,7 @@
       <form method="POST" action="/admin/users/{{$user.ID}}/disable-2fa">
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
         <button class="btn btn-ghost btn-sm" type="submit"
-          onclick="return confirm('确认关闭该用户的 2FA？')">关闭 2FA</button>
+          data-confirm="确认关闭该用户的双因素认证？此操作将立即生效。" data-confirm-title="关闭 2FA" data-confirm-icon="🔐">关闭 2FA</button>
       </form>
     </div>
     {{end}}
@@ -135,7 +179,9 @@
         {{if $canModify}}
         <form method="POST" action="/admin/users/{{$user.ID}}/passkeys/{{.ID}}/delete">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-          <button class="btn btn-danger btn-sm" type="submit">删除</button>
+          <button class="btn btn-danger btn-sm" type="submit"
+            data-confirm="确认删除此 Passkey 吗？用户将无法再使用该设备登录。"
+            data-confirm-title="删除 Passkey" data-confirm-icon="🔑">删除</button>
         </form>
         {{end}}
       </div>
@@ -161,7 +207,9 @@
             <td>
               <form method="POST" action="/admin/users/{{$user.ID}}/sessions/{{.ID}}/revoke">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <button class="btn btn-danger btn-sm" type="submit">撤销</button>
+                <button class="btn btn-danger btn-sm" type="submit"
+                  data-confirm="确认撤销此会话吗？该设备将需要重新登录。"
+                  data-confirm-title="撤销会话" data-confirm-icon="⚠️">撤销</button>
               </form>
             </td>
           </tr>
@@ -191,7 +239,9 @@
               <form method="POST" action="/admin/users/{{$user.ID}}/tokens/{{.ID}}/revoke">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <input type="hidden" name="type" value="access">
-                <button class="btn btn-danger btn-sm" type="submit">撤销</button>
+                <button class="btn btn-danger btn-sm" type="submit"
+                  data-confirm="确认撤销此访问令牌吗？"
+                  data-confirm-title="撤销访问令牌" data-confirm-icon="⚠️">撤销</button>
               </form>
             </td>
           </tr>
@@ -219,7 +269,9 @@
               <form method="POST" action="/admin/users/{{$user.ID}}/tokens/{{.ID}}/revoke">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <input type="hidden" name="type" value="refresh">
-                <button class="btn btn-danger btn-sm" type="submit">撤销</button>
+                <button class="btn btn-danger btn-sm" type="submit"
+                  data-confirm="确认撤销此刷新令牌吗？"
+                  data-confirm-title="撤销刷新令牌" data-confirm-icon="⚠️">撤销</button>
               </form>
             </td>
           </tr>

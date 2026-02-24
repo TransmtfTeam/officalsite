@@ -1,0 +1,59 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="auth-page" style="margin-top:0;min-height:100vh">
+  <div class="auth-card" style="max-width:480px">
+    <div class="auth-logo">
+      <div style="font-size:2.5rem;margin-bottom:.5rem">📧</div>
+      <div class="auth-logo-text">{{.SiteName}}</div>
+    </div>
+
+    {{with .Data}}
+    {{if index . "Verified"}}
+    <h2 class="auth-title" style="color:#16a34a">邮箱验证成功</h2>
+    {{if $.Flash}}
+    <div class="flash flash-ok">{{$.Flash}}</div>
+    {{end}}
+    <p style="text-align:center;color:var(--text2);font-size:.92rem;margin-bottom:1.5rem">
+      您的邮箱已验证，账号已激活。
+    </p>
+    <a class="btn btn-primary" href="/profile" style="width:100%;justify-content:center">前往个人资料</a>
+    {{else}}
+    <h2 class="auth-title">验证您的邮箱</h2>
+
+    {{if $.Flash}}
+    <div class="flash {{if $.IsError}}flash-err{{else}}flash-ok{{end}}">{{$.Flash}}</div>
+    {{end}}
+
+    {{if not $.IsError}}
+    <p style="text-align:center;color:var(--text2);font-size:.92rem;margin-bottom:1.5rem;line-height:1.7">
+      我们已向
+      {{if index . "Email"}}<strong>{{index . "Email"}}</strong>{{else}}您的邮箱{{end}}
+      发送了一封验证邮件，请点击邮件中的链接完成验证。
+    </p>
+    <p style="text-align:center;color:#94a3b8;font-size:.82rem;margin-bottom:1.5rem">
+      没有收到邮件？请检查垃圾邮件文件夹，或点击下方重新发送。
+    </p>
+    {{end}}
+
+    <details style="margin-bottom:1rem">
+      <summary style="font-size:.88rem;color:var(--text2);cursor:pointer;padding:.5rem 0;user-select:none">
+        重新发送验证邮件
+      </summary>
+      <form method="POST" action="/verify-email/resend" style="margin-top:.8rem">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-group">
+          <label class="form-label">注册邮箱</label>
+          <input class="form-control" type="email" name="email"
+            value="{{index . "Email"}}" placeholder="you@example.com" required>
+        </div>
+        <button class="btn btn-ghost btn-sm" type="submit">重新发送</button>
+      </form>
+    </details>
+
+    <p class="auth-footer-link"><a href="/login">返回登录</a></p>
+    {{end}}
+    {{end}}
+  </div>
+</div>
+{{end}}

@@ -80,7 +80,7 @@
               <form method="POST" action="/member/links/{{.ID}}/delete" style="display:inline-block;margin-left:.4rem">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button class="btn btn-danger btn-sm" type="submit"
-                  onclick="return confirm('确认删除该链接？')">删除</button>
+                  data-confirm="确认删除该链接吗？此操作不可撤销。" data-confirm-title="删除链接" data-confirm-icon="🗑️">删除</button>
               </form>
             </td>
           </tr>

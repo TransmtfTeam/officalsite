@@ -114,7 +114,9 @@
               </form>
               <form method="POST" action="/admin/users/{{.ID}}/delete" style="display:inline-block;margin-left:.3rem">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <button class="btn btn-danger btn-sm" type="submit">删除</button>
+                <button class="btn btn-danger btn-sm" type="submit"
+                  data-confirm="确认删除该用户吗？删除后账号数据将永久清除，不可恢复。"
+                  data-confirm-title="删除用户" data-confirm-icon="🗑️">删除</button>
               </form>
               <a class="btn btn-ghost btn-sm" href="/admin/users/{{.ID}}" style="margin-left:.3rem">详情</a>
             </td>

@@ -1,0 +1,103 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="panel-wrap">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">管理导航</div>
+      {{if .CurrentUser.IsAdmin}}
+      <a class="sidebar-link" href="/admin">概览</a>
+      <a class="sidebar-link" href="/admin/users">用户</a>
+      {{end}}
+      <a class="sidebar-link active" href="/admin/groups">分组</a>
+      <a class="sidebar-link" href="/admin/clients">应用</a>
+      {{if .CurrentUser.IsAdmin}}
+      <a class="sidebar-link" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/roles">角色</a>
+      <a class="sidebar-link" href="/admin/announcements">公告</a>
+      <a class="sidebar-link" href="/admin/settings">设置</a>
+      {{end}}
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">快速入口</div>
+      <a class="sidebar-link" href="/">返回首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
+    </div>
+  </aside>
+
+  <main class="panel-content">
+    <h1 class="panel-title">分组管理</h1>
+    <p class="panel-sub">创建自定义分组并管理成员。内置分组 <code>admin</code>、<code>member</code> 由角色自动决定，无需手动管理。</p>
+
+    {{if .Flash}}
+    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+    {{end}}
+
+    {{/* ── 内置分组说明 ── */}}
+    <div class="detail-section" style="margin-bottom:1.5rem">
+      <div class="detail-section-title">内置分组（系统自动）</div>
+      <div class="detail-row">
+        <div class="detail-key"><span class="role-badge role-admin">admin</span></div>
+        <div class="detail-val" style="font-size:.88rem;color:var(--text2)">拥有 admin 角色的所有用户</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key"><span class="role-badge role-member">member</span></div>
+        <div class="detail-val" style="font-size:.88rem;color:var(--text2)">拥有 member 或 admin 角色的所有用户</div>
+      </div>
+    </div>
+
+    {{/* ── 新建分组 ── */}}
+    <div class="form-panel">
+      <p class="form-panel-title">新建自定义分组</p>
+      <form method="POST" action="/admin/groups">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">分组标识（英文小写，如 dev-team）</label>
+            <input class="form-control" type="text" name="name" placeholder="my-group"
+              pattern="[a-z0-9\-_]+" title="仅允许小写字母、数字、连字符和下划线" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">显示名称</label>
+            <input class="form-control" type="text" name="label" placeholder="我的分组">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">创建分组</button>
+      </form>
+    </div>
+
+    {{/* ── 分组列表 ── */}}
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>分组标识</th>
+            <th>显示名称</th>
+            <th>创建时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Data}}
+          <tr>
+            <td><a href="/admin/groups/{{.ID}}" style="font-weight:500;font-family:monospace">{{.Name}}</a></td>
+            <td>{{if .Label}}{{.Label}}{{else}}<span style="color:var(--text2)">—</span>{{end}}</td>
+            <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+            <td>
+              <a class="btn btn-ghost btn-sm" href="/admin/groups/{{.ID}}">管理成员</a>
+              <form method="POST" action="/admin/groups/{{.ID}}/delete" style="display:inline-block;margin-left:.3rem">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button class="btn btn-danger btn-sm" type="submit"
+                  data-confirm="确认删除此分组吗？此操作不可撤销。" data-confirm-title="删除分组" data-confirm-icon="🗑️">删除</button>
+              </form>
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="4" style="color:var(--text2);text-align:center;padding:2rem">暂无自定义分组</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+{{end}}

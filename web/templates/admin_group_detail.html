@@ -1,0 +1,102 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="panel-wrap">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">管理导航</div>
+      {{if .CurrentUser.IsAdmin}}
+      <a class="sidebar-link" href="/admin">概览</a>
+      <a class="sidebar-link" href="/admin/users">用户</a>
+      {{end}}
+      <a class="sidebar-link active" href="/admin/groups">分组</a>
+      <a class="sidebar-link" href="/admin/clients">应用</a>
+      {{if .CurrentUser.IsAdmin}}
+      <a class="sidebar-link" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/roles">角色</a>
+      <a class="sidebar-link" href="/admin/announcements">公告</a>
+      <a class="sidebar-link" href="/admin/settings">设置</a>
+      {{end}}
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">快速入口</div>
+      <a class="sidebar-link" href="/">返回首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
+    </div>
+  </aside>
+
+  <main class="panel-content">
+    {{with .Data}}
+    {{$group   := index . "Group"}}
+    {{$members := index . "Members"}}
+    {{$users   := index . "Users"}}
+
+    <div style="margin-bottom:.5rem">
+      <a href="/admin/groups" style="color:var(--text2);font-size:.9rem">← 分组列表</a>
+    </div>
+
+    {{if $.Flash}}
+    <div class="flash {{if $.IsError}}flash-err{{else}}flash-ok{{end}}">{{$.Flash}}</div>
+    {{end}}
+
+    <h1 class="panel-title">{{if $group.Label}}{{$group.Label}}{{else}}{{$group.Name}}{{end}}</h1>
+    <p class="panel-sub">分组标识：<code class="mono">{{$group.Name}}</code></p>
+
+    {{/* ── 添加成员 ── */}}
+    <div class="form-panel">
+      <p class="form-panel-title">添加成员</p>
+      <form method="POST" action="/admin/groups/{{$group.ID}}/add-member" style="display:flex;gap:.8rem;align-items:flex-end;flex-wrap:wrap">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
+          <label class="form-label">选择用户</label>
+          <select class="form-control" name="user_id" required>
+            <option value="">请选择用户</option>
+            {{range $users}}
+            <option value="{{.ID}}">{{.DisplayName}} ({{.Email}})</option>
+            {{end}}
+          </select>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">添加</button>
+      </form>
+    </div>
+
+    {{/* ── 成员列表 ── */}}
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>邮箱</th>
+            <th>显示名称</th>
+            <th>角色</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $members}}
+          <tr>
+            <td>{{.Email}}</td>
+            <td>{{.DisplayName}}</td>
+            <td>
+              <span class="role-badge {{if eq .Role "admin"}}role-admin{{else if eq .Role "member"}}role-member{{else}}role-user{{end}}">
+                {{.Role}}
+              </span>
+            </td>
+            <td>
+              <form method="POST" action="/admin/groups/{{$group.ID}}/members/{{.ID}}/remove">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button class="btn btn-danger btn-sm" type="submit"
+                  data-confirm="确认将此用户移出分组吗？"
+                  data-confirm-title="移出分组" data-confirm-icon="👤">移出</button>
+              </form>
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="4" style="color:var(--text2);text-align:center;padding:2rem">该分组暂无成员</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{end}}
+  </main>
+</div>
+{{end}}

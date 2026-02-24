@@ -7,6 +7,7 @@
       <div class="sidebar-title">管理导航</div>
       <a class="sidebar-link" href="/admin">概览</a>
       <a class="sidebar-link" href="/admin/users">用户</a>
+      <a class="sidebar-link" href="/admin/groups">分组</a>
       <a class="sidebar-link" href="/admin/clients">应用</a>
       <a class="sidebar-link" href="/admin/providers">登录方式</a>
       <a class="sidebar-link active" href="/admin/roles">角色</a>
@@ -108,7 +109,7 @@
               <form method="POST" action="/admin/roles/{{.Name}}/delete">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button class="btn btn-danger btn-sm" type="submit"
-                  onclick="return confirm('确认删除角色 {{.Name}}？')">删除</button>
+                  data-confirm="确认删除此角色吗？此操作不可撤销。" data-confirm-title="删除角色" data-confirm-icon="🗑️">删除</button>
               </form>
             </td>
           </tr>

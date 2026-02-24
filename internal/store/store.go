@@ -19,6 +19,11 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
+var (
+	ErrPasswordResetTooSoon     = errors.New("password reset requested too recently")
+	ErrPasswordResetTokenExpired = errors.New("password reset token expired")
+)
+
 
 type User struct {
 	ID                string
@@ -32,6 +37,7 @@ type User struct {
 	TOTPPendingSecret string
 	TOTPEnabled       bool
 	CreatedAt         time.Time
+	EmailVerified     bool
 }
 
 func (u *User) IsAdmin()  bool { return u.Role == "admin" }
@@ -48,14 +54,16 @@ func (u *User) RoleLabel() string {
 }
 
 type OAuthClient struct {
-	ID           string
-	ClientID     string
-	SecretHash   string
-	Name         string
-	Description  string
-	RedirectURIs []string
-	Scopes       []string
-	CreatedAt    time.Time
+	ID            string
+	ClientID      string
+	SecretHash    string
+	Name          string
+	Description   string
+	RedirectURIs  []string
+	Scopes        []string
+	BaseAccess    string
+	AllowedGroups []string
+	CreatedAt     time.Time
 }
 
 type AuthCode struct {
@@ -254,13 +262,13 @@ func (s *Store) GetAllSettings(ctx context.Context) map[string]string {
 }
 
 
-const userCols = `id,email,password_hash,display_name,avatar_url,role,active,totp_secret,totp_pending_secret,totp_enabled,created_at`
+const userCols = `id,email,password_hash,display_name,avatar_url,role,active,totp_secret,totp_pending_secret,totp_enabled,created_at,email_verified`
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	u := &User{}
 	err := row.Scan(
 		&u.ID, &u.Email, &u.PassHash, &u.DisplayName, &u.AvatarURL, &u.Role, &u.Active,
-		&u.TOTPSecret, &u.TOTPPendingSecret, &u.TOTPEnabled, &u.CreatedAt,
+		&u.TOTPSecret, &u.TOTPPendingSecret, &u.TOTPEnabled, &u.CreatedAt, &u.EmailVerified,
 	)
 	return u, err
 }
@@ -278,14 +286,18 @@ func (s *Store) EnsureAdmin(ctx context.Context, email, password string) error {
 }
 
 func (s *Store) CreateUser(ctx context.Context, email, password, displayName, role string) (*User, error) {
+	return s.CreateUserWithEmailVerified(ctx, email, password, displayName, role, true)
+}
+
+func (s *Store) CreateUserWithEmailVerified(ctx context.Context, email, password, displayName, role string, emailVerified bool) (*User, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
 	}
 	id := uuid.New().String()
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO users(id,email,password_hash,display_name,role) VALUES($1,$2,$3,$4,$5)`,
-		id, strings.ToLower(strings.TrimSpace(email)), string(hash), displayName, role)
+		`INSERT INTO users(id,email,password_hash,display_name,role,email_verified) VALUES($1,$2,$3,$4,$5,$6)`,
+		id, strings.ToLower(strings.TrimSpace(email)), string(hash), displayName, role, emailVerified)
 	if err != nil {
 		return nil, err
 	}
@@ -412,25 +424,30 @@ func (s *Store) CreateClient(ctx context.Context, name, description string, redi
 		return "", "", err
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO oauth_clients(id,client_id,client_secret_hash,name,description,redirect_uris,scopes) VALUES($1,$2,$3,$4,$5,$6,$7)`,
+		`INSERT INTO oauth_clients(id,client_id,client_secret_hash,name,description,redirect_uris,scopes,base_access) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
 		id, clientID, string(h), name, description,
-		strings.Join(redirectURIs, "\n"), strings.Join(scopes, " "))
+		strings.Join(redirectURIs, "\n"), strings.Join(scopes, " "), "user")
 	return clientID, secret, err
 }
 
 func scanClient(row interface{ Scan(...any) error }) (*OAuthClient, error) {
 	c := &OAuthClient{}
-	var uris, scopes string
-	err := row.Scan(&c.ID, &c.ClientID, &c.SecretHash, &c.Name, &c.Description, &uris, &scopes, &c.CreatedAt)
+	var uris, scopes, baseAccess, allowedGroups string
+	err := row.Scan(&c.ID, &c.ClientID, &c.SecretHash, &c.Name, &c.Description, &uris, &scopes, &baseAccess, &allowedGroups, &c.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
 	c.RedirectURIs = splitLines(uris)
 	c.Scopes = strings.Fields(scopes)
+	c.BaseAccess = strings.TrimSpace(strings.ToLower(baseAccess))
+	if c.BaseAccess == "" {
+		c.BaseAccess = "legacy"
+	}
+	c.AllowedGroups = splitFields(allowedGroups)
 	return c, nil
 }
 
-const clientCols = `id,client_id,client_secret_hash,name,description,redirect_uris,scopes,created_at`
+const clientCols = `id,client_id,client_secret_hash,name,description,redirect_uris,scopes,base_access,allowed_groups,created_at`
 
 func (s *Store) GetClientByClientID(ctx context.Context, clientID string) (*OAuthClient, error) {
 	return scanClient(s.db.QueryRowContext(ctx, `SELECT `+clientCols+` FROM oauth_clients WHERE client_id=$1`, clientID))
@@ -919,10 +936,11 @@ func (s *Store) RevokeRefreshTokenByID(ctx context.Context, id string) error {
 }
 
 
-func (s *Store) UpdateClient(ctx context.Context, id, name, description string, redirectURIs, scopes []string) error {
+func (s *Store) UpdateClient(ctx context.Context, id, name, description string, redirectURIs, scopes []string, baseAccess string, allowedGroups []string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE oauth_clients SET name=$1,description=$2,redirect_uris=$3,scopes=$4 WHERE id=$5`,
-		name, description, strings.Join(redirectURIs, "\n"), strings.Join(scopes, " "), id)
+		`UPDATE oauth_clients SET name=$1,description=$2,redirect_uris=$3,scopes=$4,base_access=$5,allowed_groups=$6 WHERE id=$7`,
+		name, description, strings.Join(redirectURIs, "\n"), strings.Join(scopes, " "),
+		baseAccess, strings.Join(allowedGroups, " "), id)
 	return err
 }
 
@@ -1219,4 +1237,321 @@ func splitFields(s string) []string {
 		}
 	}
 	return out
+}
+
+// ── User email verification ────────────────────────────────────────────────
+
+func (s *Store) SetEmailUnverified(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET email_verified=false, updated_at=now() WHERE id=$1`, userID)
+	return err
+}
+
+func (s *Store) VerifyUserEmail(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET email_verified=true, updated_at=now() WHERE id=$1`, userID)
+	return err
+}
+
+func (s *Store) CreateEmailVerification(ctx context.Context, userID string) (string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM email_verifications WHERE user_id=$1`, userID); err != nil {
+		return "", err
+	}
+	token := RandomHex(32)
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO email_verifications(token,user_id,expires_at) VALUES($1,$2,$3)`,
+		token, userID, time.Now().Add(24*time.Hour)); err != nil {
+		return "", err
+	}
+	return token, tx.Commit()
+}
+
+func (s *Store) ConsumeEmailVerification(ctx context.Context, token string) (*User, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var userID string
+	var exp time.Time
+	err = tx.QueryRowContext(ctx,
+		`SELECT user_id, expires_at FROM email_verifications WHERE token=$1 FOR UPDATE`,
+		token).Scan(&userID, &exp)
+	if err != nil {
+		return nil, err
+	}
+	// Always delete the token (expired or valid) so it cannot be reused.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM email_verifications WHERE token=$1`, token); err != nil {
+		return nil, err
+	}
+	if time.Now().After(exp) {
+		// Commit to make deletion permanent, then surface expiry error.
+		_ = tx.Commit()
+		return nil, errors.New("verification token expired")
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET email_verified=true, updated_at=now() WHERE id=$1`, userID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return s.GetUserByID(ctx, userID)
+}
+
+// ── Password reset (self-service) ──────────────────────────────────────────
+
+func (s *Store) CreatePasswordReset(ctx context.Context, userID string, cooldown, ttl time.Duration) (string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+
+	var last time.Time
+	err = tx.QueryRowContext(ctx,
+		`SELECT last_requested_at FROM password_reset_cooldowns WHERE user_id=$1 FOR UPDATE`,
+		userID).Scan(&last)
+	if err == nil {
+		if time.Since(last) < cooldown {
+			return "", ErrPasswordResetTooSoon
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM password_resets WHERE user_id=$1`, userID); err != nil {
+		return "", err
+	}
+	token := RandomHex(32)
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO password_resets(token,user_id,expires_at) VALUES($1,$2,$3)`,
+		token, userID, time.Now().Add(ttl)); err != nil {
+		return "", err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO password_reset_cooldowns(user_id,last_requested_at) VALUES($1,now())
+		 ON CONFLICT(user_id) DO UPDATE SET last_requested_at=EXCLUDED.last_requested_at`,
+		userID); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+func (s *Store) ConsumePasswordReset(ctx context.Context, token, newPass string) (*User, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var userID string
+	var exp time.Time
+	err = tx.QueryRowContext(ctx,
+		`SELECT user_id, expires_at FROM password_resets WHERE token=$1 FOR UPDATE`, token).
+		Scan(&userID, &exp)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM password_resets WHERE token=$1`, token); err != nil {
+		return nil, err
+	}
+	if time.Now().After(exp) {
+		_ = tx.Commit()
+		return nil, ErrPasswordResetTokenExpired
+	}
+
+	h, err := bcrypt.GenerateFromPassword([]byte(newPass), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET password_hash=$1,updated_at=now() WHERE id=$2`, string(h), userID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return s.GetUserByID(ctx, userID)
+}
+
+// ── User Groups ────────────────────────────────────────────────────────────
+
+type UserGroup struct {
+	ID        string
+	Name      string
+	Label     string
+	CreatedAt time.Time
+}
+
+func (s *Store) CreateUserGroup(ctx context.Context, name, label string) error {
+	id := uuid.New().String()
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO user_groups(id,name,label) VALUES($1,$2,$3)`, id, name, label)
+	return err
+}
+
+func (s *Store) ListUserGroups(ctx context.Context) ([]*UserGroup, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id,name,label,created_at FROM user_groups ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*UserGroup
+	for rows.Next() {
+		g := &UserGroup{}
+		if err := rows.Scan(&g.ID, &g.Name, &g.Label, &g.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetUserGroupByID(ctx context.Context, id string) (*UserGroup, error) {
+	g := &UserGroup{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id,name,label,created_at FROM user_groups WHERE id=$1`, id).
+		Scan(&g.ID, &g.Name, &g.Label, &g.CreatedAt)
+	return g, err
+}
+
+func (s *Store) DeleteUserGroup(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM user_groups WHERE id=$1`, id)
+	return err
+}
+
+func (s *Store) GetGroupMembers(ctx context.Context, groupID string) ([]*User, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+userCols+` FROM users WHERE id IN (
+			SELECT user_id FROM user_group_members WHERE group_id=$1
+		) ORDER BY display_name`, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetUserGroups(ctx context.Context, userID string) ([]*UserGroup, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT g.id, g.name, g.label, g.created_at
+		 FROM user_groups g
+		 JOIN user_group_members m ON m.group_id=g.id
+		 WHERE m.user_id=$1 ORDER BY g.name`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*UserGroup
+	for rows.Next() {
+		g := &UserGroup{}
+		if err := rows.Scan(&g.ID, &g.Name, &g.Label, &g.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) AddUserToGroup(ctx context.Context, userID, groupID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO user_group_members(user_id,group_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
+		userID, groupID)
+	return err
+}
+
+func (s *Store) RemoveUserFromGroup(ctx context.Context, userID, groupID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM user_group_members WHERE user_id=$1 AND group_id=$2`, userID, groupID)
+	return err
+}
+
+func hasBaseClientAccess(u *User, baseAccess string) bool {
+	switch strings.ToLower(strings.TrimSpace(baseAccess)) {
+	case "", "user":
+		return true
+	case "legacy":
+		return false
+	case "member":
+		return u.IsMember()
+	case "admin":
+		return u.IsAdmin()
+	case "none":
+		return false
+	default:
+		return false
+	}
+}
+
+// UserCanAccessClient returns true when either condition passes:
+//   - baseAccess policy matches the user role
+//   - user belongs to at least one allowed group
+// Group membership supports built-ins (admin/member/user) and custom groups by name.
+// Admin is treated as belonging to all groups by default.
+func (s *Store) UserCanAccessClient(ctx context.Context, u *User, baseAccess string, allowedGroups []string) bool {
+	if u == nil {
+		return false
+	}
+	normalizedBase := strings.ToLower(strings.TrimSpace(baseAccess))
+	// Backward-compatible mode:
+	// - no groups configured => allow any logged-in user
+	// - groups configured => rely only on group matching
+	if normalizedBase == "legacy" || normalizedBase == "" {
+		if len(allowedGroups) == 0 {
+			return true
+		}
+	} else if hasBaseClientAccess(u, normalizedBase) {
+		return true
+	}
+	if len(allowedGroups) == 0 {
+		return false
+	}
+	if u.IsAdmin() {
+		return true
+	}
+	for _, raw := range allowedGroups {
+		g := strings.ToLower(strings.TrimSpace(raw))
+		if g == "" {
+			continue
+		}
+		switch g {
+		case "admin":
+			if u.IsAdmin() {
+				return true
+			}
+		case "member":
+			if u.IsMember() {
+				return true
+			}
+		case "user":
+			return true
+		default:
+			var count int
+			if err := s.db.QueryRowContext(ctx,
+				`SELECT COUNT(*) FROM user_group_members m
+				 JOIN user_groups g ON g.id=m.group_id
+				 WHERE m.user_id=$1 AND g.name=$2`, u.ID, g).Scan(&count); err == nil && count > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
