@@ -1,0 +1,104 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="panel-wrap">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">Admin</div>
+      <a class="sidebar-link" href="/admin">Overview</a>
+      <a class="sidebar-link" href="/admin/users">Users</a>
+      <a class="sidebar-link" href="/admin/groups">Groups</a>
+      <a class="sidebar-link" href="/admin/clients">Clients</a>
+      <a class="sidebar-link active" href="/admin/providers">Providers</a>
+      <a class="sidebar-link" href="/admin/roles">Roles</a>
+      <a class="sidebar-link" href="/admin/announcements">Announcements</a>
+      <a class="sidebar-link" href="/admin/settings">Settings</a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">Quick Links</div>
+      <a class="sidebar-link" href="/">Home</a>
+      <a class="sidebar-link" href="/profile">Profile</a>
+    </div>
+  </aside>
+
+  <main class="panel-content">
+    <div style="margin-bottom:.5rem">
+      <a href="/admin/providers" style="color:var(--text2);font-size:.9rem">Back to providers</a>
+    </div>
+
+    {{if .Flash}}
+    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+    {{end}}
+
+    {{with .Data}}
+    <h1 class="panel-title">Edit Provider: {{.Name}}</h1>
+
+    <div class="detail-section">
+      <div class="detail-section-title">Provider Identity</div>
+      <div class="detail-row">
+        <div class="detail-key">Slug (read-only)</div>
+        <div class="detail-val"><code style="color:var(--blue)">/auth/oidc/{{.Slug}}</code></div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">Callback URL</div>
+        <div class="detail-val"><code style="color:var(--blue)">{{$.Issuer}}/auth/oidc/{{.Slug}}/callback</code></div>
+      </div>
+    </div>
+
+    <div class="form-panel">
+      <form method="POST" action="/admin/providers/{{.ID}}/edit">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Display Name</label>
+            <input class="form-control" type="text" name="name" value="{{.Name}}" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Icon (optional)</label>
+            <input class="form-control" type="text" name="icon" value="{{.Icon}}" placeholder="e.g. X / G / key">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Client ID</label>
+            <input class="form-control" type="text" name="client_id" value="{{.ClientID}}" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Client Secret (leave blank to keep)</label>
+            <input class="form-control" type="password" name="client_secret" placeholder="Keep unchanged when empty">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Issuer URL</label>
+            <input class="form-control" type="url" name="issuer_url" value="{{.IssuerURL}}" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Scopes (space-separated)</label>
+            <input class="form-control" type="text" name="scopes" value="{{.Scopes}}">
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:1.2rem">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+            <input type="checkbox" name="auto_register" value="1" {{if .AutoRegister}}checked{{end}}>
+            <span>Allow auto-registration for first-time external users</span>
+          </label>
+        </div>
+
+        <div style="display:flex;gap:.8rem">
+          <button class="btn btn-primary" type="submit">Save</button>
+          <a class="btn btn-ghost" href="/admin/providers">Cancel</a>
+        </div>
+      </form>
+    </div>
+    {{end}}
+  </main>
+</div>
+{{end}}
+
+
+

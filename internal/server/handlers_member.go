@@ -8,11 +8,14 @@ import (
 	"transmtf.com/oidc/internal/store"
 )
 
-// ── Projects ─────────────────────────────────────────────────────────────────
+// Projects
 
 func (h *Handler) MemberProjects(w http.ResponseWriter, r *http.Request) {
 	projects, _ := h.st.ListProjects(r.Context())
 	d := h.pageData(r, "Project Management")
+	if flash := r.URL.Query().Get("flash"); flash != "" {
+		d.Flash = flash
+	}
 	d.Data = projects
 	h.render(w, "member_projects", d)
 }
@@ -39,20 +42,20 @@ func (h *Handler) MemberProjectCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projects, _ := h.st.ListProjects(ctx)
-	d.Data = projects
-    d.Flash = "Project created"
-	h.render(w, "member_projects", d)
+	http.Redirect(w, r, "/member/projects?flash=Project+created", http.StatusFound)
 }
 
 func (h *Handler) MemberProjectEdit(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	p, err := h.st.GetProject(r.Context(), id)
 	if err != nil {
-        h.renderError(w, r, http.StatusNotFound, "Project not found", id)
+		h.renderError(w, r, http.StatusNotFound, "Project not found", id)
 		return
 	}
 	d := h.pageData(r, "Edit Project")
+	if flash := r.URL.Query().Get("flash"); flash != "" {
+		d.Flash = flash
+	}
 	d.Data = p
 	h.render(w, "member_project_edit", d)
 }
@@ -79,9 +82,7 @@ func (h *Handler) MemberProjectUpdate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, "member_project_edit", d)
 		return
 	}
-	d.Data = p
-	d.Flash = "Saved"
-	h.render(w, "member_project_edit", d)
+	http.Redirect(w, r, "/member/projects/"+id+"/edit?flash=Saved", http.StatusFound)
 }
 
 func (h *Handler) MemberProjectDelete(w http.ResponseWriter, r *http.Request) {
@@ -115,11 +116,11 @@ func projectFromForm(r *http.Request) *store.Project {
 	}
 }
 
-// ── Friend Links ──────────────────────────────────────────────────────────────
+// Friend Links
 
 func (h *Handler) MemberLinks(w http.ResponseWriter, r *http.Request) {
 	links, _ := h.st.ListFriendLinks(r.Context())
-	d := h.pageData(r, "友情链接管理")
+	d := h.pageData(r, "Friend Links Management")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
@@ -144,7 +145,7 @@ func (h *Handler) MemberLinkCreate(w http.ResponseWriter, r *http.Request) {
 
 	renderErr := func(msg string) {
 		links, _ := h.st.ListFriendLinks(ctx)
-		d := h.pageData(r, "友情链接管理")
+		d := h.pageData(r, "Friend Links Management")
 		d.Data = links
 		d.Flash = msg
 		d.IsError = true
@@ -152,18 +153,18 @@ func (h *Handler) MemberLinkCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if name == "" || url == "" {
-		renderErr("名称和链接 URL 不能为空")
+		renderErr("Name and link URL are required")
 		return
 	}
 	if !isAllowedAbsoluteURL(url) {
-		renderErr("链接 URL 必须为 HTTPS，或 localhost/127.0.0.1 的 HTTP 地址")
+		renderErr("Link URL must be HTTPS, or HTTP on localhost/127.0.0.1")
 		return
 	}
 	if err := h.st.CreateFriendLink(ctx, name, url, icon, sortOrder); err != nil {
 		renderErr("Create failed: " + err.Error())
 		return
 	}
-	http.Redirect(w, r, "/member/links?flash=链接已创建", http.StatusFound)
+	http.Redirect(w, r, "/member/links?flash=Link+created", http.StatusFound)
 }
 
 func (h *Handler) MemberLinkEdit(w http.ResponseWriter, r *http.Request) {
@@ -173,7 +174,7 @@ func (h *Handler) MemberLinkEdit(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusNotFound, "Link not found", id)
 		return
 	}
-	d := h.pageData(r, "编辑友情链接")
+	d := h.pageData(r, "Edit Friend Link")
 	d.Data = l
 	h.render(w, "member_link_edit", d)
 }
@@ -196,7 +197,7 @@ func (h *Handler) MemberLinkUpdate(w http.ResponseWriter, r *http.Request) {
 
 	renderErr := func(msg string) {
 		l, _ := h.st.GetFriendLink(ctx, id)
-		d := h.pageData(r, "编辑友情链接")
+		d := h.pageData(r, "Edit Friend Link")
 		d.Data = l
 		d.Flash = msg
 		d.IsError = true
@@ -204,18 +205,18 @@ func (h *Handler) MemberLinkUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if name == "" || url == "" {
-		renderErr("名称和链接 URL 不能为空")
+		renderErr("Name and link URL are required")
 		return
 	}
 	if !isAllowedAbsoluteURL(url) {
-		renderErr("链接 URL 必须为 HTTPS，或 localhost/127.0.0.1 的 HTTP 地址")
+		renderErr("Link URL must be HTTPS, or HTTP on localhost/127.0.0.1")
 		return
 	}
 	if err := h.st.UpdateFriendLink(ctx, id, name, url, icon, sortOrder); err != nil {
 		renderErr("Save failed: " + err.Error())
 		return
 	}
-	http.Redirect(w, r, "/member/links?flash=已保存", http.StatusFound)
+	http.Redirect(w, r, "/member/links?flash=Saved", http.StatusFound)
 }
 
 func (h *Handler) MemberLinkDelete(w http.ResponseWriter, r *http.Request) {
@@ -230,3 +231,6 @@ func (h *Handler) MemberLinkDelete(w http.ResponseWriter, r *http.Request) {
 	_ = h.st.DeleteFriendLink(r.Context(), r.PathValue("id"))
 	http.Redirect(w, r, "/member/links", http.StatusFound)
 }
+
+
+

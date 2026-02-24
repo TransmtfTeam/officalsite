@@ -4,50 +4,51 @@
 <div class="panel-wrap">
   <aside class="sidebar">
     <div class="sidebar-section">
-      <div class="sidebar-title">管理导航</div>
-      <a class="sidebar-link" href="/admin">概览</a>
-      <a class="sidebar-link" href="/admin/users">用户</a>
-      <a class="sidebar-link" href="/admin/groups">分组</a>
-      <a class="sidebar-link" href="/admin/clients">应用</a>
-      <a class="sidebar-link active" href="/admin/providers">登录方式</a>
-      <a class="sidebar-link" href="/admin/roles">角色</a>
-      <a class="sidebar-link" href="/admin/announcements">公告</a>
-      <a class="sidebar-link" href="/admin/settings">设置</a>
+      <div class="sidebar-title">Admin</div>
+      <a class="sidebar-link" href="/admin">Overview</a>
+      <a class="sidebar-link" href="/admin/users">Users</a>
+      <a class="sidebar-link" href="/admin/groups">Groups</a>
+      <a class="sidebar-link" href="/admin/clients">Clients</a>
+      <a class="sidebar-link active" href="/admin/providers">Providers</a>
+      <a class="sidebar-link" href="/admin/roles">Roles</a>
+      <a class="sidebar-link" href="/admin/announcements">Announcements</a>
+      <a class="sidebar-link" href="/admin/settings">Settings</a>
     </div>
     <div class="sidebar-section">
-      <div class="sidebar-title">快速入口</div>
-      <a class="sidebar-link" href="/">返回首页</a>
-      <a class="sidebar-link" href="/profile">个人资料</a>
+      <div class="sidebar-title">Quick Links</div>
+      <a class="sidebar-link" href="/">Home</a>
+      <a class="sidebar-link" href="/profile">Profile</a>
     </div>
   </aside>
 
   <main class="panel-content">
-    <h1 class="panel-title">外部登录方式</h1>
-    <p class="panel-sub">配置标准 OIDC 提供商（例如 X、Google、Keycloak），用于一键登录。</p>
+    <h1 class="panel-title">External Login Providers</h1>
+    <p class="panel-sub">Configure external OIDC providers for sign-in.</p>
 
     {{if .Flash}}
     <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
     {{end}}
 
     <div class="form-panel">
-      <p class="form-panel-title">新增提供商</p>
+      <p class="form-panel-title">Add Provider</p>
       <p style="font-size:.82rem;color:#888;margin-bottom:1rem">
-        回调地址请填写为：<code style="color:var(--blue)">{{.Issuer}}/auth/oidc/{slug}/callback</code>
+        Callback URL format:
+        <code style="color:var(--blue)">{{.Issuer}}/auth/oidc/{slug}/callback</code>
       </p>
       <form method="POST" action="/admin/providers">
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">名称（展示用）</label>
+            <label class="form-label">Name</label>
             <input class="form-control" type="text" name="name" placeholder="X / Google / Keycloak" required>
           </div>
           <div class="form-group">
-            <label class="form-label">Slug（URL 路径）</label>
+            <label class="form-label">Slug</label>
             <input class="form-control" type="text" name="slug" placeholder="twitter" pattern="[a-z0-9\-]+" required>
           </div>
           <div class="form-group">
-            <label class="form-label">图标（可选，emoji 或留空）</label>
-            <input class="form-control" type="text" name="icon" placeholder="𝕏 / G / 🔑">
+            <label class="form-label">Icon (optional)</label>
+            <input class="form-control" type="text" name="icon" placeholder="e.g. X / G / key">
           </div>
         </div>
         <div class="form-row">
@@ -66,16 +67,22 @@
             <input class="form-control" type="url" name="issuer_url" placeholder="https://accounts.google.com" required>
           </div>
           <div class="form-group">
-            <label class="form-label">Scopes（空格分隔）</label>
+            <label class="form-label">Scopes (space-separated)</label>
             <input class="form-control" type="text" name="scopes" value="openid email profile">
           </div>
         </div>
-        <button class="btn btn-primary btn-sm" type="submit">添加</button>
+        <div class="form-group" style="margin-bottom:1rem">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+            <input type="checkbox" name="auto_register" value="1" checked>
+            <span>Allow auto-registration for first-time external users</span>
+          </label>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">Add Provider</button>
       </form>
     </div>
 
     <details class="card" style="margin-bottom:1.5rem;cursor:pointer">
-      <summary style="font-size:.9rem;font-weight:600;padding:.2rem 0">常见配置示例</summary>
+      <summary style="font-size:.9rem;font-weight:600;padding:.2rem 0">Common setup examples</summary>
       <div style="margin-top:1rem;font-size:.82rem;color:var(--text2);display:flex;flex-direction:column;gap:.8rem">
         <div>
           <strong style="color:var(--text)">X (x.com)</strong><br>
@@ -88,10 +95,6 @@
           Issuer: <code>https://accounts.google.com</code><br>
           Scopes: <code>openid email profile</code>
         </div>
-        <div>
-          <strong style="color:var(--text)">Keycloak / Authentik / Dex</strong><br>
-          使用各自的 OIDC Issuer 地址，例如：<code>https://auth.example.com/realms/master</code>
-        </div>
       </div>
     </details>
 
@@ -99,11 +102,12 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>名称</th>
+            <th>Name</th>
             <th>Slug</th>
             <th>Issuer</th>
-            <th>状态</th>
-            <th>操作</th>
+            <th>Status</th>
+            <th>Auto Reg</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -114,28 +118,33 @@
             <td style="font-size:.8rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{.IssuerURL}}</td>
             <td>
               {{if .Enabled}}
-              <span style="color:#16a34a;font-size:.82rem">已启用</span>
+              <span style="color:#16a34a;font-size:.82rem">Enabled</span>
               {{else}}
-              <span style="color:var(--text2);font-size:.82rem">已停用</span>
+              <span style="color:var(--text2);font-size:.82rem">Disabled</span>
+              {{end}}
+            </td>
+            <td>
+              {{if .AutoRegister}}
+              <span style="color:#16a34a;font-size:.82rem">On</span>
+              {{else}}
+              <span style="color:#dc2626;font-size:.82rem">Off</span>
               {{end}}
             </td>
             <td style="white-space:nowrap">
-              <form method="POST" action="/admin/providers/{{.ID}}/toggle" style="display:inline-block">
+              <a class="btn btn-ghost btn-sm" href="/admin/providers/{{.ID}}/edit">Edit</a>
+              <form method="POST" action="/admin/providers/{{.ID}}/toggle" style="display:inline-block;margin-left:.4rem">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <button class="btn btn-ghost btn-sm" type="submit">
-                  {{if .Enabled}}停用{{else}}启用{{end}}
-                </button>
+                <button class="btn btn-ghost btn-sm" type="submit">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
               </form>
               <form method="POST" action="/admin/providers/{{.ID}}/delete" style="display:inline-block;margin-left:.4rem">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button class="btn btn-danger btn-sm" type="submit"
-                  data-confirm="确认删除此登录方式吗？使用该方式登录的用户将无法继续使用。"
-                  data-confirm-title="删除登录方式" data-confirm-icon="🗑️">删除</button>
+                  onclick="return confirm('Delete provider {{.Name}}? Users of this provider may lose sign-in access.')">Delete</button>
               </form>
             </td>
           </tr>
           {{else}}
-          <tr><td colspan="5" style="color:var(--text2);text-align:center;padding:2rem">尚未配置任何外部登录提供商</td></tr>
+          <tr><td colspan="6" style="color:var(--text2);text-align:center;padding:2rem">No providers configured</td></tr>
           {{end}}
         </tbody>
       </table>
@@ -143,3 +152,4 @@
   </main>
 </div>
 {{end}}
+

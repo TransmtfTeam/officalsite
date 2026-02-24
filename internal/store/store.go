@@ -26,19 +26,22 @@ var (
 
 
 type User struct {
-	ID                string
-	Email             string
-	PassHash          string
-	DisplayName       string
-	AvatarURL         string
-	Role              string // user | member | admin
-	Active            bool
-	TOTPSecret        string
-	TOTPPendingSecret string
-	TOTPEnabled       bool
-	CreatedAt         time.Time
-	EmailVerified     bool
+	ID                    string
+	Email                 string
+	PassHash              string
+	DisplayName           string
+	AvatarURL             string
+	Role                  string // user | member | admin
+	Active                bool
+	TOTPSecret            string
+	TOTPPendingSecret     string
+	TOTPEnabled           bool
+	CreatedAt             time.Time
+	EmailVerified         bool
+	RequirePasswordChange bool
 }
+
+func HasPassword(u *User) bool { return u != nil && strings.TrimSpace(u.PassHash) != "" }
 
 func (u *User) IsAdmin()  bool { return u.Role == "admin" }
 func (u *User) IsMember() bool { return u.Role == "member" || u.Role == "admin" }
@@ -122,6 +125,7 @@ type OIDCProvider struct {
 	IssuerURL    string
 	Scopes       string
 	Enabled      bool
+	AutoRegister bool
 	CreatedAt    time.Time
 }
 
@@ -262,13 +266,14 @@ func (s *Store) GetAllSettings(ctx context.Context) map[string]string {
 }
 
 
-const userCols = `id,email,password_hash,display_name,avatar_url,role,active,totp_secret,totp_pending_secret,totp_enabled,created_at,email_verified`
+const userCols = `id,email,password_hash,display_name,avatar_url,role,active,totp_secret,totp_pending_secret,totp_enabled,created_at,email_verified,require_password_change`
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	u := &User{}
 	err := row.Scan(
 		&u.ID, &u.Email, &u.PassHash, &u.DisplayName, &u.AvatarURL, &u.Role, &u.Active,
 		&u.TOTPSecret, &u.TOTPPendingSecret, &u.TOTPEnabled, &u.CreatedAt, &u.EmailVerified,
+		&u.RequirePasswordChange,
 	)
 	return u, err
 }
@@ -384,6 +389,38 @@ func (s *Store) CountUsers(ctx context.Context) int {
 
 func (s *Store) VerifyPassword(u *User, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(u.PassHash), []byte(password)) == nil
+}
+
+func (s *Store) SetRequirePasswordChange(ctx context.Context, userID string, required bool) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET require_password_change=$1,updated_at=now() WHERE id=$2`,
+		required, userID)
+	return err
+}
+
+func (s *Store) SetEmailVerified(ctx context.Context, userID string, verified bool) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET email_verified=$1,updated_at=now() WHERE id=$2`,
+		verified, userID)
+	return err
+}
+
+func (s *Store) ClearPassword(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET password_hash='',updated_at=now() WHERE id=$1`,
+		userID)
+	return err
+}
+
+func (s *Store) UpdatePasswordAndClearFlag(ctx context.Context, userID, newPass string) error {
+	h, err := bcrypt.GenerateFromPassword([]byte(newPass), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE users SET password_hash=$1,require_password_change=false,updated_at=now() WHERE id=$2`,
+		string(h), userID)
+	return err
 }
 
 
@@ -652,17 +689,17 @@ func (s *Store) UpdateUserAvatar(ctx context.Context, id, avatarURL string) erro
 }
 
 
-func (s *Store) CreateOIDCProvider(ctx context.Context, name, slug, icon, clientID, clientSecret, issuerURL, scopes string) error {
+func (s *Store) CreateOIDCProvider(ctx context.Context, name, slug, icon, clientID, clientSecret, issuerURL, scopes string, autoRegister bool) error {
 	id := uuid.New().String()
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO oidc_providers(id,name,slug,icon,client_id,client_secret,issuer_url,scopes) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
-		id, name, slug, icon, clientID, clientSecret, issuerURL, scopes)
+		`INSERT INTO oidc_providers(id,name,slug,icon,client_id,client_secret,issuer_url,scopes,auto_register) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+		id, name, slug, icon, clientID, clientSecret, issuerURL, scopes, autoRegister)
 	return err
 }
 
 func (s *Store) ListOIDCProviders(ctx context.Context) ([]*OIDCProvider, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id,name,slug,icon,client_id,client_secret,issuer_url,scopes,enabled,created_at FROM oidc_providers ORDER BY created_at`)
+		`SELECT id,name,slug,icon,client_id,client_secret,issuer_url,scopes,enabled,auto_register,created_at FROM oidc_providers ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -670,7 +707,7 @@ func (s *Store) ListOIDCProviders(ctx context.Context) ([]*OIDCProvider, error) 
 	var out []*OIDCProvider
 	for rows.Next() {
 		p := &OIDCProvider{}
-		if err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.Scopes, &p.Enabled, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.Scopes, &p.Enabled, &p.AutoRegister, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -680,7 +717,7 @@ func (s *Store) ListOIDCProviders(ctx context.Context) ([]*OIDCProvider, error) 
 
 func (s *Store) ListEnabledOIDCProviders(ctx context.Context) ([]*OIDCProvider, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id,name,slug,icon,client_id,client_secret,issuer_url,scopes,enabled,created_at FROM oidc_providers WHERE enabled=true ORDER BY created_at`)
+		`SELECT id,name,slug,icon,client_id,client_secret,issuer_url,scopes,enabled,auto_register,created_at FROM oidc_providers WHERE enabled=true ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -688,7 +725,7 @@ func (s *Store) ListEnabledOIDCProviders(ctx context.Context) ([]*OIDCProvider, 
 	var out []*OIDCProvider
 	for rows.Next() {
 		p := &OIDCProvider{}
-		if err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.Scopes, &p.Enabled, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.Scopes, &p.Enabled, &p.AutoRegister, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -699,23 +736,23 @@ func (s *Store) ListEnabledOIDCProviders(ctx context.Context) ([]*OIDCProvider, 
 func (s *Store) GetOIDCProviderBySlug(ctx context.Context, slug string) (*OIDCProvider, error) {
 	p := &OIDCProvider{}
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id,name,slug,icon,client_id,client_secret,issuer_url,scopes,enabled,created_at FROM oidc_providers WHERE slug=$1`,
-		slug).Scan(&p.ID, &p.Name, &p.Slug, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.Scopes, &p.Enabled, &p.CreatedAt)
+		`SELECT id,name,slug,icon,client_id,client_secret,issuer_url,scopes,enabled,auto_register,created_at FROM oidc_providers WHERE slug=$1`,
+		slug).Scan(&p.ID, &p.Name, &p.Slug, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.Scopes, &p.Enabled, &p.AutoRegister, &p.CreatedAt)
 	return p, err
 }
 
 func (s *Store) GetOIDCProviderByID(ctx context.Context, id string) (*OIDCProvider, error) {
 	p := &OIDCProvider{}
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id,name,slug,icon,client_id,client_secret,issuer_url,scopes,enabled,created_at FROM oidc_providers WHERE id=$1`,
-		id).Scan(&p.ID, &p.Name, &p.Slug, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.Scopes, &p.Enabled, &p.CreatedAt)
+		`SELECT id,name,slug,icon,client_id,client_secret,issuer_url,scopes,enabled,auto_register,created_at FROM oidc_providers WHERE id=$1`,
+		id).Scan(&p.ID, &p.Name, &p.Slug, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.Scopes, &p.Enabled, &p.AutoRegister, &p.CreatedAt)
 	return p, err
 }
 
-func (s *Store) UpdateOIDCProvider(ctx context.Context, id, name, icon, clientID, clientSecret, issuerURL, scopes string, enabled bool) error {
+func (s *Store) UpdateOIDCProvider(ctx context.Context, id, name, icon, clientID, clientSecret, issuerURL, scopes string, enabled, autoRegister bool) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE oidc_providers SET name=$1,icon=$2,client_id=$3,client_secret=$4,issuer_url=$5,scopes=$6,enabled=$7 WHERE id=$8`,
-		name, icon, clientID, clientSecret, issuerURL, scopes, enabled, id)
+		`UPDATE oidc_providers SET name=$1,icon=$2,client_id=$3,client_secret=$4,issuer_url=$5,scopes=$6,enabled=$7,auto_register=$8 WHERE id=$9`,
+		name, icon, clientID, clientSecret, issuerURL, scopes, enabled, autoRegister, id)
 	return err
 }
 
@@ -1145,7 +1182,7 @@ func (s *Store) DeleteCustomRole(ctx context.Context, name string) error {
 }
 
 
-// ── Friend Links ────────────────────────────────────────────────────────────
+// Friend Links
 
 type FriendLink struct {
 	ID        string
@@ -1239,7 +1276,7 @@ func splitFields(s string) []string {
 	return out
 }
 
-// ── User email verification ────────────────────────────────────────────────
+// User email verification
 
 func (s *Store) SetEmailUnverified(ctx context.Context, userID string) error {
 	_, err := s.db.ExecContext(ctx,
@@ -1304,7 +1341,7 @@ func (s *Store) ConsumeEmailVerification(ctx context.Context, token string) (*Us
 	return s.GetUserByID(ctx, userID)
 }
 
-// ── Password reset (self-service) ──────────────────────────────────────────
+// Password reset (self-service)
 
 func (s *Store) CreatePasswordReset(ctx context.Context, userID string, cooldown, ttl time.Duration) (string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -1383,7 +1420,7 @@ func (s *Store) ConsumePasswordReset(ctx context.Context, token, newPass string)
 	return s.GetUserByID(ctx, userID)
 }
 
-// ── User Groups ────────────────────────────────────────────────────────────
+// User Groups
 
 type UserGroup struct {
 	ID        string
@@ -1555,3 +1592,4 @@ func (s *Store) UserCanAccessClient(ctx context.Context, u *User, baseAccess str
 	}
 	return false
 }
+

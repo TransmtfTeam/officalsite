@@ -17,84 +17,43 @@ func (h *Handler) mailer(ctx context.Context) email.Sender {
 // defaultWelcomeHTML is the styled HTML template for welcome emails.
 // Placeholders: {{SiteName}}, {{SiteIconHTML}}, {{Name}}, {{ProfileURL}}
 const defaultWelcomeHTML = `<!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f0f4f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4f8;padding:48px 16px">
-<tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
-  <tr>
-    <td style="background:linear-gradient(135deg,#3b82f6 0%,#ec4899 100%);padding:32px 40px;text-align:center">
+<body style="margin:0;padding:24px;background:#f5f7fb;font-family:Segoe UI,Roboto,sans-serif;color:#1f2937">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:28px">
+    <div style="text-align:center;margin-bottom:18px">
       {{SiteIconHTML}}
-      <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:800;letter-spacing:-.5px">{{SiteName}}</h1>
-    </td>
-  </tr>
-  <tr>
-    <td style="padding:40px">
-      <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;font-weight:700">欢迎加入 {{SiteName}}</h2>
-      <p style="color:#475569;margin:0 0 8px;line-height:1.7;font-size:15px">你好，{{Name}}，</p>
-      <p style="color:#475569;margin:0 0 28px;line-height:1.7;font-size:15px">
-        账号已创建成功，现在可以登录并完善你的个人资料。
-      </p>
-      <a href="{{ProfileURL}}"
-         style="display:inline-block;background:linear-gradient(135deg,#3b82f6,#ec4899);color:#ffffff;padding:13px 30px;border-radius:10px;text-decoration:none;font-weight:600;font-size:15px">
-        查看个人资料
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <td style="padding:20px 40px 24px;border-top:1px solid #f1f5f9;text-align:center">
-      <p style="color:#94a3b8;margin:0;font-size:13px">{{SiteName}} · 此邮件由系统自动发送，请勿回复</p>
-    </td>
-  </tr>
-</table>
-</td></tr>
-</table>
+      <h1 style="margin:0;font-size:22px">{{SiteName}}</h1>
+    </div>
+    <h2 style="margin:0 0 10px;font-size:20px">Welcome to {{SiteName}}</h2>
+    <p style="margin:0 0 16px;line-height:1.7">Hello {{Name}}, your account is ready.</p>
+    <p style="margin:0 0 22px;line-height:1.7">You can complete your profile using the button below.</p>
+    <a href="{{ProfileURL}}" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Open Profile</a>
+    <p style="margin:24px 0 0;font-size:13px;color:#6b7280">{{SiteName}} system email. Please do not reply.</p>
+  </div>
 </body>
 </html>`
 
 // defaultPasswordResetHTML is the styled HTML template for password reset emails.
 // Placeholders: {{SiteName}}, {{SiteIconHTML}}, {{Name}}, {{NewPassword}}, {{ProfileURL}}
 const defaultPasswordResetHTML = `<!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f0f4f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4f8;padding:48px 16px">
-<tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
-  <tr>
-    <td style="background:linear-gradient(135deg,#3b82f6 0%,#ec4899 100%);padding:32px 40px;text-align:center">
+<body style="margin:0;padding:24px;background:#f5f7fb;font-family:Segoe UI,Roboto,sans-serif;color:#1f2937">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:28px">
+    <div style="text-align:center;margin-bottom:18px">
       {{SiteIconHTML}}
-      <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:800;letter-spacing:-.5px">{{SiteName}}</h1>
-    </td>
-  </tr>
-  <tr>
-    <td style="padding:40px">
-      <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;font-weight:700">密码已被重置</h2>
-      <p style="color:#475569;margin:0 0 8px;line-height:1.7;font-size:15px">你好，{{Name}}，</p>
-      <p style="color:#475569;margin:0 0 20px;line-height:1.7;font-size:15px">
-        管理员已重置了你的账号密码，新密码如下：
-      </p>
-      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin-bottom:24px;text-align:center">
-        <code style="font-size:18px;font-weight:700;color:#1e293b;letter-spacing:1px">{{NewPassword}}</code>
-      </div>
-      <p style="color:#475569;margin:0 0 28px;line-height:1.7;font-size:15px">
-        请登录后立即前往个人资料页修改密码。
-      </p>
-      <a href="{{ProfileURL}}"
-         style="display:inline-block;background:linear-gradient(135deg,#3b82f6,#ec4899);color:#ffffff;padding:13px 30px;border-radius:10px;text-decoration:none;font-weight:600;font-size:15px">
-        修改密码
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <td style="padding:20px 40px 24px;border-top:1px solid #f1f5f9;text-align:center">
-      <p style="color:#94a3b8;margin:0;font-size:13px">{{SiteName}} · 此邮件由系统自动发送，请勿回复</p>
-    </td>
-  </tr>
-</table>
-</td></tr>
-</table>
+      <h1 style="margin:0;font-size:22px">{{SiteName}}</h1>
+    </div>
+    <h2 style="margin:0 0 10px;font-size:20px">Password was reset</h2>
+    <p style="margin:0 0 16px;line-height:1.7">Hello {{Name}}, an administrator reset your password.</p>
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px;margin-bottom:18px;text-align:center">
+      <code style="font-size:18px;font-weight:700">{{NewPassword}}</code>
+    </div>
+    <p style="margin:0 0 20px;line-height:1.7">Please sign in and change this password immediately.</p>
+    <a href="{{ProfileURL}}" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Change Password</a>
+    <p style="margin:24px 0 0;font-size:13px;color:#6b7280">{{SiteName}} system email. Please do not reply.</p>
+  </div>
 </body>
 </html>`
 
@@ -120,86 +79,42 @@ func siteIconImgHTML(issuer, iconURL, altText string) string {
 // defaultVerifyHTML is the styled HTML template for email verification.
 // Placeholders: {{SiteName}}, {{SiteIconHTML}}, {{Name}}, {{VerifyURL}}
 const defaultVerifyHTML = `<!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f0f4f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4f8;padding:48px 16px">
-<tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
-  <tr>
-    <td style="background:linear-gradient(135deg,#3b82f6 0%,#ec4899 100%);padding:32px 40px;text-align:center">
+<body style="margin:0;padding:24px;background:#f5f7fb;font-family:Segoe UI,Roboto,sans-serif;color:#1f2937">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:28px">
+    <div style="text-align:center;margin-bottom:18px">
       {{SiteIconHTML}}
-      <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:800;letter-spacing:-.5px">{{SiteName}}</h1>
-    </td>
-  </tr>
-  <tr>
-    <td style="padding:40px">
-      <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;font-weight:700">验证您的邮箱</h2>
-      <p style="color:#475569;margin:0 0 8px;line-height:1.7;font-size:15px">你好，{{Name}}，</p>
-      <p style="color:#475569;margin:0 0 28px;line-height:1.7;font-size:15px">
-        请点击下方按钮完成邮箱验证。链接有效期为 24 小时。
-      </p>
-      <a href="{{VerifyURL}}"
-         style="display:inline-block;background:linear-gradient(135deg,#3b82f6,#ec4899);color:#ffffff;padding:13px 30px;border-radius:10px;text-decoration:none;font-weight:600;font-size:15px">
-        验证邮箱
-      </a>
-      <p style="color:#94a3b8;margin:28px 0 0;line-height:1.7;font-size:13px">
-        如果按钮无法点击，请复制以下链接到浏览器：<br>
-        <span style="word-break:break-all;color:#475569">{{VerifyURL}}</span>
-      </p>
-    </td>
-  </tr>
-  <tr>
-    <td style="padding:20px 40px 24px;border-top:1px solid #f1f5f9;text-align:center">
-      <p style="color:#94a3b8;margin:0;font-size:13px">{{SiteName}} · 此邮件由系统自动发送，请勿回复</p>
-    </td>
-  </tr>
-</table>
-</td></tr>
-</table>
+      <h1 style="margin:0;font-size:22px">{{SiteName}}</h1>
+    </div>
+    <h2 style="margin:0 0 10px;font-size:20px">Verify your email</h2>
+    <p style="margin:0 0 18px;line-height:1.7">Hello {{Name}}, click below to verify your email. This link expires in 24 hours.</p>
+    <a href="{{VerifyURL}}" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Verify Email</a>
+    <p style="margin:20px 0 0;font-size:13px;color:#6b7280">If the button does not work, open this URL:</p>
+    <p style="margin:8px 0 0;font-size:13px;word-break:break-all;color:#374151">{{VerifyURL}}</p>
+    <p style="margin:24px 0 0;font-size:13px;color:#6b7280">{{SiteName}} system email. Please do not reply.</p>
+  </div>
 </body>
 </html>`
 
 // defaultForgotPasswordHTML is the styled HTML template for password reset links.
 // Placeholders: {{SiteName}}, {{SiteIconHTML}}, {{Name}}, {{ResetURL}}
 const defaultForgotPasswordHTML = `<!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f0f4f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4f8;padding:48px 16px">
-<tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
-  <tr>
-    <td style="background:linear-gradient(135deg,#3b82f6 0%,#ec4899 100%);padding:32px 40px;text-align:center">
+<body style="margin:0;padding:24px;background:#f5f7fb;font-family:Segoe UI,Roboto,sans-serif;color:#1f2937">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:28px">
+    <div style="text-align:center;margin-bottom:18px">
       {{SiteIconHTML}}
-      <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:800;letter-spacing:-.5px">{{SiteName}}</h1>
-    </td>
-  </tr>
-  <tr>
-    <td style="padding:40px">
-      <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;font-weight:700">重置您的密码</h2>
-      <p style="color:#475569;margin:0 0 8px;line-height:1.7;font-size:15px">你好，{{Name}}，</p>
-      <p style="color:#475569;margin:0 0 28px;line-height:1.7;font-size:15px">
-        请点击下方按钮重置密码。链接有效期为 30 分钟。
-      </p>
-      <a href="{{ResetURL}}"
-         style="display:inline-block;background:linear-gradient(135deg,#3b82f6,#ec4899);color:#ffffff;padding:13px 30px;border-radius:10px;text-decoration:none;font-weight:600;font-size:15px">
-        重置密码
-      </a>
-      <p style="color:#94a3b8;margin:28px 0 0;line-height:1.7;font-size:13px">
-        如果按钮无法点击，请复制以下链接到浏览器：<br>
-        <span style="word-break:break-all;color:#475569">{{ResetURL}}</span>
-      </p>
-    </td>
-  </tr>
-  <tr>
-    <td style="padding:20px 40px 24px;border-top:1px solid #f1f5f9;text-align:center">
-      <p style="color:#94a3b8;margin:0;font-size:13px">{{SiteName}} · 此邮件由系统自动发送，请勿回复</p>
-    </td>
-  </tr>
-</table>
-</td></tr>
-</table>
+      <h1 style="margin:0;font-size:22px">{{SiteName}}</h1>
+    </div>
+    <h2 style="margin:0 0 10px;font-size:20px">Reset your password</h2>
+    <p style="margin:0 0 18px;line-height:1.7">Hello {{Name}}, click below to reset your password. This link expires in 30 minutes.</p>
+    <a href="{{ResetURL}}" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Reset Password</a>
+    <p style="margin:20px 0 0;font-size:13px;color:#6b7280">If the button does not work, open this URL:</p>
+    <p style="margin:8px 0 0;font-size:13px;word-break:break-all;color:#374151">{{ResetURL}}</p>
+    <p style="margin:24px 0 0;font-size:13px;color:#6b7280">{{SiteName}} system email. Please do not reply.</p>
+  </div>
 </body>
 </html>`
 
@@ -216,8 +131,8 @@ func (h *Handler) sendVerificationEmail(ctx context.Context, toEmail, name, toke
 		"VerifyURL":    verifyURL,
 	}
 
-	subject := "【" + siteName + "】请验证您的邮箱"
-	textBody := "你好，" + name + "，\n\n请点击以下链接完成邮箱验证（24小时内有效）：\n" + verifyURL + "\n\n" + siteName + " 团队"
+	subject := "[" + siteName + "] Verify your email"
+	textBody := "Hello " + name + ",\n\nPlease verify your email by opening the link below (valid for 24 hours):\n" + verifyURL + "\n\n" + siteName + " Team"
 	htmlBody := renderEmailTpl(defaultVerifyHTML, vars)
 
 	if err := h.mailer(ctx).SendHTML(toEmail, subject, textBody, htmlBody); err != nil {
@@ -237,8 +152,8 @@ func (h *Handler) sendForgotPasswordEmail(ctx context.Context, toEmail, name, to
 		"ResetURL":     resetURL,
 	}
 
-	subject := "【" + siteName + "】重置密码"
-	textBody := "你好，" + name + "，\n\n请点击以下链接重置密码（30分钟内有效）：\n" + resetURL + "\n\n" + siteName + " 团队"
+	subject := "[" + siteName + "] Reset password"
+	textBody := "Hello " + name + ",\n\nReset your password using the link below (valid for 30 minutes):\n" + resetURL + "\n\n" + siteName + " Team"
 	htmlBody := renderEmailTpl(defaultForgotPasswordHTML, vars)
 
 	if err := h.mailer(ctx).SendHTML(toEmail, subject, textBody, htmlBody); err != nil {
@@ -253,15 +168,15 @@ func (h *Handler) sendWelcomeEmail(ctx context.Context, toEmail, name string) {
 	iconHTML := siteIconImgHTML(h.cfg.Issuer, h.st.GetSetting(ctx, "site_icon_url"), siteName)
 
 	vars := map[string]string{
-		"SiteName":    siteName,
+		"SiteName":     siteName,
 		"SiteIconHTML": iconHTML,
-		"Name":        name,
-		"ProfileURL":  profileURL,
+		"Name":         name,
+		"ProfileURL":   profileURL,
 	}
 
-	subject := "欢迎加入 " + siteName
+	subject := "Welcome to " + siteName
 	textBody := fmt.Sprintf(
-		"你好，%s，\n\n欢迎加入 %s。\n\n前往个人资料完善信息：\n%s\n\n%s 团队",
+		"Hello %s,\n\nWelcome to %s.\n\nComplete your profile here:\n%s\n\n%s Team",
 		name, siteName, profileURL, siteName,
 	)
 
@@ -290,9 +205,9 @@ func (h *Handler) sendPasswordResetEmail(ctx context.Context, toEmail, name, new
 		"ProfileURL":   profileURL,
 	}
 
-	subject := fmt.Sprintf("【%s】密码已被重置", siteName)
+	subject := fmt.Sprintf("[%s] Password reset", siteName)
 	textBody := fmt.Sprintf(
-		"你好，%s，\n\n管理员已重置了你的账号密码，新密码：%s\n\n请登录后立即修改密码：\n%s\n\n%s 团队",
+		"Hello %s,\n\nAn administrator reset your account password.\nNew password: %s\n\nPlease sign in and change it immediately:\n%s\n\n%s Team",
 		name, newPass, profileURL, siteName,
 	)
 

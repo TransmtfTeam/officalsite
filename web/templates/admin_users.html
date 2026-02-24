@@ -4,29 +4,29 @@
 <div class="panel-wrap">
   <aside class="sidebar">
     <div class="sidebar-section">
-      <div class="sidebar-title">管理导航</div>
+      <div class="sidebar-title">Admin</div>
       {{if .CurrentUser.IsAdmin}}
-      <a class="sidebar-link" href="/admin">概览</a>
-      <a class="sidebar-link active" href="/admin/users">用户</a>
+      <a class="sidebar-link" href="/admin">Overview</a>
+      <a class="sidebar-link active" href="/admin/users">Users</a>
       {{end}}
-      <a class="sidebar-link" href="/admin/clients">应用</a>
+      <a class="sidebar-link" href="/admin/clients">Clients</a>
       {{if .CurrentUser.IsAdmin}}
-      <a class="sidebar-link" href="/admin/providers">登录方式</a>
-      <a class="sidebar-link" href="/admin/roles">角色</a>
-      <a class="sidebar-link" href="/admin/announcements">公告</a>
-      <a class="sidebar-link" href="/admin/settings">设置</a>
+      <a class="sidebar-link" href="/admin/providers">Providers</a>
+      <a class="sidebar-link" href="/admin/roles">Roles</a>
+      <a class="sidebar-link" href="/admin/announcements">Announcements</a>
+      <a class="sidebar-link" href="/admin/settings">Settings</a>
       {{end}}
     </div>
     <div class="sidebar-section">
-      <div class="sidebar-title">快速入口</div>
-      <a class="sidebar-link" href="/">返回首页</a>
-      <a class="sidebar-link" href="/profile">个人资料</a>
+      <div class="sidebar-title">Quick Links</div>
+      <a class="sidebar-link" href="/">Home</a>
+      <a class="sidebar-link" href="/profile">Profile</a>
     </div>
   </aside>
 
   <main class="panel-content">
-    <h1 class="panel-title">用户管理</h1>
-    <p class="panel-sub">创建用户并管理角色与状态。</p>
+    <h1 class="panel-title">User Management</h1>
+    <p class="panel-sub">Create users and manage account roles/status.</p>
 
     {{if .Flash}}
     <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
@@ -36,35 +36,41 @@
     {{$customRoles := index $d "CustomRoles"}}
 
     <div class="form-panel">
-      <p class="form-panel-title">新增用户</p>
+      <p class="form-panel-title">Create User</p>
       <form method="POST" action="/admin/users">
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">邮箱</label>
+            <label class="form-label">Email</label>
             <input class="form-control" type="email" name="email" required>
           </div>
           <div class="form-group">
-            <label class="form-label">显示名称</label>
+            <label class="form-label">Display Name</label>
             <input class="form-control" type="text" name="display_name" required>
           </div>
           <div class="form-group">
-            <label class="form-label">密码</label>
+            <label class="form-label">Password</label>
             <input class="form-control" type="password" name="password" minlength="8" required>
           </div>
           <div class="form-group">
-            <label class="form-label">角色</label>
+            <label class="form-label">Role</label>
             <select class="form-control" name="role">
-              <option value="user">用户 (user)</option>
-              <option value="member">成员 (member)</option>
-              <option value="admin">管理员 (admin)</option>
+              <option value="user">user</option>
+              <option value="member">member</option>
+              <option value="admin">admin</option>
               {{range $customRoles}}
               <option value="{{.Name}}">{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</option>
               {{end}}
             </select>
           </div>
         </div>
-        <button class="btn btn-primary btn-sm" type="submit">创建用户</button>
+        <div class="form-group" style="margin-bottom:.8rem">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+            <input type="checkbox" name="require_password_change" value="1">
+            <span style="font-size:.88rem">Require password change on first login</span>
+          </label>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">Create User</button>
       </form>
     </div>
 
@@ -72,32 +78,33 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>邮箱</th>
-            <th>名称</th>
-            <th>角色</th>
-            <th>状态</th>
-            <th>操作</th>
+            <th>Email</th>
+            <th>Name</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Email Verified</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {{range (index $d "Users")}}
           {{$userRole := .Role}}
           <tr>
-            <td>
-              <a href="/admin/users/{{.ID}}" style="font-weight:500">{{.Email}}</a>
-            </td>
+            <td><a href="/admin/users/{{.ID}}" style="font-weight:500">{{.Email}}</a></td>
             <td>{{.DisplayName}}</td>
             <td>
               <span class="role-badge {{if eq .Role "admin"}}role-admin{{else if eq .Role "member"}}role-member{{else}}role-user{{end}}">
                 {{.Role}}
               </span>
             </td>
-            <td>{{if .Active}}<span style="color:#16a34a">启用</span>{{else}}<span style="color:#dc2626">停用</span>{{end}}</td>
+            <td>{{if .Active}}<span style="color:#16a34a">Active</span>{{else}}<span style="color:#dc2626">Disabled</span>{{end}}</td>
+            <td>{{if .EmailVerified}}<span style="color:#16a34a;font-size:.82rem">Yes</span>{{else}}<span style="color:#dc2626;font-size:.82rem">No</span>{{end}}</td>
             <td>
-              <form method="POST" action="/admin/users/{{.ID}}/update" style="display:inline-flex;align-items:center;gap:.4rem;flex-wrap:wrap">
+              <form method="POST" action="/admin/users/{{.ID}}/update"
+                    style="display:inline-flex;align-items:center;gap:.4rem;flex-wrap:wrap"
+                    onsubmit="return confirm('Confirm updating {{.DisplayName}}. Role will be set to ' + this.role.value + '.');">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <input class="form-control" type="text" name="display_name" value="{{.DisplayName}}"
-                  style="width:130px">
+                <input class="form-control" type="text" name="display_name" value="{{.DisplayName}}" style="width:130px">
                 <select class="form-control" name="role" style="width:120px">
                   <option value="user" {{if eq $userRole "user"}}selected{{end}}>user</option>
                   <option value="member" {{if eq $userRole "member"}}selected{{end}}>member</option>
@@ -107,22 +114,21 @@
                   {{end}}
                 </select>
                 <select class="form-control" name="active" style="width:80px">
-                  <option value="1" {{if .Active}}selected{{end}}>启用</option>
-                  <option value="0" {{if not .Active}}selected{{end}}>停用</option>
+                  <option value="1" {{if .Active}}selected{{end}}>Active</option>
+                  <option value="0" {{if not .Active}}selected{{end}}>Disabled</option>
                 </select>
-                <button class="btn btn-ghost btn-sm" type="submit">保存</button>
+                <button class="btn btn-ghost btn-sm" type="submit">Save</button>
               </form>
               <form method="POST" action="/admin/users/{{.ID}}/delete" style="display:inline-block;margin-left:.3rem">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button class="btn btn-danger btn-sm" type="submit"
-                  data-confirm="确认删除该用户吗？删除后账号数据将永久清除，不可恢复。"
-                  data-confirm-title="删除用户" data-confirm-icon="🗑️">删除</button>
+                  onclick="return confirm('Delete user {{.DisplayName}}? This operation cannot be undone.');">Delete</button>
               </form>
-              <a class="btn btn-ghost btn-sm" href="/admin/users/{{.ID}}" style="margin-left:.3rem">详情</a>
+              <a class="btn btn-ghost btn-sm" href="/admin/users/{{.ID}}" style="margin-left:.3rem">Detail</a>
             </td>
           </tr>
           {{else}}
-          <tr><td colspan="5" style="color:var(--text2);text-align:center;padding:2rem">暂无用户数据</td></tr>
+          <tr><td colspan="6" style="color:var(--text2);text-align:center;padding:2rem">No users</td></tr>
           {{end}}
         </tbody>
       </table>

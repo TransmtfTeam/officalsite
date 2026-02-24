@@ -100,8 +100,8 @@ func (h *Handler) Authorize(w http.ResponseWriter, r *http.Request) {
 	// Check client access policy (base role policy OR group membership).
 	u := h.currentUser(r)
 	if !h.st.UserCanAccessClient(r.Context(), u, client.BaseAccess, client.AllowedGroups) {
-		d := h.pageData(r, "访问受限")
-		d.Flash = "您没有访问此应用的权限，请联系管理员。"
+		d := h.pageData(r, "Access Denied")
+		d.Flash = "You do not have permission to access this client. Please contact an administrator."
 		d.IsError = true
 		h.render(w, "error", d)
 		return
@@ -110,7 +110,7 @@ func (h *Handler) Authorize(w http.ResponseWriter, r *http.Request) {
 	// Build display scopes: remove "role" if "profile" is already requested.
 	displayScopes := filterRedundantScopes(reqScopes)
 
-	d := h.pageData(r, "授权确认")
+	d := h.pageData(r, "Consent")
 	d.Data = map[string]any{
 		"Client":  client,
 		"Request": ar,
@@ -213,9 +213,13 @@ func (h *Handler) AuthorizeConsent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	redir := ar.RedirectURI + "?code=" + url.QueryEscape(code)
-	if ar.State != "" {
-		redir += "&state=" + url.QueryEscape(ar.State)
+	redir, err := appendRedirectParams(ar.RedirectURI, map[string]string{
+		"code":  code,
+		"state": ar.State,
+	})
+	if err != nil {
+		oidcError(w, 400, "invalid_request", "invalid redirect_uri")
+		return
 	}
 	http.Redirect(w, r, redir, http.StatusFound)
 }
@@ -533,11 +537,32 @@ func verifyPKCE(verifier, challenge, method string) bool {
 }
 
 func (h *Handler) authRedirectError(w http.ResponseWriter, r *http.Request, redirectURI, state, code, desc string) {
-	u := redirectURI + "?error=" + url.QueryEscape(code) + "&error_description=" + url.QueryEscape(desc)
-	if state != "" {
-		u += "&state=" + url.QueryEscape(state)
+	u, err := appendRedirectParams(redirectURI, map[string]string{
+		"error":             code,
+		"error_description": desc,
+		"state":             state,
+	})
+	if err != nil {
+		oidcError(w, 400, "invalid_request", "invalid redirect_uri")
+		return
 	}
 	http.Redirect(w, r, u, http.StatusFound)
+}
+
+func appendRedirectParams(raw string, params map[string]string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", err
+	}
+	q := u.Query()
+	for k, v := range params {
+		if v == "" {
+			continue
+		}
+		q.Set(k, v)
+	}
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }
 
 func containsScope(scopes []string, target string) bool {
@@ -548,3 +573,4 @@ func containsScope(scopes []string, target string) bool {
 	}
 	return false
 }
+

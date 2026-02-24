@@ -1,5 +1,5 @@
 {{define "base"}}<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,7 +11,7 @@
 <body>
 <nav class="nav">
   <div style="display:flex;align-items:center;gap:.6rem">
-    <button class="sidebar-toggle" id="sidebar-toggle" aria-label="打开菜单" style="display:none">
+    <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Open menu" style="display:none">
       <span class="hamburger-line"></span>
       <span class="hamburger-line"></span>
       <span class="hamburger-line"></span>
@@ -21,20 +21,20 @@
   <div class="nav-links">
     {{if .CurrentUser}}
       {{if .CurrentUser.IsMember}}
-        <a href="/member/projects">项目</a>
-        <a href="/admin/clients">应用</a>
+        <a href="/member/projects">Projects</a>
+        <a href="/admin/clients">Apps</a>
       {{end}}
       {{if .CurrentUser.IsAdmin}}
-        <a href="/admin">管理</a>
+        <a href="/admin">Admin</a>
       {{end}}
       <a href="/profile">{{.CurrentUser.DisplayName}}</a>
       <form method="POST" action="/logout" class="nav-inline-form">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <button type="submit" class="nav-link-btn">退出</button>
+        <button type="submit" class="nav-link-btn">Logout</button>
       </form>
     {{else}}
-      <a href="/login">登录</a>
-      <a href="/register">注册</a>
+      <a href="/login">Login</a>
+      <a href="/register">Register</a>
     {{end}}
   </div>
 </nav>
@@ -43,12 +43,12 @@
 
 <div class="cdialog-overlay" id="cdialog-overlay">
   <div class="cdialog">
-    <div class="cdialog-icon" id="cdialog-icon">⚠️</div>
-    <div class="cdialog-title" id="cdialog-title">确认操作</div>
+    <div class="cdialog-icon" id="cdialog-icon">!</div>
+    <div class="cdialog-title" id="cdialog-title">Confirm Action</div>
     <div class="cdialog-msg" id="cdialog-msg"></div>
     <div class="cdialog-actions">
-      <button class="btn btn-ghost" id="cdialog-cancel">取消</button>
-      <button class="btn btn-danger" id="cdialog-confirm">确认</button>
+      <button class="btn btn-ghost" id="cdialog-cancel">Cancel</button>
+      <button class="btn btn-danger" id="cdialog-confirm">Confirm</button>
     </div>
   </div>
 </div>
@@ -62,11 +62,11 @@
 {{block "content" .}}{{end}}
 
 <footer>
-  <p>Copyright © {{.SiteName}} · 联系邮箱 <a href="mailto:{{.ContactEmail}}">{{.ContactEmail}}</a></p>
+  <p>Copyright (c) {{.SiteName}} | Contact <a href="mailto:{{.ContactEmail}}">{{.ContactEmail}}</a></p>
   <p style="margin-top:.4rem;font-size:.8rem">
-    <a href="/tos" style="color:#666">服务条款</a>
+    <a href="/tos" style="color:#666">Terms</a>
     <span style="color:#444;margin:0 .5rem">|</span>
-    <a href="/privacy" style="color:#666">隐私政策</a>
+    <a href="/privacy" style="color:#666">Privacy</a>
   </p>
 </footer>
 <script src="/static/js/passkey.js"></script>

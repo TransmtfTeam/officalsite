@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"transmtf.com/oidc/internal/store"
@@ -107,6 +108,14 @@ func (h *Handler) Login2FAPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.clear2FAChallengeCookie(w)
+
+	if u.RequirePasswordChange {
+		sid, _ := h.st.CreateSession(r.Context(), u.ID)
+		h.setSessionCookie(w, sid)
+		http.Redirect(w, r, "/profile/change-password", http.StatusFound)
+		return
+	}
+
 	sid, err := h.st.CreateSession(r.Context(), u.ID)
 	if err != nil {
 		h.renderError(w, r, http.StatusInternalServerError, "Session creation failed", err.Error())
@@ -131,11 +140,6 @@ func (h *Handler) Profile2FAStart(w http.ResponseWriter, r *http.Request) {
 		h.renderProfileWith2FA(w, r, "2FA is already enabled", true)
 		return
 	}
-	currentPass := r.FormValue("current_password")
-	if !h.st.VerifyPassword(u, currentPass) {
-		h.renderProfileWith2FA(w, r, "Current password is incorrect", true)
-		return
-	}
 
 	secret, err := newTOTPSecret()
 	if err != nil {
@@ -146,7 +150,7 @@ func (h *Handler) Profile2FAStart(w http.ResponseWriter, r *http.Request) {
 		h.renderProfileWith2FA(w, r, "Failed to save 2FA configuration", true)
 		return
 	}
-	h.renderProfileWith2FA(w, r, "Use your authenticator app to scan the key and enter a verification code to enable 2FA", false)
+	http.Redirect(w, r, "/profile?flash=TOTP+secret+generated.+Open+Enable+2FA+to+continue.", http.StatusFound)
 }
 
 func (h *Handler) Profile2FAEnable(w http.ResponseWriter, r *http.Request) {
@@ -178,7 +182,7 @@ func (h *Handler) Profile2FAEnable(w http.ResponseWriter, r *http.Request) {
 		h.renderProfileWith2FA(w, r, "Failed to enable 2FA", true)
 		return
 	}
-	h.renderProfileWith2FA(w, r, "2FA enabled", false)
+	http.Redirect(w, r, "/profile?flash=2FA+enabled", http.StatusFound)
 }
 
 func (h *Handler) Profile2FADisable(w http.ResponseWriter, r *http.Request) {
@@ -200,19 +204,32 @@ func (h *Handler) Profile2FADisable(w http.ResponseWriter, r *http.Request) {
 		h.renderProfileWith2FA(w, r, "2FA is not enabled", true)
 		return
 	}
-	if !h.st.VerifyPassword(u, r.FormValue("current_password")) {
-		h.renderProfileWith2FA(w, r, "Current password is incorrect", true)
-		return
+
+	passwordOK := false
+	totpOK := false
+	currentPass := strings.TrimSpace(r.FormValue("current_password"))
+	totpCode := strings.TrimSpace(r.FormValue("totp_code"))
+
+	if store.HasPassword(u) && currentPass != "" {
+		passwordOK = h.st.VerifyPassword(u, currentPass)
 	}
-	if !verifyTOTP(u.TOTPSecret, r.FormValue("totp_code"), time.Now()) {
-		h.renderProfileWith2FA(w, r, "Invalid verification code", true)
+	if totpCode != "" {
+		totpOK = verifyTOTP(u.TOTPSecret, totpCode, time.Now())
+	}
+
+	if !(passwordOK || totpOK) {
+		if store.HasPassword(u) {
+			h.renderProfileWith2FA(w, r, "Provide a valid current password or TOTP code", true)
+		} else {
+			h.renderProfileWith2FA(w, r, "Valid TOTP code is required", true)
+		}
 		return
 	}
 	if err := h.st.DisableTOTP(r.Context(), u.ID); err != nil {
 		h.renderProfileWith2FA(w, r, "Failed to disable 2FA", true)
 		return
 	}
-	h.renderProfileWith2FA(w, r, "2FA disabled", false)
+	http.Redirect(w, r, "/profile?flash=2FA+disabled", http.StatusFound)
 }
 
 func (h *Handler) renderProfileWith2FA(w http.ResponseWriter, r *http.Request, flash string, isErr bool) {
@@ -227,7 +244,11 @@ func (h *Handler) renderProfileWith2FA(w http.ResponseWriter, r *http.Request, f
 	d.IsError = isErr
 
 	ctx := r.Context()
-	data := map[string]any{"Passkeys": nil}
+	data := map[string]any{
+		"Passkeys":     nil,
+		"HasPassword":  store.HasPassword(u),
+		"PasskeyCount": h.st.CountPasskeysByUserID(ctx, u.ID),
+	}
 	passkeys, _ := h.st.GetPasskeyCredentialsByUserID(ctx, u.ID)
 	data["Passkeys"] = passkeys
 	if u.TOTPPendingSecret != "" {

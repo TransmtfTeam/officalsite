@@ -6,7 +6,7 @@
     <div class="auth-logo">
       <div class="auth-logo-text">Team TransMTF</div>
     </div>
-    <h2 class="auth-title">两步验证</h2>
+    <h2 class="auth-title">Two-Factor Verification</h2>
 
     {{if .Flash}}
     <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
@@ -14,7 +14,7 @@
 
     {{with .Data}}
     <p style="font-size:.9rem;color:var(--text2);margin-bottom:1rem;text-align:center">
-      账号：<strong>{{index . "Email"}}</strong>
+      Account: <strong>{{index . "Email"}}</strong>
     </p>
 
     {{$hasTOTP := index . "HasTOTP"}}
@@ -23,7 +23,7 @@
     {{if and $hasTOTP $hasPasskey}}
     <div class="tab-group">
       <div class="tab-bar">
-        <button class="tab-btn active" data-tab="tab-totp" type="button">认证器</button>
+        <button class="tab-btn active" data-tab="tab-totp" type="button">Authenticator Code</button>
         <button class="tab-btn" data-tab="tab-passkey" type="button">Passkey</button>
       </div>
 
@@ -31,21 +31,21 @@
         <form method="POST" action="/login/2fa">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           <div class="form-group">
-            <label class="form-label">认证器验证码</label>
+            <label class="form-label">Authenticator Code</label>
             <input class="form-control" type="text" name="totp_code" inputmode="numeric"
               autocomplete="one-time-code" placeholder="123456" required autofocus>
           </div>
-          <button class="btn btn-primary" style="width:100%;justify-content:center" type="submit">验证并登录</button>
+          <button class="btn btn-primary" style="width:100%;justify-content:center" type="submit">Verify and Sign In</button>
         </form>
       </div>
 
       <div id="tab-passkey" class="tab-panel">
         <p style="font-size:.88rem;color:var(--text2);margin-bottom:1rem;text-align:center">
-          使用已注册的 Passkey（指纹/面容/安全密钥）验证身份。
+          Verify with a registered passkey (Face ID / Touch ID / hardware key).
         </p>
         <div id="passkey-login-msg"></div>
         <button id="passkey-login-btn" class="btn btn-primary" style="width:100%;justify-content:center" type="button">
-          使用 Passkey 验证
+          Use Passkey
         </button>
       </div>
     </div>
@@ -54,25 +54,25 @@
     <form method="POST" action="/login/2fa">
       <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
       <div class="form-group">
-        <label class="form-label">认证器验证码</label>
+        <label class="form-label">Authenticator Code</label>
         <input class="form-control" type="text" name="totp_code" inputmode="numeric"
           autocomplete="one-time-code" placeholder="123456" required autofocus>
       </div>
-      <button class="btn btn-primary" style="width:100%;justify-content:center" type="submit">验证并登录</button>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" type="submit">Verify and Sign In</button>
     </form>
 
     {{else if $hasPasskey}}
     <p style="font-size:.88rem;color:var(--text2);margin-bottom:1rem;text-align:center">
-      使用已注册的 Passkey（指纹/面容/安全密钥）验证身份。
+      Verify with a registered passkey (Face ID / Touch ID / hardware key).
     </p>
     <div id="passkey-login-msg"></div>
     <button id="passkey-login-btn" class="btn btn-primary" style="width:100%;justify-content:center" type="button">
-      使用 Passkey 验证
+      Use Passkey
     </button>
     {{end}}
     {{end}}
 
-    <p class="auth-footer-link"><a href="/login">返回登录页</a></p>
+    <p class="auth-footer-link"><a href="/login">Back to login</a></p>
   </div>
 </div>
 {{end}}

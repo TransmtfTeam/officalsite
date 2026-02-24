@@ -202,8 +202,10 @@ func (h *Handler) isSystemAdminUser(u *store.User) bool {
 
 func (h *Handler) sessionMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		csrfTok := h.ensureCSRFCookie(w, r)
-		r = r.WithContext(context.WithValue(r.Context(), ctxCSRF, csrfTok))
+		if shouldEnsureCSRFCookie(r) {
+			csrfTok := h.ensureCSRFCookie(w, r)
+			r = r.WithContext(context.WithValue(r.Context(), ctxCSRF, csrfTok))
+		}
 		sid := h.sessionFromRequest(r)
 		if sid != "" {
 			if u, err := h.st.GetSessionUser(r.Context(), sid); err == nil {
@@ -216,8 +218,13 @@ func (h *Handler) sessionMiddleware(next http.Handler) http.Handler {
 
 func (h *Handler) requireLogin(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if h.currentUser(r) == nil {
+		u := h.currentUser(r)
+		if u == nil {
 			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
+			return
+		}
+		if mustChangePasswordNow(u, r.URL.Path) {
+			http.Redirect(w, r, "/profile/change-password", http.StatusFound)
 			return
 		}
 		next(w, r)
@@ -229,6 +236,10 @@ func (h *Handler) requireMember(next http.HandlerFunc) http.HandlerFunc {
 		u := h.currentUser(r)
 		if u == nil {
 			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
+			return
+		}
+		if mustChangePasswordNow(u, r.URL.Path) {
+			http.Redirect(w, r, "/profile/change-password", http.StatusFound)
 			return
 		}
 		if !u.IsMember() {
@@ -244,6 +255,10 @@ func (h *Handler) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 		u := h.currentUser(r)
 		if u == nil {
 			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
+			return
+		}
+		if mustChangePasswordNow(u, r.URL.Path) {
+			http.Redirect(w, r, "/profile/change-password", http.StatusFound)
 			return
 		}
 		if !u.IsAdmin() {
@@ -265,12 +280,28 @@ func (h *Handler) requirePermission(perm string) func(http.HandlerFunc) http.Han
 				http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 				return
 			}
+			if mustChangePasswordNow(u, r.URL.Path) {
+				http.Redirect(w, r, "/profile/change-password", http.StatusFound)
+				return
+			}
 			if !h.userHasPermission(r.Context(), u, perm) {
 				h.renderError(w, r, http.StatusForbidden, "Forbidden", "insufficient permissions")
 				return
 			}
 			next(w, r)
 		}
+	}
+}
+
+func mustChangePasswordNow(u *store.User, path string) bool {
+	if u == nil || !u.RequirePasswordChange {
+		return false
+	}
+	switch path {
+	case "/profile/change-password", "/logout", "/profile/passkey/register/begin", "/profile/passkey/register/finish":
+		return false
+	default:
+		return true
 	}
 }
 
@@ -399,6 +430,9 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 
 	// Public pages
 	mux.HandleFunc("GET /",          h.Home)
+	mux.HandleFunc("GET /favicon.png", h.SiteFaviconFile)
+	mux.HandleFunc("GET /favicon.jpg", h.SiteFaviconFile)
+	mux.HandleFunc("GET /favicon.ico", h.AdminSiteIcon)
 	mux.HandleFunc("GET /login",     h.LoginPage)
 	mux.HandleFunc("POST /login",    h.LoginPost)
 	mux.HandleFunc("GET /login/2fa", h.Login2FAPage)
@@ -434,6 +468,9 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	// Authenticated user
 	mux.HandleFunc("GET /profile",  h.requireLogin(h.Profile))
 	mux.HandleFunc("POST /profile", h.requireLogin(h.ProfilePost))
+	mux.HandleFunc("GET /profile/change-password",  h.requireLogin(h.ProfileForceChangePage))
+	mux.HandleFunc("POST /profile/change-password", h.requireLogin(h.ProfileForceChangePost))
+	mux.HandleFunc("POST /profile/delete-password", h.requireLogin(h.ProfileDeletePassword))
 	mux.HandleFunc("POST /profile/2fa/start",  h.requireLogin(h.Profile2FAStart))
 	mux.HandleFunc("POST /profile/2fa/enable", h.requireLogin(h.Profile2FAEnable))
 	mux.HandleFunc("POST /profile/2fa/disable", h.requireLogin(h.Profile2FADisable))
@@ -446,6 +483,9 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	// Passkey login (2FA step) - under /login/2fa/ so the 2FA challenge cookie (path=/login/2fa) is included
 	mux.HandleFunc("GET /login/2fa/passkey/begin",  h.PasskeyLoginBegin)
 	mux.HandleFunc("POST /login/2fa/passkey/finish", h.PasskeyLoginFinish)
+	// Passkey primary login (no auth required, unauthenticated)
+	mux.HandleFunc("GET /login/passkey/begin",  h.PasskeyPrimaryLoginBegin)
+	mux.HandleFunc("POST /login/passkey/finish", h.PasskeyPrimaryLoginFinish)
 
 	// Member panel
 	mux.HandleFunc("GET /member/projects",              h.requirePermission("manage_projects")(h.MemberProjects))
@@ -468,6 +508,8 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	mux.HandleFunc("GET /admin/users/{id}",                              h.requirePermission("manage_users")(h.AdminUserDetail))
 	mux.HandleFunc("POST /admin/users/{id}/reset-password",              h.requirePermission("manage_users")(h.AdminUserResetPassword))
 	mux.HandleFunc("POST /admin/users/{id}/disable-2fa",                 h.requirePermission("manage_users")(h.AdminUserDisable2FA))
+	mux.HandleFunc("POST /admin/users/{id}/verify-email",                h.requirePermission("manage_users")(h.AdminVerifyEmail))
+	mux.HandleFunc("POST /admin/users/{id}/unverify-email",              h.requirePermission("manage_users")(h.AdminUnverifyEmail))
 	mux.HandleFunc("POST /admin/users/{id}/sessions/{sid}/revoke",       h.requirePermission("manage_users")(h.AdminUserRevokeSession))
 	mux.HandleFunc("POST /admin/users/{id}/tokens/{tid}/revoke",         h.requirePermission("manage_users")(h.AdminUserRevokeToken))
 	mux.HandleFunc("POST /admin/users/{id}/passkeys/{pkid}/delete",      h.requirePermission("manage_users")(h.AdminDeletePasskey))
@@ -475,8 +517,10 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	// Admin panel - client management (manage_clients permission)
 	mux.HandleFunc("GET /admin/clients",                   h.requirePermission("manage_clients")(h.AdminClients))
 	mux.HandleFunc("GET /admin/clients/new",               h.requirePermission("manage_clients")(h.AdminClientCreatePage))
+	mux.HandleFunc("GET /admin/clients/created-result",    h.requirePermission("manage_clients")(h.AdminClientCreatedResult))
 	mux.HandleFunc("POST /admin/clients",                  h.requirePermission("manage_clients")(h.AdminClientCreate))
 	mux.HandleFunc("GET /admin/clients/{id}",              h.requirePermission("manage_clients")(h.AdminClientDetail))
+	mux.HandleFunc("GET /admin/clients/{id}/secret",       h.requirePermission("manage_clients")(h.AdminClientSecretResult))
 	mux.HandleFunc("POST /admin/clients/{id}/update",      h.requirePermission("manage_clients")(h.AdminClientUpdate))
 	mux.HandleFunc("POST /admin/clients/{id}/reset-secret", h.requirePermission("manage_clients")(h.AdminClientResetSecret))
 	mux.HandleFunc("POST /admin/clients/{id}/delete",      h.requirePermission("manage_clients")(h.AdminClientDelete))
@@ -484,6 +528,8 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	// Admin panel - providers / roles / announcements / settings
 	mux.HandleFunc("GET /admin/providers",                          h.requirePermission("manage_providers")(h.AdminProviders))
 	mux.HandleFunc("POST /admin/providers",                         h.requirePermission("manage_providers")(h.AdminProviderCreate))
+	mux.HandleFunc("GET /admin/providers/{id}/edit",                h.requirePermission("manage_providers")(h.AdminProviderEditPage))
+	mux.HandleFunc("POST /admin/providers/{id}/edit",               h.requirePermission("manage_providers")(h.AdminProviderEdit))
 	mux.HandleFunc("POST /admin/providers/{id}/toggle",             h.requirePermission("manage_providers")(h.AdminProviderToggle))
 	mux.HandleFunc("POST /admin/providers/{id}/delete",             h.requirePermission("manage_providers")(h.AdminProviderDelete))
 	mux.HandleFunc("GET /admin/roles",                              h.requirePermission("manage_roles")(h.AdminRoles))
@@ -561,6 +607,18 @@ func isValidCSRFToken(s string) bool {
 	}
 	_, err := hex.DecodeString(s)
 	return err == nil
+}
+
+// Only issue/refresh CSRF cookies for top-level HTML document GET requests.
+// This avoids concurrent subresource responses racing to overwrite the CSRF cookie.
+func shouldEnsureCSRFCookie(r *http.Request) bool {
+	if r.Method != http.MethodGet {
+		return false
+	}
+	if strings.HasPrefix(r.URL.Path, "/static/") {
+		return false
+	}
+	return strings.Contains(r.Header.Get("Accept"), "text/html")
 }
 
 func safeNextPath(next, fallback string) string {
@@ -666,7 +724,7 @@ func (h *Handler) PWAManifest(w http.ResponseWriter, r *http.Request) {
 		mime := "image/png"
 		lower := strings.ToLower(iconURL)
 		if strings.HasPrefix(lower, "data:") {
-			// data:image/png;base64,... → extract the MIME type.
+			// data:image/png;base64,... -> extract the MIME type.
 			rest := strings.TrimPrefix(lower, "data:")
 			if semi := strings.IndexByte(rest, ';'); semi > 0 {
 				mime = rest[:semi]
@@ -685,3 +743,4 @@ func (h *Handler) PWAManifest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	json.NewEncoder(w).Encode(m)
 }
+

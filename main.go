@@ -98,9 +98,10 @@ func parseTemplates() (map[string]*template.Template, error) {
 	names := []string{
 		"home", "login", "login_2fa", "register", "consent", "profile", "error",
 		"tos", "privacy", "verify_email", "forgot_password", "reset_password",
+		"force_change_password",
 		"admin_dashboard", "admin_users", "admin_user_detail",
 		"admin_clients", "admin_client_create", "admin_client_created", "admin_client_detail", "admin_client_secret",
-		"admin_providers", "admin_roles", "admin_announcements", "admin_settings",
+		"admin_providers", "admin_provider_detail", "admin_roles", "admin_announcements", "admin_settings",
 		"admin_groups", "admin_group_detail",
 		"member_projects", "member_project_edit",
 		"member_links", "member_link_edit",

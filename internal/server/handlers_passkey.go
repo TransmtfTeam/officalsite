@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strings"
+	"time"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -170,6 +172,12 @@ func (h *Handler) PasskeyRegisterFinish(w http.ResponseWriter, r *http.Request) 
 		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "failed to save credential"})
 		return
 	}
+	if u.RequirePasswordChange {
+		if err := h.st.SetRequirePasswordChange(ctx, u.ID, false); err != nil {
+			jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "failed to update account security state"})
+			return
+		}
+	}
 
 	jsonResp(w, http.StatusOK, map[string]string{"ok": "true"})
 }
@@ -206,6 +214,45 @@ func (h *Handler) PasskeyDeleteCredential(w http.ResponseWriter, r *http.Request
         http.Redirect(w, r, "/profile?flash=Passkey+not+found", http.StatusFound)
 		return
 	}
+	hasPassword := store.HasPassword(u)
+	hasTOTP := u.TOTPEnabled && u.TOTPSecret != ""
+	passkeyCount := len(creds)
+
+	// Passwordless accounts must keep at least one passkey.
+	if !hasPassword && passkeyCount <= 1 {
+		http.Redirect(w, r, "/profile?flash=Cannot+delete+the+last+passkey+for+a+passwordless+account", http.StatusFound)
+		return
+	}
+
+	currentPass := strings.TrimSpace(r.FormValue("current_password"))
+	totpCode := strings.TrimSpace(r.FormValue("totp_code"))
+	passwordOK := false
+	totpOK := false
+
+	if hasPassword && currentPass != "" {
+		passwordOK = h.st.VerifyPassword(u, currentPass)
+	}
+	if hasTOTP && totpCode != "" {
+		totpOK = verifyTOTP(u.TOTPSecret, totpCode, time.Now())
+	}
+
+	if hasPassword {
+		if !(passwordOK || totpOK) {
+			http.Redirect(w, r, "/profile?flash=Please+provide+a+valid+password+or+TOTP+code", http.StatusFound)
+			return
+		}
+	} else {
+		// No password: require an alternate verification method (TOTP) before deletion.
+		if !hasTOTP {
+			http.Redirect(w, r, "/profile?flash=Enable+TOTP+or+set+a+password+before+deleting+passkeys", http.StatusFound)
+			return
+		}
+		if !totpOK {
+			http.Redirect(w, r, "/profile?flash=Valid+TOTP+code+is+required", http.StatusFound)
+			return
+		}
+	}
+
 	if err := h.st.DeletePasskeyCredential(ctx, id); err != nil {
         http.Redirect(w, r, "/profile?flash=Delete+failed", http.StatusFound)
 		return
@@ -344,6 +391,13 @@ func (h *Handler) PasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 	}
 	h.clear2FAChallengeCookie(w)
 
+	if u.RequirePasswordChange {
+		sid, _ := h.st.CreateSession(ctx, u.ID)
+		h.setSessionCookie(w, sid)
+		jsonResp(w, http.StatusOK, map[string]string{"redirect": "/profile/change-password"})
+		return
+	}
+
 	sid, err := h.st.CreateSession(ctx, u.ID)
 	if err != nil {
 		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "failed to create session"})
@@ -395,4 +449,123 @@ func (h *Handler) AdminDeletePasskey(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	http.Redirect(w, r, "/admin/users/"+userID, http.StatusFound)
+}
+
+// PasskeyPrimaryLoginBegin starts a discoverable passkey login (no 2FA challenge required).
+// GET /login/passkey/begin
+func (h *Handler) PasskeyPrimaryLoginBegin(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	wa, err := h.newWebAuthn(ctx)
+	if err != nil {
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "webauthn init failed"})
+		return
+	}
+
+	options, session, err := wa.BeginDiscoverableLogin()
+	if err != nil {
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	sessionData, err := json.Marshal(session)
+	if err != nil {
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "session marshal failed"})
+		return
+	}
+
+	sessID := "pkprimary_" + uuid.New().String()
+	if err := h.st.CreateWebAuthnSession(ctx, sessID, string(sessionData)); err != nil {
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "session store failed"})
+		return
+	}
+
+	w.Header().Set("X-WebAuthn-Session", sessID)
+	jsonResp(w, http.StatusOK, options)
+}
+
+// PasskeyPrimaryLoginFinish completes a discoverable passkey login.
+// POST /login/passkey/finish
+func (h *Handler) PasskeyPrimaryLoginFinish(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	sessID := r.Header.Get("X-WebAuthn-Session")
+	if sessID == "" {
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "missing session ID"})
+		return
+	}
+
+	sessionData, err := h.st.GetWebAuthnSession(ctx, sessID)
+	if err != nil {
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "invalid or expired session"})
+		return
+	}
+	defer h.st.DeleteWebAuthnSession(ctx, sessID)
+
+	var session webauthn.SessionData
+	if err := json.Unmarshal([]byte(sessionData), &session); err != nil {
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "session unmarshal failed"})
+		return
+	}
+
+	wa, err := h.newWebAuthn(ctx)
+	if err != nil {
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "webauthn init failed"})
+		return
+	}
+
+	var resolvedUser *store.User
+	var resolvedWAU *webAuthnUser
+
+	handler := func(rawID, userHandle []byte) (webauthn.User, error) {
+		credID := base64.RawURLEncoding.EncodeToString(rawID)
+		pkCred, err := h.st.GetPasskeyCredentialByCredentialID(ctx, credID)
+		if err != nil {
+			return nil, err
+		}
+		u, err := h.st.GetUserByID(ctx, pkCred.UserID)
+		if err != nil {
+			return nil, err
+		}
+		resolvedUser = u
+		wau, err := h.buildWebAuthnUser(ctx, u)
+		if err != nil {
+			return nil, err
+		}
+		resolvedWAU = wau
+		return wau, nil
+	}
+
+	credential, err := wa.FinishDiscoverableLogin(handler, session, r)
+	if err != nil {
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "passkey verification failed: " + err.Error()})
+		return
+	}
+
+	if resolvedUser == nil || !resolvedUser.Active {
+		jsonResp(w, http.StatusForbidden, map[string]string{"error": "account not found or disabled"})
+		return
+	}
+	_ = resolvedWAU
+
+	// Update sign count in DB.
+	if credential != nil {
+		if updatedCred, merr := json.Marshal(credential); merr == nil {
+			credID := base64.RawURLEncoding.EncodeToString(credential.ID)
+			_ = h.st.UpdatePasskeyCredential(ctx, credID, string(updatedCred))
+		}
+	}
+
+	if resolvedUser.RequirePasswordChange {
+		sid, _ := h.st.CreateSession(ctx, resolvedUser.ID)
+		h.setSessionCookie(w, sid)
+		jsonResp(w, http.StatusOK, map[string]string{"redirect": "/profile/change-password"})
+		return
+	}
+
+	sid, err := h.st.CreateSession(ctx, resolvedUser.ID)
+	if err != nil {
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "failed to create session"})
+		return
+	}
+	h.setSessionCookie(w, sid)
+	jsonResp(w, http.StatusOK, map[string]string{"redirect": "/profile"})
 }

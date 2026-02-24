@@ -922,3 +922,138 @@ footer {
   flex: 1;
   justify-content: center;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE ADMIN PANEL RESPONSIVE IMPROVEMENTS
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* ── Panel layout: stack sidebar above content ── */
+  .panel-wrap {
+    flex-direction: column;
+    padding-top: 60px;
+  }
+
+  /* ── Panel content: full width, smaller padding ── */
+  .panel-content {
+    max-width: 100%;
+    padding: 1rem;
+  }
+
+  /* ── Scrollable tables without layout break ── */
+  .data-table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 10px;
+  }
+
+  /* ── Card inner padding tighter ── */
+  .card { padding: 1rem; }
+  .form-panel { padding: 1rem; }
+
+  /* ── Form rows: always single column on mobile ── */
+  .form-row {
+    grid-template-columns: 1fr !important;
+    gap: .75rem;
+  }
+
+  /* ── Detail section rows: stack key + val ── */
+  .detail-row {
+    flex-direction: column;
+    gap: .2rem;
+    padding: .6rem 0;
+  }
+  .detail-key {
+    min-width: unset;
+    font-weight: 600;
+    color: var(--text2);
+    font-size: .82rem;
+  }
+  .detail-val { font-size: .9rem; }
+
+  /* ── Reset-password form: stack vertically ── */
+  .detail-section form[style*="display:flex"][style*="align-items:flex-end"],
+  .detail-section form[style*="display: flex"][style*="align-items: flex-end"] {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* ── User update inline forms: wrap properly ── */
+  form[action*="/update"] {
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+  form[action*="/update"] .form-control {
+    width: 100% !important;
+    min-width: 0;
+  }
+  form[action*="/update"] select.form-control {
+    width: 100% !important;
+  }
+
+  /* ── Passkey items: wrap on small screens ── */
+  .passkey-item {
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+  .passkey-info { flex: 1; min-width: 120px; }
+
+  /* ── Buttons: full-width in certain contexts ── */
+  .detail-section .btn,
+  .form-panel .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* ── Panel title smaller ── */
+  .panel-title { font-size: 1.3rem; }
+
+  /* ── Table cells: prevent overflow ── */
+  .data-table td,
+  .data-table th {
+    white-space: nowrap;
+    padding: .5rem .6rem;
+    font-size: .82rem;
+  }
+
+  /* ── Shrink action column buttons ── */
+  .data-table td .btn { padding: .3rem .6rem; font-size: .78rem; }
+
+  /* ── Admin user update form in table: stack ── */
+  .data-table td form[style*="inline-flex"] {
+    flex-direction: column;
+    align-items: stretch;
+    display: flex;
+    gap: .3rem;
+  }
+
+  /* ── Group tag chips: smaller gap ── */
+  div[style*="flex-wrap:wrap"] { gap: .3rem; }
+
+  /* ── Client detail / settings: full-width inputs ── */
+  .form-group { margin-bottom: .8rem; }
+  .form-control { font-size: .9rem; }
+
+  /* ── Flash messages: full width ── */
+  .flash { font-size: .88rem; padding: .65rem .9rem; }
+
+  /* ── Reduce panel sub-heading margin ── */
+  .panel-sub { margin-bottom: .8rem; }
+
+  /* ── Sidebar toggle button is shown (already handled, but ensure visible) ── */
+  .sidebar-toggle { display: flex !important; }
+}
+
+/* Extra-small screens */
+@media (max-width: 480px) {
+  .panel-content { padding: .75rem; }
+  .card { padding: .8rem; }
+  .panel-title { font-size: 1.1rem; }
+  .modal-box { padding: 1.2rem; }
+  .btn { padding: .45rem .9rem; font-size: .85rem; }
+  .btn-sm { padding: .3rem .65rem; font-size: .78rem; }
+  /* Make form-row in admin_users create form single column */
+  .form-panel .form-row { display: flex !important; flex-direction: column; }
+}

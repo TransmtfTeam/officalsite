@@ -238,6 +238,26 @@ func canonicalIssuerURL(raw string) (string, error) {
 	return strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host) + u.Path, nil
 }
 
+func (h *Handler) providerCallbackURL(r *http.Request, slug string) string {
+	base := strings.TrimRight(strings.TrimSpace(h.cfg.Issuer), "/")
+	if host := strings.TrimSpace(r.Host); host != "" {
+		scheme := "https"
+		if fp := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]); fp != "" {
+			scheme = fp
+		} else if r.TLS == nil {
+			scheme = "http"
+		}
+		if fh := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0]); fh != "" {
+			host = fh
+		}
+		base = scheme + "://" + host
+	}
+	if !isAllowedAbsoluteURL(base) {
+		base = strings.TrimRight(strings.TrimSpace(h.cfg.Issuer), "/")
+	}
+	return base + "/auth/oidc/" + slug + "/callback"
+}
+
 // GET /auth/oidc/{slug}
 func (h *Handler) OIDCProviderLogin(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
@@ -277,7 +297,7 @@ func (h *Handler) OIDCProviderLogin(w http.ResponseWriter, r *http.Request) {
 	params := url.Values{}
 	params.Set("response_type", "code")
 	params.Set("client_id", provider.ClientID)
-	params.Set("redirect_uri", h.cfg.Issuer+"/auth/oidc/"+slug+"/callback")
+	params.Set("redirect_uri", h.providerCallbackURL(r, slug))
 	params.Set("scope", strings.Join(scopes, " "))
 	params.Set("state", state)
 	params.Set("nonce", nonce)
@@ -325,7 +345,7 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tok, err := rpExchangeCode(doc.TokenEndpoint, provider, code, h.cfg.Issuer+"/auth/oidc/"+slug+"/callback", st.Verifier)
+	tok, err := rpExchangeCode(doc.TokenEndpoint, provider, code, h.providerCallbackURL(r, slug), st.Verifier)
 	if err != nil {
 		h.renderError(w, r, http.StatusBadGateway, "Token exchange failed", err.Error())
 		return
@@ -393,15 +413,27 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u, err := h.st.GetUserByIdentity(ctx, slug, subject)
 	if err != nil {
-		// Only verified email can link to an existing local account.
-		if emailVerified && email != "" {
+		if !isErrNoRows(err) {
+			h.renderError(w, r, http.StatusInternalServerError, "Identity lookup failed", err.Error())
+			return
+		}
+		// Auto-link by email when local account exists.
+		if email != "" {
 			existing, emailErr := h.st.GetUserByEmail(ctx, email)
 			if emailErr == nil {
 				u = existing
+			} else if !isErrNoRows(emailErr) {
+				h.renderError(w, r, http.StatusInternalServerError, "User lookup failed", emailErr.Error())
+				return
 			}
 		}
 
 		if u == nil {
+			if !provider.AutoRegister {
+				h.renderError(w, r, http.StatusForbidden, "Registration disabled",
+					"This login provider does not allow auto-registration. Please contact an administrator.")
+				return
+			}
 			if name == "" {
 				if email != "" {
 					name = email
@@ -413,11 +445,21 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 			if createEmail == "" || !emailVerified {
 				createEmail = syntheticOIDCEmail(slug, subject)
 			}
-			u, err = h.st.CreateUser(ctx, createEmail, store.RandomHex(32), name, "user")
+			isVerifiedEmail := emailVerified && email != "" && strings.EqualFold(createEmail, email)
+			u, err = h.st.CreateUserWithEmailVerified(ctx, createEmail, store.RandomHex(32), name, "user", isVerifiedEmail)
 			if err != nil {
 				h.renderError(w, r, http.StatusInternalServerError, "Failed to create user", err.Error())
 				return
 			}
+			// New OAuth users must choose their own local recovery method:
+			// set a password or keep passkey-only mode.
+			if err := h.st.ClearPassword(ctx, u.ID); err != nil {
+				h.renderError(w, r, http.StatusInternalServerError, "Failed to initialize account security", err.Error())
+				return
+			}
+			u.PassHash = ""
+			_ = h.st.SetRequirePasswordChange(ctx, u.ID, true)
+			u.RequirePasswordChange = true
 			if avatar != "" {
 				_ = h.st.UpdateUserAvatar(ctx, u.ID, avatar)
 			}
@@ -442,6 +484,13 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 		u.AvatarURL = avatar
 	}
 	if h.startSecondFactor(w, r, u, st.Redirect) {
+		return
+	}
+
+	if u.RequirePasswordChange {
+		sid, _ := h.st.CreateSession(ctx, u.ID)
+		h.setSessionCookie(w, sid)
+		http.Redirect(w, r, "/profile/change-password", http.StatusFound)
 		return
 	}
 
@@ -606,3 +655,4 @@ func syntheticOIDCEmail(provider, subject string) string {
 	sum := sha256.Sum256([]byte(provider + ":" + subject))
 	return "oidc_" + base64.RawURLEncoding.EncodeToString(sum[:10]) + "@oidc.local"
 }
+
