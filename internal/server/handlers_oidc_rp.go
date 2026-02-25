@@ -333,7 +333,12 @@ func (h *Handler) startProviderAuthFlow(w http.ResponseWriter, r *http.Request, 
 		params.Set("nonce", nonce)
 	}
 
-	http.Redirect(w, r, doc.AuthorizationEndpoint+"?"+params.Encode(), http.StatusFound)
+	statusCode := http.StatusFound
+	if r.Method == http.MethodPost {
+		// POST 发起的绑定流程使用 303，确保浏览器按导航跳转到授权页。
+		statusCode = http.StatusSeeOther
+	}
+	http.Redirect(w, r, doc.AuthorizationEndpoint+"?"+params.Encode(), statusCode)
 	return true
 }
 
@@ -369,7 +374,7 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusBadRequest, "Login failed", "Missing state parameter.")
 		return
 	}
-	st, err := h.st.ConsumeOIDCState(r.Context(), stateVal)
+	st, err := h.st.GetOIDCState(r.Context(), stateVal)
 	if err != nil || st.Provider != slug {
 		h.renderError(w, r, http.StatusBadRequest, "Invalid login state", "Please start login again.")
 		return
@@ -486,6 +491,10 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 
 	if subject == "" {
 		h.renderError(w, r, http.StatusBadGateway, "User identity missing", "Provider response did not include a stable subject identifier.")
+		return
+	}
+	if err := h.st.DeleteOIDCState(r.Context(), stateVal); err != nil {
+		h.renderError(w, r, http.StatusInternalServerError, "Login state cleanup failed", "Please start login again.")
 		return
 	}
 

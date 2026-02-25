@@ -434,15 +434,6 @@ func (h *Handler) ProfileIdentityBind(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
-	if !store.HasPassword(u) {
-		http.Redirect(w, r, "/profile?flash="+url.QueryEscape("请先设置密码，再绑定登录方式"), http.StatusFound)
-		return
-	}
-	pass := r.FormValue("current_password")
-	if !h.st.VerifyPassword(u, pass) {
-		http.Redirect(w, r, "/profile?flash="+url.QueryEscape("当前密码不正确"), http.StatusFound)
-		return
-	}
 
 	slug := r.PathValue("slug")
 	ctx := r.Context()
@@ -475,15 +466,6 @@ func (h *Handler) ProfileIdentityUnbind(w http.ResponseWriter, r *http.Request) 
 	u := h.currentUser(r)
 	if u == nil {
 		http.Redirect(w, r, "/login", http.StatusFound)
-		return
-	}
-	if !store.HasPassword(u) {
-		http.Redirect(w, r, "/profile?flash="+url.QueryEscape("请先设置密码，再解绑登录方式"), http.StatusFound)
-		return
-	}
-	pass := r.FormValue("current_password")
-	if !h.st.VerifyPassword(u, pass) {
-		http.Redirect(w, r, "/profile?flash="+url.QueryEscape("当前密码不正确"), http.StatusFound)
 		return
 	}
 

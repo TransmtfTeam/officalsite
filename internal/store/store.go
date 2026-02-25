@@ -825,6 +825,26 @@ func (s *Store) CreateOIDCState(ctx context.Context, state, provider, userID, no
 	return err
 }
 
+func (s *Store) GetOIDCState(ctx context.Context, state string) (*OIDCState, error) {
+	st := &OIDCState{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT state,provider,user_id,nonce,verifier,redirect,expires_at FROM oidc_states WHERE state=$1`,
+		state).Scan(&st.State, &st.Provider, &st.UserID, &st.Nonce, &st.Verifier, &st.Redirect, &st.ExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+	if time.Now().After(st.ExpiresAt) {
+		_, _ = s.db.ExecContext(ctx, `DELETE FROM oidc_states WHERE state=$1`, state)
+		return nil, sql.ErrNoRows
+	}
+	return st, nil
+}
+
+func (s *Store) DeleteOIDCState(ctx context.Context, state string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM oidc_states WHERE state=$1`, state)
+	return err
+}
+
 func (s *Store) ConsumeOIDCState(ctx context.Context, state string) (*OIDCState, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

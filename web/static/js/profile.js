@@ -77,6 +77,7 @@ document.addEventListener('DOMContentLoaded', function () {
         title: el.getAttribute('data-confirm-title') || '确认操作',
         msg: el.getAttribute('data-confirm') || '',
         confirmLabel: el.getAttribute('data-confirm-btn') || '确认',
+        danger: el.getAttribute('data-confirm-danger') === '0' ? false : true,
         on确认: function () {
           var form = el.form || el.closest('form');
           if (form) {
@@ -90,7 +91,11 @@ document.addEventListener('DOMContentLoaded', function () {
               inp.setAttribute('data-cdialog', '1');
               form.appendChild(inp);
             }
-            form.submit();
+            if (typeof form.requestSubmit === 'function') {
+              form.requestSubmit();
+            } else {
+              form.submit();
+            }
           } else if (el.tagName === 'A' && el.href) {
             window.location.href = el.href;
           }

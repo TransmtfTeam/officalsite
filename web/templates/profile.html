@@ -24,7 +24,7 @@
   <div class="card" style="margin-bottom:1.5rem">
     <p class="form-panel-title">外部登录方式</p>
     <p style="font-size:.88rem;color:var(--text2);margin-bottom:1rem">
-      绑定后可使用外部账号登录。绑定和解绑都需要输入当前密码。
+      绑定后可使用外部账号登录。点击绑定会跳转到对应平台授权页；解绑无需密码。
     </p>
     {{with $.Data}}
     {{$items := index . "ExternalProviders"}}
@@ -56,14 +56,25 @@
       {{if .Bound}}
       <form method="POST" action="/profile/identities/{{.Slug}}/unbind" style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;justify-content:flex-end">
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-        <input class="form-control" style="width:160px" type="password" name="current_password" placeholder="当前密码" required>
-        <button class="btn btn-danger btn-sm" type="submit">解绑</button>
+        <button class="btn btn-danger btn-sm" type="submit"
+          data-confirm="确定要解绑 {{.Name}} 吗？解绑后将不能再用该方式登录。"
+          data-confirm-title="确认解绑登录方式"
+          data-confirm-btn="确认解绑"
+          data-confirm-icon="⚠">
+          解绑
+        </button>
       </form>
       {{else if .Enabled}}
       <form method="POST" action="/profile/identities/{{.Slug}}/bind" style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;justify-content:flex-end">
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-        <input class="form-control" style="width:160px" type="password" name="current_password" placeholder="当前密码" required>
-        <button class="btn btn-primary btn-sm" type="submit">绑定</button>
+        <button class="btn btn-primary btn-sm" type="submit"
+          data-confirm="将跳转到 {{.Name}} 授权页面完成绑定。是否继续？"
+          data-confirm-title="确认绑定登录方式"
+          data-confirm-btn="继续"
+          data-confirm-icon="🔗"
+          data-confirm-danger="0">
+          绑定
+        </button>
       </form>
       {{else}}
       <button class="btn btn-ghost btn-sm" type="button" disabled>暂不可绑定</button>
