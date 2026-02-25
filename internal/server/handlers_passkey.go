@@ -15,19 +15,18 @@ import (
 	"transmtf.com/oidc/internal/store"
 )
 
-
 type webAuthnUser struct {
 	user  *store.User
 	creds []webauthn.Credential
 }
 
-func (u *webAuthnUser) WebAuthnID() []byte                        { return []byte(u.user.ID) }
-func (u *webAuthnUser) WebAuthnName() string                      { return u.user.Email }
-func (u *webAuthnUser) WebAuthnDisplayName() string               { return u.user.DisplayName }
-func (u *webAuthnUser) WebAuthnIcon() string                      { return "" }
+func (u *webAuthnUser) WebAuthnID() []byte                         { return []byte(u.user.ID) }
+func (u *webAuthnUser) WebAuthnName() string                       { return u.user.Email }
+func (u *webAuthnUser) WebAuthnDisplayName() string                { return u.user.DisplayName }
+func (u *webAuthnUser) WebAuthnIcon() string                       { return "" }
 func (u *webAuthnUser) WebAuthnCredentials() []webauthn.Credential { return u.creds }
 
-// buildWebAuthnUser loads a user's passkey credentials and wraps them.
+// buildWebAuthnUser 读取用户的通行密钥凭据并进行封装。
 func (h *Handler) buildWebAuthnUser(ctx context.Context, u *store.User) (*webAuthnUser, error) {
 	dbCreds, err := h.st.GetPasskeyCredentialsByUserID(ctx, u.ID)
 	if err != nil {
@@ -52,7 +51,7 @@ func (h *Handler) newWebAuthn(ctx context.Context) (*webauthn.WebAuthn, error) {
 	}
 	siteName := h.st.GetSetting(ctx, "site_name")
 	if siteName == "" {
-		siteName = "Team TransMTF"
+		siteName = "团队站点"
 	}
 	rpID := issuerURL.Hostname()
 	return webauthn.New(&webauthn.Config{
@@ -62,24 +61,23 @@ func (h *Handler) newWebAuthn(ctx context.Context) (*webauthn.WebAuthn, error) {
 	})
 }
 
-
 func (h *Handler) PasskeyRegisterBegin(w http.ResponseWriter, r *http.Request) {
 	u := h.currentUser(r)
 	if u == nil {
-		jsonResp(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		jsonResp(w, http.StatusUnauthorized, map[string]string{"error": "未授权"})
 		return
 	}
 
 	ctx := r.Context()
 	wa, err := h.newWebAuthn(ctx)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "webauthn init failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "通行密钥组件初始化失败"})
 		return
 	}
 
 	wau, err := h.buildWebAuthnUser(ctx, u)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "failed to load credentials"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "加载通行密钥凭据失败"})
 		return
 	}
 
@@ -97,13 +95,13 @@ func (h *Handler) PasskeyRegisterBegin(w http.ResponseWriter, r *http.Request) {
 
 	sessionData, err := json.Marshal(session)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "session marshal failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "会话序列化失败"})
 		return
 	}
 
 	sessID := uuid.New().String()
 	if err := h.st.CreateWebAuthnSession(ctx, sessID, string(sessionData)); err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "session store failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "会话存储失败"})
 		return
 	}
 
@@ -114,67 +112,67 @@ func (h *Handler) PasskeyRegisterBegin(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PasskeyRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	u := h.currentUser(r)
 	if u == nil {
-		jsonResp(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		jsonResp(w, http.StatusUnauthorized, map[string]string{"error": "未授权"})
 		return
 	}
 
 	ctx := r.Context()
 	sessID := r.Header.Get("X-WebAuthn-Session")
 	if sessID == "" {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "missing session ID"})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "缺少会话标识"})
 		return
 	}
 
 	sessionData, err := h.st.GetWebAuthnSession(ctx, sessID)
 	if err != nil {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "invalid or expired session"})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "会话无效或已过期"})
 		return
 	}
 	defer h.st.DeleteWebAuthnSession(ctx, sessID)
 
 	var session webauthn.SessionData
 	if err := json.Unmarshal([]byte(sessionData), &session); err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "session unmarshal failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "会话反序列化失败"})
 		return
 	}
 
 	wa, err := h.newWebAuthn(ctx)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "webauthn init failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "通行密钥组件初始化失败"})
 		return
 	}
 
 	wau, err := h.buildWebAuthnUser(ctx, u)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "failed to load credentials"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "加载通行密钥凭据失败"})
 		return
 	}
 
 	credential, err := wa.FinishRegistration(wau, session, r)
 	if err != nil {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "registration failed: " + err.Error()})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "注册失败：" + err.Error()})
 		return
 	}
 
 	credData, err := json.Marshal(credential)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "credential marshal failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "凭据序列化失败"})
 		return
 	}
 
 	credID := base64.RawURLEncoding.EncodeToString(credential.ID)
 	name := r.URL.Query().Get("name")
 	if name == "" {
-		name = "Passkey"
+		name = "通行密钥"
 	}
 
 	if err := h.st.CreatePasskeyCredential(ctx, u.ID, credID, string(credData), name); err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "failed to save credential"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "保存凭据失败"})
 		return
 	}
 	if u.RequirePasswordChange {
 		if err := h.st.SetRequirePasswordChange(ctx, u.ID, false); err != nil {
-			jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "failed to update account security state"})
+			jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "更新账户安全状态失败"})
 			return
 		}
 	}
@@ -184,7 +182,7 @@ func (h *Handler) PasskeyRegisterFinish(w http.ResponseWriter, r *http.Request) 
 
 func (h *Handler) PasskeyDeleteCredential(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -200,7 +198,7 @@ func (h *Handler) PasskeyDeleteCredential(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	creds, err := h.st.GetPasskeyCredentialsByUserID(ctx, u.ID)
 	if err != nil {
-        http.Redirect(w, r, "/profile?flash=Delete+failed", http.StatusFound)
+		http.Redirect(w, r, "/profile?flash=删除失败", http.StatusFound)
 		return
 	}
 	found := false
@@ -211,16 +209,16 @@ func (h *Handler) PasskeyDeleteCredential(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if !found {
-        http.Redirect(w, r, "/profile?flash=Passkey+not+found", http.StatusFound)
+		http.Redirect(w, r, "/profile?flash=通行密钥不存在", http.StatusFound)
 		return
 	}
 	hasPassword := store.HasPassword(u)
 	hasTOTP := u.TOTPEnabled && u.TOTPSecret != ""
 	passkeyCount := len(creds)
 
-	// Passwordless accounts must keep at least one passkey.
+	// 无密码账户必须至少保留一个通行密钥。
 	if !hasPassword && passkeyCount <= 1 {
-		http.Redirect(w, r, "/profile?flash=Cannot+delete+the+last+passkey+for+a+passwordless+account", http.StatusFound)
+		http.Redirect(w, r, "/profile?flash=无密码账户不能删除最后一个通行密钥", http.StatusFound)
 		return
 	}
 
@@ -238,61 +236,60 @@ func (h *Handler) PasskeyDeleteCredential(w http.ResponseWriter, r *http.Request
 
 	if hasPassword {
 		if !(passwordOK || totpOK) {
-			http.Redirect(w, r, "/profile?flash=Please+provide+a+valid+password+or+TOTP+code", http.StatusFound)
+			http.Redirect(w, r, "/profile?flash=请提供有效的密码或动态口令验证码", http.StatusFound)
 			return
 		}
 	} else {
-		// No password: require an alternate verification method (TOTP) before deletion.
+		// 无密码时：删除前必须通过替代验证方式（动态口令）进行校验。
 		if !hasTOTP {
-			http.Redirect(w, r, "/profile?flash=Enable+TOTP+or+set+a+password+before+deleting+passkeys", http.StatusFound)
+			http.Redirect(w, r, "/profile?flash=删除通行密钥前请先启用动态口令或设置密码", http.StatusFound)
 			return
 		}
 		if !totpOK {
-			http.Redirect(w, r, "/profile?flash=Valid+TOTP+code+is+required", http.StatusFound)
+			http.Redirect(w, r, "/profile?flash=需要有效的动态口令验证码", http.StatusFound)
 			return
 		}
 	}
 
 	if err := h.st.DeletePasskeyCredential(ctx, id); err != nil {
-        http.Redirect(w, r, "/profile?flash=Delete+failed", http.StatusFound)
+		http.Redirect(w, r, "/profile?flash=删除失败", http.StatusFound)
 		return
 	}
-    http.Redirect(w, r, "/profile?flash=Passkey+deleted", http.StatusFound)
+	http.Redirect(w, r, "/profile?flash=通行密钥已删除", http.StatusFound)
 }
-
 
 func (h *Handler) PasskeyLoginBegin(w http.ResponseWriter, r *http.Request) {
 	chID := h.twoFAChallengeFromRequest(r)
 	if chID == "" {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "no 2FA challenge"})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "没有双重验证挑战"})
 		return
 	}
 	ctx := r.Context()
 	ch, err := h.st.GetLogin2FAChallenge(ctx, chID)
 	if err != nil {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "invalid challenge"})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "挑战无效"})
 		return
 	}
 	u, err := h.st.GetUserByID(ctx, ch.UserID)
 	if err != nil || !u.Active {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "user not found"})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "用户不存在"})
 		return
 	}
 
 	if h.st.CountPasskeysByUserID(ctx, u.ID) == 0 {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "no passkeys registered"})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "未注册通行密钥"})
 		return
 	}
 
 	wa, err := h.newWebAuthn(ctx)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "webauthn init failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "通行密钥组件初始化失败"})
 		return
 	}
 
 	wau, err := h.buildWebAuthnUser(ctx, u)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "failed to load credentials"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "加载通行密钥凭据失败"})
 		return
 	}
 
@@ -304,13 +301,13 @@ func (h *Handler) PasskeyLoginBegin(w http.ResponseWriter, r *http.Request) {
 
 	sessionData, err := json.Marshal(session)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "session marshal failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "会话序列化失败"})
 		return
 	}
 
 	sessID := "pk_" + uuid.New().String()
 	if err := h.st.CreateWebAuthnSession(ctx, sessID, string(sessionData)); err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "session store failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "会话存储失败"})
 		return
 	}
 
@@ -321,57 +318,57 @@ func (h *Handler) PasskeyLoginBegin(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 	chID := h.twoFAChallengeFromRequest(r)
 	if chID == "" {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "no 2FA challenge"})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "没有双重验证挑战"})
 		return
 	}
 
 	ctx := r.Context()
 	sessID := r.Header.Get("X-WebAuthn-Session")
 	if sessID == "" {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "missing session ID"})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "缺少会话标识"})
 		return
 	}
 
 	sessionData, err := h.st.GetWebAuthnSession(ctx, sessID)
 	if err != nil {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "invalid or expired webauthn session"})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "通行密钥会话无效或已过期"})
 		return
 	}
 	defer h.st.DeleteWebAuthnSession(ctx, sessID)
 
 	var session webauthn.SessionData
 	if err := json.Unmarshal([]byte(sessionData), &session); err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "session unmarshal failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "会话反序列化失败"})
 		return
 	}
 
 	ch, err := h.st.GetLogin2FAChallenge(ctx, chID)
 	if err != nil {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "invalid 2FA challenge"})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "双重验证挑战无效"})
 		return
 	}
 
 	u, err := h.st.GetUserByID(ctx, ch.UserID)
 	if err != nil || !u.Active {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "user not found"})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "用户不存在"})
 		return
 	}
 
 	wa, err := h.newWebAuthn(ctx)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "webauthn init failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "通行密钥组件初始化失败"})
 		return
 	}
 
 	wau, err := h.buildWebAuthnUser(ctx, u)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "failed to load credentials"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "加载通行密钥凭据失败"})
 		return
 	}
 
 	credential, err := wa.FinishLogin(wau, session, r)
 	if err != nil {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "passkey verification failed: " + err.Error()})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "通行密钥验证失败：" + err.Error()})
 		return
 	}
 
@@ -386,7 +383,7 @@ func (h *Handler) PasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 
 	// Consume 2FA challenge and create session
 	if _, err := h.st.ConsumeLogin2FAChallenge(ctx, chID); err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "failed to consume challenge"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "消耗挑战失败"})
 		return
 	}
 	h.clear2FAChallengeCookie(w)
@@ -400,7 +397,7 @@ func (h *Handler) PasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 
 	sid, err := h.st.CreateSession(ctx, u.ID)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "failed to create session"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "创建会话失败"})
 		return
 	}
 	h.setSessionCookie(w, sid)
@@ -409,10 +406,9 @@ func (h *Handler) PasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, http.StatusOK, map[string]string{"redirect": redirect})
 }
 
-
 func (h *Handler) AdminDeletePasskey(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -425,24 +421,24 @@ func (h *Handler) AdminDeletePasskey(w http.ResponseWriter, r *http.Request) {
 
 	targetUser, err := h.st.GetUserByID(ctx, userID)
 	if err != nil {
-		http.Redirect(w, r, "/admin/users/"+userID+"?flash=User+not+found", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=用户不存在", http.StatusFound)
 		return
 	}
 	cur := h.currentUser(r)
 	if targetUser.IsAdmin() && !h.isSystemAdminUser(cur) {
-		http.Redirect(w, r, "/admin/users/"+userID+"?flash=Cannot+modify+admin+account", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=不能修改管理员账户", http.StatusFound)
 		return
 	}
 
 	creds, err := h.st.GetPasskeyCredentialsByUserID(ctx, userID)
 	if err != nil {
-		http.Redirect(w, r, "/admin/users/"+userID+"?flash=Delete+failed", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=删除失败", http.StatusFound)
 		return
 	}
 	for _, c := range creds {
 		if c.ID == pkID {
 			if dbErr := h.st.DeletePasskeyCredential(ctx, pkID); dbErr != nil {
-				http.Redirect(w, r, "/admin/users/"+userID+"?flash=Delete+failed", http.StatusFound)
+				http.Redirect(w, r, "/admin/users/"+userID+"?flash=删除失败", http.StatusFound)
 				return
 			}
 			break
@@ -451,13 +447,13 @@ func (h *Handler) AdminDeletePasskey(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/users/"+userID, http.StatusFound)
 }
 
-// PasskeyPrimaryLoginBegin starts a discoverable passkey login (no 2FA challenge required).
+// PasskeyPrimaryLoginBegin 启动可发现凭据的通行密钥登录（无需双重验证挑战）。
 // GET /login/passkey/begin
 func (h *Handler) PasskeyPrimaryLoginBegin(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	wa, err := h.newWebAuthn(ctx)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "webauthn init failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "通行密钥组件初始化失败"})
 		return
 	}
 
@@ -469,13 +465,13 @@ func (h *Handler) PasskeyPrimaryLoginBegin(w http.ResponseWriter, r *http.Reques
 
 	sessionData, err := json.Marshal(session)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "session marshal failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "会话序列化失败"})
 		return
 	}
 
 	sessID := "pkprimary_" + uuid.New().String()
 	if err := h.st.CreateWebAuthnSession(ctx, sessID, string(sessionData)); err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "session store failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "会话存储失败"})
 		return
 	}
 
@@ -483,32 +479,32 @@ func (h *Handler) PasskeyPrimaryLoginBegin(w http.ResponseWriter, r *http.Reques
 	jsonResp(w, http.StatusOK, options)
 }
 
-// PasskeyPrimaryLoginFinish completes a discoverable passkey login.
+// PasskeyPrimaryLoginFinish 完成可发现凭据的通行密钥登录。
 // POST /login/passkey/finish
 func (h *Handler) PasskeyPrimaryLoginFinish(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sessID := r.Header.Get("X-WebAuthn-Session")
 	if sessID == "" {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "missing session ID"})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "缺少会话标识"})
 		return
 	}
 
 	sessionData, err := h.st.GetWebAuthnSession(ctx, sessID)
 	if err != nil {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "invalid or expired session"})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "会话无效或已过期"})
 		return
 	}
 	defer h.st.DeleteWebAuthnSession(ctx, sessID)
 
 	var session webauthn.SessionData
 	if err := json.Unmarshal([]byte(sessionData), &session); err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "session unmarshal failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "会话反序列化失败"})
 		return
 	}
 
 	wa, err := h.newWebAuthn(ctx)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "webauthn init failed"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "通行密钥组件初始化失败"})
 		return
 	}
 
@@ -536,12 +532,12 @@ func (h *Handler) PasskeyPrimaryLoginFinish(w http.ResponseWriter, r *http.Reque
 
 	credential, err := wa.FinishDiscoverableLogin(handler, session, r)
 	if err != nil {
-		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "passkey verification failed: " + err.Error()})
+		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "通行密钥验证失败：" + err.Error()})
 		return
 	}
 
 	if resolvedUser == nil || !resolvedUser.Active {
-		jsonResp(w, http.StatusForbidden, map[string]string{"error": "account not found or disabled"})
+		jsonResp(w, http.StatusForbidden, map[string]string{"error": "账户不存在或已停用"})
 		return
 	}
 	_ = resolvedWAU
@@ -563,7 +559,7 @@ func (h *Handler) PasskeyPrimaryLoginFinish(w http.ResponseWriter, r *http.Reque
 
 	sid, err := h.st.CreateSession(ctx, resolvedUser.ID)
 	if err != nil {
-		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "failed to create session"})
+		jsonResp(w, http.StatusInternalServerError, map[string]string{"error": "创建会话失败"})
 		return
 	}
 	h.setSessionCookie(w, sid)

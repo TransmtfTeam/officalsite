@@ -20,10 +20,9 @@ import (
 var schemaSQL string
 
 var (
-	ErrPasswordResetTooSoon     = errors.New("password reset requested too recently")
-	ErrPasswordResetTokenExpired = errors.New("password reset token expired")
+	ErrPasswordResetTooSoon      = errors.New("发起找回密码过于频繁")
+	ErrPasswordResetTokenExpired = errors.New("找回密码链接已过期")
 )
-
 
 type User struct {
 	ID                    string
@@ -43,7 +42,7 @@ type User struct {
 
 func HasPassword(u *User) bool { return u != nil && strings.TrimSpace(u.PassHash) != "" }
 
-func (u *User) IsAdmin()  bool { return u.Role == "admin" }
+func (u *User) IsAdmin() bool  { return u.Role == "admin" }
 func (u *User) IsMember() bool { return u.Role == "member" || u.Role == "admin" }
 func (u *User) RoleLabel() string {
 	switch u.Role {
@@ -114,7 +113,6 @@ type Project struct {
 	UpdatedAt time.Time
 }
 
-
 type OIDCProvider struct {
 	ID           string
 	Name         string
@@ -129,7 +127,6 @@ type OIDCProvider struct {
 	CreatedAt    time.Time
 }
 
-
 type UserIdentity struct {
 	ID        string
 	UserID    string
@@ -137,7 +134,6 @@ type UserIdentity struct {
 	Subject   string
 	CreatedAt time.Time
 }
-
 
 type OIDCState struct {
 	State     string
@@ -154,7 +150,6 @@ type Login2FAChallenge struct {
 	Redirect  string
 	ExpiresAt time.Time
 }
-
 
 type Store struct{ db *sql.DB }
 
@@ -174,7 +169,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, schemaSQL)
 	return err
 }
-
 
 func (s *Store) GetSetting(ctx context.Context, key string) string {
 	var v string
@@ -201,7 +195,7 @@ func (s *Store) setSettingDefault(ctx context.Context, key, value string) error 
 // Existing values are never overwritten.
 func (s *Store) EnsureDefaults(ctx context.Context) error {
 	defaults := map[string]string{
-		"site_name":       "Team TransMTF",
+		"site_name":       "团队站点",
 		"contact_email":   "contact@transmtf.com",
 		"tos_content":     defaultTOS,
 		"privacy_content": defaultPrivacy,
@@ -264,7 +258,6 @@ func (s *Store) GetAllSettings(ctx context.Context) map[string]string {
 	}
 	return m
 }
-
 
 const userCols = `id,email,password_hash,display_name,avatar_url,role,active,totp_secret,totp_pending_secret,totp_enabled,created_at,email_verified,require_password_change`
 
@@ -423,7 +416,6 @@ func (s *Store) UpdatePasswordAndClearFlag(ctx context.Context, userID, newPass 
 	return err
 }
 
-
 func (s *Store) CreateSession(ctx context.Context, userID string) (string, error) {
 	id := uuid.New().String()
 	_, err := s.db.ExecContext(ctx,
@@ -450,7 +442,6 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE id=$1`, id)
 	return err
 }
-
 
 func (s *Store) CreateClient(ctx context.Context, name, description string, redirectURIs, scopes []string) (clientID, secret string, err error) {
 	id := uuid.New().String()
@@ -526,7 +517,6 @@ func (s *Store) VerifyClientSecret(c *OAuthClient, secret string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(c.SecretHash), []byte(secret)) == nil
 }
 
-
 func (s *Store) CreateAuthCode(ctx context.Context, code, clientID, userID, redirectURI string, scopes []string, challenge, method, nonce string) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO auth_codes(code,client_id,user_id,redirect_uri,scopes,code_challenge,code_challenge_method,nonce,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
@@ -552,7 +542,7 @@ func (s *Store) ConsumeAuthCode(ctx context.Context, code string) (*AuthCode, er
 		return nil, err
 	}
 	if ac.Used || time.Now().After(ac.ExpiresAt) {
-		return nil, errors.New("code invalid or expired")
+		return nil, errors.New("授权码无效或已过期")
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE auth_codes SET used=true WHERE code=$1`, code); err != nil {
 		return nil, err
@@ -563,7 +553,6 @@ func (s *Store) ConsumeAuthCode(ctx context.Context, code string) (*AuthCode, er
 	ac.Scopes = strings.Fields(scopes)
 	return ac, nil
 }
-
 
 func (s *Store) CreateAccessToken(ctx context.Context, userID, clientID string, scopes []string) (string, error) {
 	raw := RandomHex(32)
@@ -625,7 +614,6 @@ func (s *Store) RevokeRefreshToken(ctx context.Context, raw string) error {
 	return err
 }
 
-
 const projCols = `id,slug,name_zh,name_en,desc_zh,desc_en,status,url,tags,featured,sort_order,created_at,updated_at`
 
 func scanProject(row interface{ Scan(...any) error }) (*Project, error) {
@@ -682,12 +670,10 @@ func (s *Store) CountProjects(ctx context.Context) int {
 	return n
 }
 
-
 func (s *Store) UpdateUserAvatar(ctx context.Context, id, avatarURL string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE users SET avatar_url=$1, updated_at=now() WHERE id=$2`, avatarURL, id)
 	return err
 }
-
 
 func (s *Store) CreateOIDCProvider(ctx context.Context, name, slug, icon, clientID, clientSecret, issuerURL, scopes string, autoRegister bool) error {
 	id := uuid.New().String()
@@ -767,7 +753,6 @@ func (s *Store) CountOIDCProviders(ctx context.Context) int {
 	return n
 }
 
-
 func (s *Store) LinkIdentity(ctx context.Context, userID, provider, subject string) error {
 	id := uuid.New().String()
 	_, err := s.db.ExecContext(ctx,
@@ -786,7 +771,6 @@ func (s *Store) GetUserByIdentity(ctx context.Context, provider, subject string)
 	}
 	return s.GetUserByID(ctx, userID)
 }
-
 
 func (s *Store) CreateOIDCState(ctx context.Context, state, provider, nonce, verifier, redirect string) error {
 	_, err := s.db.ExecContext(ctx,
@@ -872,7 +856,6 @@ func (s *Store) DeleteLogin2FAChallenge(ctx context.Context, id string) error {
 	return err
 }
 
-
 type Session struct {
 	ID        string
 	UserID    string
@@ -899,7 +882,6 @@ func (s *Store) GetSessionsByUserID(ctx context.Context, userID string) ([]*Sess
 	return out, rows.Err()
 }
 
-
 func (s *Store) GetUserIdentitiesByUserID(ctx context.Context, userID string) ([]*UserIdentity, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id,user_id,provider,subject,created_at FROM user_identities WHERE user_id=$1 ORDER BY created_at DESC`,
@@ -918,7 +900,6 @@ func (s *Store) GetUserIdentitiesByUserID(ctx context.Context, userID string) ([
 	}
 	return out, rows.Err()
 }
-
 
 func (s *Store) GetAccessTokensByUserID(ctx context.Context, userID string) ([]*AccessToken, error) {
 	rows, err := s.db.QueryContext(ctx,
@@ -972,7 +953,6 @@ func (s *Store) RevokeRefreshTokenByID(ctx context.Context, id string) error {
 	return err
 }
 
-
 func (s *Store) UpdateClient(ctx context.Context, id, name, description string, redirectURIs, scopes []string, baseAccess string, allowedGroups []string) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE oauth_clients SET name=$1,description=$2,redirect_uris=$3,scopes=$4,base_access=$5,allowed_groups=$6 WHERE id=$7`,
@@ -990,7 +970,6 @@ func (s *Store) ResetClientSecret(ctx context.Context, id string) (string, error
 	_, err = s.db.ExecContext(ctx, `UPDATE oauth_clients SET client_secret_hash=$1 WHERE id=$2`, string(h), id)
 	return secret, err
 }
-
 
 func (s *Store) GetClientAnnouncement(ctx context.Context, clientID string) string {
 	var v string
@@ -1025,7 +1004,6 @@ func (s *Store) SetClientAnnouncement(ctx context.Context, clientID, content str
 	}
 	return nil
 }
-
 
 type PasskeyCredential struct {
 	ID           string
@@ -1089,7 +1067,6 @@ func (s *Store) CountPasskeysByUserID(ctx context.Context, userID string) int {
 	return n
 }
 
-
 func (s *Store) CreateWebAuthnSession(ctx context.Context, id, data string) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO webauthn_sessions(id,data,expires_at) VALUES($1,$2,$3)`,
@@ -1107,7 +1084,7 @@ func (s *Store) GetWebAuthnSession(ctx context.Context, id string) (string, erro
 	}
 	if time.Now().After(exp) {
 		s.db.ExecContext(ctx, `DELETE FROM webauthn_sessions WHERE id=$1`, id)
-		return "", errors.New("webauthn session expired")
+		return "", errors.New("通行密钥会话已过期")
 	}
 	return data, nil
 }
@@ -1116,7 +1093,6 @@ func (s *Store) DeleteWebAuthnSession(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM webauthn_sessions WHERE id=$1`, id)
 	return err
 }
-
 
 type CustomRole struct {
 	Name        string
@@ -1163,7 +1139,7 @@ func (s *Store) GetCustomRole(ctx context.Context, name string) (*CustomRole, er
 
 func (s *Store) CreateCustomRole(ctx context.Context, name, label string, permissions []string) error {
 	if IsDefaultRole(name) {
-		return errors.New("cannot create a role with a reserved name")
+		return errors.New("不能使用系统保留名称创建角色")
 	}
 	perms := strings.Join(permissions, " ")
 	_, err := s.db.ExecContext(ctx,
@@ -1175,12 +1151,11 @@ func (s *Store) CreateCustomRole(ctx context.Context, name, label string, permis
 
 func (s *Store) DeleteCustomRole(ctx context.Context, name string) error {
 	if IsDefaultRole(name) {
-		return errors.New("cannot delete a default role")
+		return errors.New("不能删除内置角色")
 	}
 	_, err := s.db.ExecContext(ctx, `DELETE FROM custom_roles WHERE name=$1`, name)
 	return err
 }
-
 
 // Friend Links
 
@@ -1241,7 +1216,6 @@ func (s *Store) DeleteFriendLink(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM friend_links WHERE id=$1`, id)
 	return err
 }
-
 
 func RandomHex(n int) string {
 	b := make([]byte, n)
@@ -1330,7 +1304,7 @@ func (s *Store) ConsumeEmailVerification(ctx context.Context, token string) (*Us
 	if time.Now().After(exp) {
 		// Commit to make deletion permanent, then surface expiry error.
 		_ = tx.Commit()
-		return nil, errors.New("verification token expired")
+		return nil, errors.New("验证链接已过期")
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE users SET email_verified=true, updated_at=now() WHERE id=$1`, userID); err != nil {
 		return nil, err
@@ -1541,6 +1515,7 @@ func hasBaseClientAccess(u *User, baseAccess string) bool {
 // UserCanAccessClient returns true when either condition passes:
 //   - baseAccess policy matches the user role
 //   - user belongs to at least one allowed group
+//
 // Group membership supports built-ins (admin/member/user) and custom groups by name.
 // Admin is treated as belonging to all groups by default.
 func (s *Store) UserCanAccessClient(ctx context.Context, u *User, baseAccess string, allowedGroups []string) bool {
@@ -1592,4 +1567,3 @@ func (s *Store) UserCanAccessClient(ctx context.Context, u *User, baseAccess str
 	}
 	return false
 }
-

@@ -24,7 +24,7 @@
   <main class="panel-content">
     <h1 class="panel-title">角色管理</h1>
     <p class="panel-sub">
-      三个内置角色（user / member / admin）不可删除。可以在此创建自定义角色并分配站点权限。
+      三个内置角色（用户 / 成员 / 管理员）不可删除。可以在此创建自定义角色并分配站点权限。
     </p>
 
     {{if .Flash}}
@@ -41,7 +41,7 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">角色名（仅小写字母、数字、-）</label>
-            <input class="form-control" type="text" name="name" placeholder="editor" required pattern="[a-z0-9\-]+">
+            <input class="form-control" type="text" name="name" placeholder="请输入角色代号" required pattern="[a-z0-9\-]+">
           </div>
           <div class="form-group">
             <label class="form-label">显示标签（可选）</label>
@@ -72,17 +72,17 @@
         <thead><tr><th>角色名</th><th>说明</th><th>权限</th></tr></thead>
         <tbody>
           <tr>
-            <td><span class="role-badge role-user">user</span></td>
+            <td><span class="role-badge role-user">用户</span></td>
             <td style="font-size:.88rem;color:var(--text2)">普通注册用户</td>
-            <td style="font-size:.8rem;color:var(--text2)">登录、个人资料、OIDC 授权</td>
+            <td style="font-size:.8rem;color:var(--text2)">登录、个人资料、授权确认</td>
           </tr>
           <tr>
-            <td><span class="role-badge role-member">member</span></td>
+            <td><span class="role-badge role-member">成员</span></td>
             <td style="font-size:.88rem;color:var(--text2)">团队成员</td>
             <td style="font-size:.8rem;color:var(--text2)">管理项目 · 管理应用 · 管理公告</td>
           </tr>
           <tr>
-            <td><span class="role-badge role-admin">admin</span></td>
+            <td><span class="role-badge role-admin">管理员</span></td>
             <td style="font-size:.88rem;color:var(--text2)">管理员</td>
             <td style="font-size:.8rem;color:var(--text2)">全部权限</td>
           </tr>

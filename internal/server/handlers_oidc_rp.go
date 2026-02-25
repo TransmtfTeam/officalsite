@@ -63,28 +63,28 @@ func fetchRPDiscovery(issuerURL string) (*rpDiscovery, error) {
 	wellKnown := strings.TrimRight(issuerURL, "/") + "/.well-known/openid-configuration"
 	resp, err := rpHTTPClient.Get(wellKnown) //nolint:gosec
 	if err != nil {
-		return nil, fmt.Errorf("fetch discovery: %w", err)
+		return nil, fmt.Errorf("获取发现文档失败：%w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("fetch discovery: unexpected status %d", resp.StatusCode)
+		return nil, fmt.Errorf("获取发现文档返回异常状态：%d", resp.StatusCode)
 	}
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	var d rpDiscovery
 	if err := json.Unmarshal(body, &d); err != nil {
-		return nil, fmt.Errorf("parse discovery: %w", err)
+		return nil, fmt.Errorf("解析发现文档失败：%w", err)
 	}
 
 	if d.Issuer == "" || d.AuthorizationEndpoint == "" || d.TokenEndpoint == "" || d.JWKSURI == "" {
-		return nil, fmt.Errorf("discovery missing required fields")
+		return nil, fmt.Errorf("发现文档缺少必填字段")
 	}
 	if !isAllowedAbsoluteURL(d.Issuer) || !isAllowedAbsoluteURL(d.AuthorizationEndpoint) ||
 		!isAllowedAbsoluteURL(d.TokenEndpoint) || !isAllowedAbsoluteURL(d.JWKSURI) {
-		return nil, fmt.Errorf("discovery contains unsupported URLs")
+		return nil, fmt.Errorf("发现文档包含不受支持的地址")
 	}
 	if d.UserinfoEndpoint != "" && !isAllowedAbsoluteURL(d.UserinfoEndpoint) {
-		return nil, fmt.Errorf("discovery contains unsupported userinfo endpoint")
+		return nil, fmt.Errorf("发现文档包含不受支持的用户信息地址")
 	}
 
 	wantIssuer, err := canonicalIssuerURL(issuerURL)
@@ -93,10 +93,10 @@ func fetchRPDiscovery(issuerURL string) (*rpDiscovery, error) {
 	}
 	gotIssuer, err := canonicalIssuerURL(d.Issuer)
 	if err != nil {
-		return nil, fmt.Errorf("invalid discovery issuer: %w", err)
+		return nil, fmt.Errorf("发现文档发行方无效：%w", err)
 	}
 	if wantIssuer != gotIssuer {
-		return nil, fmt.Errorf("discovery issuer mismatch")
+		return nil, fmt.Errorf("发现文档发行方不匹配")
 	}
 
 	rpCacheMu.Lock()
@@ -117,17 +117,17 @@ func fetchRPJWKS(jwksURL string) (map[string]*rsa.PublicKey, error) {
 
 	resp, err := rpHTTPClient.Get(jwksURL) //nolint:gosec
 	if err != nil {
-		return nil, fmt.Errorf("fetch jwks: %w", err)
+		return nil, fmt.Errorf("获取密钥清单失败：%w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("fetch jwks: unexpected status %d", resp.StatusCode)
+		return nil, fmt.Errorf("获取密钥清单返回异常状态：%d", resp.StatusCode)
 	}
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 128*1024))
 	var jwks rpJWKS
 	if err := json.Unmarshal(body, &jwks); err != nil {
-		return nil, fmt.Errorf("parse jwks: %w", err)
+		return nil, fmt.Errorf("解析密钥清单失败：%w", err)
 	}
 
 	out := make(map[string]*rsa.PublicKey, len(jwks.Keys))
@@ -139,11 +139,11 @@ func fetchRPJWKS(jwksURL string) (map[string]*rsa.PublicKey, error) {
 		if err != nil {
 			continue
 		}
-		// Keep key even without kid; keyfunc can fallback when only one key exists.
+		// 即使没有密钥标识也保留，只有一把密钥时可回退使用。
 		out[k.Kid] = pub
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("jwks has no usable RSA keys")
+		return nil, fmt.Errorf("密钥清单中没有可用的加密密钥")
 	}
 
 	rpJWKSCacheMu.Lock()
@@ -163,7 +163,7 @@ func rsaKeyFromJWK(nB64, eB64 string) (*rsa.PublicKey, error) {
 		return nil, err
 	}
 	if len(eBytes) == 0 {
-		return nil, fmt.Errorf("invalid exponent")
+		return nil, fmt.Errorf("指数无效")
 	}
 
 	n := new(big.Int).SetBytes(nBytes)
@@ -172,7 +172,7 @@ func rsaKeyFromJWK(nB64, eB64 string) (*rsa.PublicKey, error) {
 		e = (e << 8) + int(b)
 	}
 	if n.Sign() <= 0 || e <= 1 {
-		return nil, fmt.Errorf("invalid rsa key")
+		return nil, fmt.Errorf("密钥无效")
 	}
 	return &rsa.PublicKey{N: n, E: e}, nil
 }
@@ -185,13 +185,13 @@ func verifyProviderIDToken(idToken string, doc *rpDiscovery, clientID, nonce str
 
 	token, err := jwt.Parse(idToken, func(t *jwt.Token) (any, error) {
 		if t.Method == nil {
-			return nil, fmt.Errorf("missing signing method")
+			return nil, fmt.Errorf("缺少签名算法")
 		}
 		alg := t.Method.Alg()
 		if alg != jwt.SigningMethodRS256.Alg() &&
 			alg != jwt.SigningMethodRS384.Alg() &&
 			alg != jwt.SigningMethodRS512.Alg() {
-			return nil, fmt.Errorf("unsupported id_token alg: %s", alg)
+			return nil, fmt.Errorf("不支持的身份令牌算法：%s", alg)
 		}
 
 		kid, _ := t.Header["kid"].(string)
@@ -205,23 +205,23 @@ func verifyProviderIDToken(idToken string, doc *rpDiscovery, clientID, nonce str
 				return k, nil
 			}
 		}
-		return nil, fmt.Errorf("id_token key not found")
+		return nil, fmt.Errorf("未找到身份令牌对应密钥")
 	}, jwt.WithIssuer(doc.Issuer), jwt.WithAudience(clientID), jwt.WithLeeway(60*time.Second))
 	if err != nil {
-		return nil, fmt.Errorf("verify id_token: %w", err)
+		return nil, fmt.Errorf("校验身份令牌失败：%w", err)
 	}
 	if !token.Valid {
-		return nil, fmt.Errorf("id_token invalid")
+		return nil, fmt.Errorf("身份令牌无效")
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return nil, fmt.Errorf("invalid id_token claims")
+		return nil, fmt.Errorf("身份令牌声明无效")
 	}
 	if nonce != "" {
 		got := stringClaim(claims, "nonce")
 		if got == "" || got != nonce {
-			return nil, fmt.Errorf("id_token nonce mismatch")
+			return nil, fmt.Errorf("身份令牌随机串不匹配")
 		}
 	}
 	return claims, nil
@@ -230,7 +230,7 @@ func verifyProviderIDToken(idToken string, doc *rpDiscovery, clientID, nonce str
 func canonicalIssuerURL(raw string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || !u.IsAbs() || u.Host == "" {
-		return "", fmt.Errorf("invalid issuer URL")
+		return "", fmt.Errorf("发行方地址无效")
 	}
 	u.RawQuery = ""
 	u.Fragment = ""
@@ -263,13 +263,13 @@ func (h *Handler) OIDCProviderLogin(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 	provider, err := h.st.GetOIDCProviderBySlug(r.Context(), slug)
 	if err != nil || !provider.Enabled {
-        h.renderError(w, r, http.StatusNotFound, "Provider not found", slug)
+		h.renderError(w, r, http.StatusNotFound, "登录方式不可用", "该登录方式不存在或已停用")
 		return
 	}
 
 	doc, err := fetchRPDiscovery(provider.IssuerURL)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadGateway, "Unable to load login configuration", err.Error())
+		h.renderError(w, r, http.StatusBadGateway, "无法加载登录配置", "请检查发行方配置是否正确")
 		return
 	}
 
@@ -282,12 +282,12 @@ func (h *Handler) OIDCProviderLogin(w http.ResponseWriter, r *http.Request) {
 		scopes = []string{"openid", "email", "profile"}
 	}
 	if !containsScope(scopes, "openid") {
-		h.renderError(w, r, http.StatusBadRequest, "Invalid provider configuration", "provider scopes must include openid")
+		h.renderError(w, r, http.StatusBadRequest, "登录方式配置无效", "登录方式权限范围必须包含核心登录权限")
 		return
 	}
 
 	if err := h.st.CreateOIDCState(r.Context(), state, slug, nonce, verifier, next); err != nil {
-        h.renderError(w, r, http.StatusInternalServerError, "State creation failed", err.Error())
+		h.renderError(w, r, http.StatusInternalServerError, "登录状态创建失败", "请稍后重试")
 		return
 	}
 
@@ -312,52 +312,52 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 
 	if errCode := r.URL.Query().Get("error"); errCode != "" {
-		desc := r.URL.Query().Get("error_description")
-        h.renderError(w, r, http.StatusBadRequest, "Login denied", errCode+": "+desc)
+		_ = r.URL.Query().Get("error_description")
+		h.renderError(w, r, http.StatusBadRequest, "登录被拒绝", "外部登录返回拒绝信息，请重试或联系管理员")
 		return
 	}
 
 	code := r.URL.Query().Get("code")
 	if strings.TrimSpace(code) == "" {
-		h.renderError(w, r, http.StatusBadRequest, "Login failed", "missing code")
+		h.renderError(w, r, http.StatusBadRequest, "登录失败", "缺少授权码")
 		return
 	}
 	stateVal := r.URL.Query().Get("state")
 	if strings.TrimSpace(stateVal) == "" {
-		h.renderError(w, r, http.StatusBadRequest, "Login failed", "missing state")
+		h.renderError(w, r, http.StatusBadRequest, "登录失败", "缺少状态参数")
 		return
 	}
 	st, err := h.st.ConsumeOIDCState(r.Context(), stateVal)
 	if err != nil || st.Provider != slug {
-        h.renderError(w, r, http.StatusBadRequest, "Invalid login state", "Please start login again")
+		h.renderError(w, r, http.StatusBadRequest, "登录状态无效", "请重新发起登录")
 		return
 	}
 
 	provider, err := h.st.GetOIDCProviderBySlug(r.Context(), slug)
 	if err != nil || !provider.Enabled {
-        h.renderError(w, r, http.StatusNotFound, "Provider not found", slug)
+		h.renderError(w, r, http.StatusNotFound, "登录方式不可用", "该登录方式不存在或已停用")
 		return
 	}
 
 	doc, err := fetchRPDiscovery(provider.IssuerURL)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadGateway, "Unable to load login configuration", err.Error())
+		h.renderError(w, r, http.StatusBadGateway, "无法加载登录配置", "请检查发行方配置是否正确")
 		return
 	}
 
 	tok, err := rpExchangeCode(doc.TokenEndpoint, provider, code, h.providerCallbackURL(r, slug), st.Verifier)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadGateway, "Token exchange failed", err.Error())
+		h.renderError(w, r, http.StatusBadGateway, "换取令牌失败", "请检查应用标识、应用密钥和回调地址配置")
 		return
 	}
 	if tok.IDToken == "" {
-		h.renderError(w, r, http.StatusBadGateway, "Login failed", "missing id_token")
+		h.renderError(w, r, http.StatusBadGateway, "登录失败", "缺少身份令牌")
 		return
 	}
 
 	idClaims, err := verifyProviderIDToken(tok.IDToken, doc, provider.ClientID, st.Nonce)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadGateway, "ID Token verification failed", err.Error())
+		h.renderError(w, r, http.StatusBadGateway, "身份令牌校验失败", "请检查发行方证书与签名算法配置")
 		return
 	}
 
@@ -379,12 +379,12 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 		avatar = stringClaim(idClaims, "avatar_url")
 	}
 
-	// Pull userinfo to enrich claims; enforce sub consistency if present.
+	// 拉取用户信息补全声明；若返回主体标识则强制与身份令牌保持一致。
 	if doc.UserinfoEndpoint != "" {
 		usub, uemail, uverified, uname, upic, uiErr := rpUserInfo(doc.UserinfoEndpoint, tok.AccessToken)
 		if uiErr == nil {
 			if subject != "" && usub != "" && usub != subject {
-				h.renderError(w, r, http.StatusBadGateway, "Login failed", "userinfo sub mismatch")
+				h.renderError(w, r, http.StatusBadGateway, "登录失败", "用户信息主体不匹配")
 				return
 			}
 			if subject == "" {
@@ -406,7 +406,7 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if subject == "" {
-		h.renderError(w, r, http.StatusBadGateway, "Failed to fetch user info", "missing sub")
+		h.renderError(w, r, http.StatusBadGateway, "获取用户信息失败", "缺少主体标识")
 		return
 	}
 
@@ -414,31 +414,31 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 	u, err := h.st.GetUserByIdentity(ctx, slug, subject)
 	if err != nil {
 		if !isErrNoRows(err) {
-			h.renderError(w, r, http.StatusInternalServerError, "Identity lookup failed", err.Error())
+			h.renderError(w, r, http.StatusInternalServerError, "身份查询失败", err.Error())
 			return
 		}
-		// Auto-link by email when local account exists.
+		// 若系统中已存在同邮箱账户，则自动绑定。
 		if email != "" {
 			existing, emailErr := h.st.GetUserByEmail(ctx, email)
 			if emailErr == nil {
 				u = existing
 			} else if !isErrNoRows(emailErr) {
-				h.renderError(w, r, http.StatusInternalServerError, "User lookup failed", emailErr.Error())
+				h.renderError(w, r, http.StatusInternalServerError, "用户查询失败", emailErr.Error())
 				return
 			}
 		}
 
 		if u == nil {
 			if !provider.AutoRegister {
-				h.renderError(w, r, http.StatusForbidden, "Registration disabled",
-					"This login provider does not allow auto-registration. Please contact an administrator.")
+				h.renderError(w, r, http.StatusForbidden, "注册已禁用",
+					"该登录提供商未开启自动注册，请联系管理员。")
 				return
 			}
 			if name == "" {
 				if email != "" {
 					name = email
 				} else {
-					name = "OIDC User"
+					name = "外部登录用户"
 				}
 			}
 			createEmail := email
@@ -448,13 +448,13 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 			isVerifiedEmail := emailVerified && email != "" && strings.EqualFold(createEmail, email)
 			u, err = h.st.CreateUserWithEmailVerified(ctx, createEmail, store.RandomHex(32), name, "user", isVerifiedEmail)
 			if err != nil {
-				h.renderError(w, r, http.StatusInternalServerError, "Failed to create user", err.Error())
+				h.renderError(w, r, http.StatusInternalServerError, "创建用户失败", err.Error())
 				return
 			}
-			// New OAuth users must choose their own local recovery method:
-			// set a password or keep passkey-only mode.
+			// 新建外部登录账户默认清除本地密码，要求用户后续自行设置恢复方式。
+			// 可设置密码，也可仅使用通行密钥。
 			if err := h.st.ClearPassword(ctx, u.ID); err != nil {
-				h.renderError(w, r, http.StatusInternalServerError, "Failed to initialize account security", err.Error())
+				h.renderError(w, r, http.StatusInternalServerError, "初始化账户安全策略失败", err.Error())
 				return
 			}
 			u.PassHash = ""
@@ -466,13 +466,13 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := h.st.LinkIdentity(ctx, u.ID, slug, subject); err != nil {
-			h.renderError(w, r, http.StatusInternalServerError, "Failed to link identity", err.Error())
+			h.renderError(w, r, http.StatusInternalServerError, "绑定外部身份失败", err.Error())
 			return
 		}
 	}
 
 	if !u.Active {
-        h.renderError(w, r, http.StatusForbidden, "Account disabled", "Please contact administrator")
+		h.renderError(w, r, http.StatusForbidden, "账户已停用", "请联系管理员")
 		return
 	}
 	if name != "" && strings.TrimSpace(u.DisplayName) == "" {
@@ -496,7 +496,7 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 
 	sid, err := h.st.CreateSession(ctx, u.ID)
 	if err != nil {
-		h.renderError(w, r, http.StatusInternalServerError, "Failed to create session", err.Error())
+		h.renderError(w, r, http.StatusInternalServerError, "创建会话失败", err.Error())
 		return
 	}
 	h.setSessionCookie(w, sid)
@@ -511,7 +511,7 @@ type rpTokenResp struct {
 }
 
 func rpExchangeCode(tokenEndpoint string, p *store.OIDCProvider, code, redirectURI, verifier string) (*rpTokenResp, error) {
-	// Most providers accept client_secret_basic. If not, retry with client_secret_post.
+	// 大多数提供商支持基础认证；失败时回退为表单提交密钥。
 	tok, status, err := rpExchangeCodeOnce(tokenEndpoint, p, code, redirectURI, verifier, true)
 	if err == nil {
 		return tok, nil
@@ -550,33 +550,33 @@ func rpExchangeCodeOnce(tokenEndpoint string, p *store.OIDCProvider, code, redir
 
 	resp, err := rpHTTPClient.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("token request: %w", err)
+		return nil, 0, fmt.Errorf("令牌请求失败：%w", err)
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 
 	var t rpTokenResp
 	if err := json.Unmarshal(body, &t); err != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return nil, resp.StatusCode, fmt.Errorf("parse token response: %w", err)
+		return nil, resp.StatusCode, fmt.Errorf("解析令牌响应失败：%w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if t.Error != "" {
 			return nil, resp.StatusCode, fmt.Errorf("%s: %s", t.Error, t.ErrorDesc)
 		}
-		return nil, resp.StatusCode, fmt.Errorf("token endpoint status: %d", resp.StatusCode)
+		return nil, resp.StatusCode, fmt.Errorf("令牌端点状态异常：%d", resp.StatusCode)
 	}
 	if t.Error != "" {
 		return nil, resp.StatusCode, fmt.Errorf("%s: %s", t.Error, t.ErrorDesc)
 	}
 	if t.AccessToken == "" {
-		return nil, resp.StatusCode, fmt.Errorf("token response missing access_token")
+		return nil, resp.StatusCode, fmt.Errorf("令牌响应缺少访问令牌")
 	}
 	return &t, resp.StatusCode, nil
 }
 
 func rpUserInfo(endpoint, accessToken string) (sub, email string, emailVerified bool, name, picture string, err error) {
 	if strings.TrimSpace(endpoint) == "" {
-		err = fmt.Errorf("missing userinfo endpoint")
+		err = fmt.Errorf("缺少用户信息端点")
 		return
 	}
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
@@ -592,7 +592,7 @@ func rpUserInfo(endpoint, accessToken string) (sub, email string, emailVerified 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err = fmt.Errorf("userinfo endpoint status: %d", resp.StatusCode)
+		err = fmt.Errorf("用户信息端点状态异常：%d", resp.StatusCode)
 		return
 	}
 
@@ -655,4 +655,3 @@ func syntheticOIDCEmail(provider, subject string) string {
 	sum := sha256.Sum256([]byte(provider + ":" + subject))
 	return "oidc_" + base64.RawURLEncoding.EncodeToString(sum[:10]) + "@oidc.local"
 }
-

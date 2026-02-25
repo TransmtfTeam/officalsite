@@ -17,7 +17,7 @@ func (h *Handler) startSecondFactor(w http.ResponseWriter, r *http.Request, u *s
 	}
 	chID, err := h.st.CreateLogin2FAChallenge(r.Context(), u.ID, safeNextPath(next, "/profile"))
 	if err != nil {
-		h.renderError(w, r, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		h.renderError(w, r, http.StatusInternalServerError, "服务器内部错误", err.Error())
 		return true
 	}
 	h.set2FAChallengeCookie(w, chID)
@@ -49,7 +49,7 @@ func (h *Handler) Login2FAPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	d := h.pageData(r, "Two-Factor Authentication")
+	d := h.pageData(r, "双重验证")
 	d.Data = map[string]any{
 		"Email":      u.Email,
 		"HasTOTP":    u.TOTPEnabled && u.TOTPSecret != "",
@@ -60,7 +60,7 @@ func (h *Handler) Login2FAPage(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Login2FAPost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -89,9 +89,9 @@ func (h *Handler) Login2FAPost(w http.ResponseWriter, r *http.Request) {
 
 	code := r.FormValue("totp_code")
 	if !verifyTOTP(u.TOTPSecret, code, time.Now()) {
-		d := h.pageData(r, "Two-Factor Authentication")
+		d := h.pageData(r, "双重验证")
 		d.IsError = true
-		d.Flash = "Invalid verification code, please try again"
+		d.Flash = "验证码错误，请重试"
 		d.Data = map[string]any{
 			"Email":      u.Email,
 			"HasTOTP":    u.TOTPEnabled && u.TOTPSecret != "",
@@ -118,7 +118,7 @@ func (h *Handler) Login2FAPost(w http.ResponseWriter, r *http.Request) {
 
 	sid, err := h.st.CreateSession(r.Context(), u.ID)
 	if err != nil {
-		h.renderError(w, r, http.StatusInternalServerError, "Session creation failed", err.Error())
+		h.renderError(w, r, http.StatusInternalServerError, "会话创建失败", err.Error())
 		return
 	}
 	h.setSessionCookie(w, sid)
@@ -127,7 +127,7 @@ func (h *Handler) Login2FAPost(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Profile2FAStart(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -137,25 +137,25 @@ func (h *Handler) Profile2FAStart(w http.ResponseWriter, r *http.Request) {
 
 	u := h.currentUser(r)
 	if u.TOTPEnabled {
-		h.renderProfileWith2FA(w, r, "2FA is already enabled", true)
+		h.renderProfileWith2FA(w, r, "双重验证已启用", true)
 		return
 	}
 
 	secret, err := newTOTPSecret()
 	if err != nil {
-		h.renderProfileWith2FA(w, r, "Unable to generate 2FA secret", true)
+		h.renderProfileWith2FA(w, r, "无法生成动态口令密钥", true)
 		return
 	}
 	if err := h.st.SavePendingTOTPSecret(r.Context(), u.ID, secret); err != nil {
-		h.renderProfileWith2FA(w, r, "Failed to save 2FA configuration", true)
+		h.renderProfileWith2FA(w, r, "保存双重验证配置失败", true)
 		return
 	}
-	http.Redirect(w, r, "/profile?flash=TOTP+secret+generated.+Open+Enable+2FA+to+continue.", http.StatusFound)
+	http.Redirect(w, r, "/profile?flash=已生成动态口令密钥，请继续完成启用", http.StatusFound)
 }
 
 func (h *Handler) Profile2FAEnable(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -165,29 +165,29 @@ func (h *Handler) Profile2FAEnable(w http.ResponseWriter, r *http.Request) {
 
 	u, err := h.st.GetUserByID(r.Context(), h.currentUser(r).ID)
 	if err != nil {
-		h.renderError(w, r, http.StatusInternalServerError, "User read failed", err.Error())
+		h.renderError(w, r, http.StatusInternalServerError, "读取用户信息失败", err.Error())
 		return
 	}
 	if u.TOTPPendingSecret == "" {
-		h.renderProfileWith2FA(w, r, "No pending 2FA configuration to enable", true)
+		h.renderProfileWith2FA(w, r, "没有待启用的双重验证配置", true)
 		return
 	}
 
 	code := r.FormValue("totp_code")
 	if !verifyTOTP(u.TOTPPendingSecret, code, time.Now()) {
-		h.renderProfileWith2FA(w, r, "Invalid verification code, please try again", true)
+		h.renderProfileWith2FA(w, r, "验证码错误，请重试", true)
 		return
 	}
 	if err := h.st.EnableTOTP(r.Context(), u.ID); err != nil {
-		h.renderProfileWith2FA(w, r, "Failed to enable 2FA", true)
+		h.renderProfileWith2FA(w, r, "启用双重验证失败", true)
 		return
 	}
-	http.Redirect(w, r, "/profile?flash=2FA+enabled", http.StatusFound)
+	http.Redirect(w, r, "/profile?flash=双重验证已启用", http.StatusFound)
 }
 
 func (h *Handler) Profile2FADisable(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -197,11 +197,11 @@ func (h *Handler) Profile2FADisable(w http.ResponseWriter, r *http.Request) {
 
 	u, err := h.st.GetUserByID(r.Context(), h.currentUser(r).ID)
 	if err != nil {
-		h.renderError(w, r, http.StatusInternalServerError, "User read failed", err.Error())
+		h.renderError(w, r, http.StatusInternalServerError, "读取用户信息失败", err.Error())
 		return
 	}
 	if !u.TOTPEnabled || u.TOTPSecret == "" {
-		h.renderProfileWith2FA(w, r, "2FA is not enabled", true)
+		h.renderProfileWith2FA(w, r, "双重验证未启用", true)
 		return
 	}
 
@@ -219,27 +219,27 @@ func (h *Handler) Profile2FADisable(w http.ResponseWriter, r *http.Request) {
 
 	if !(passwordOK || totpOK) {
 		if store.HasPassword(u) {
-			h.renderProfileWith2FA(w, r, "Provide a valid current password or TOTP code", true)
+			h.renderProfileWith2FA(w, r, "请提供正确的当前密码或动态口令验证码", true)
 		} else {
-			h.renderProfileWith2FA(w, r, "Valid TOTP code is required", true)
+			h.renderProfileWith2FA(w, r, "需要有效的动态口令验证码", true)
 		}
 		return
 	}
 	if err := h.st.DisableTOTP(r.Context(), u.ID); err != nil {
-		h.renderProfileWith2FA(w, r, "Failed to disable 2FA", true)
+		h.renderProfileWith2FA(w, r, "关闭双重验证失败", true)
 		return
 	}
-	http.Redirect(w, r, "/profile?flash=2FA+disabled", http.StatusFound)
+	http.Redirect(w, r, "/profile?flash=双重验证已关闭", http.StatusFound)
 }
 
 func (h *Handler) renderProfileWith2FA(w http.ResponseWriter, r *http.Request, flash string, isErr bool) {
 	u, err := h.st.GetUserByID(r.Context(), h.currentUser(r).ID)
 	if err != nil {
-		h.renderError(w, r, http.StatusInternalServerError, "User read failed", err.Error())
+		h.renderError(w, r, http.StatusInternalServerError, "读取用户信息失败", err.Error())
 		return
 	}
 	r = r.WithContext(context.WithValue(r.Context(), ctxUser, u))
-	d := h.pageData(r, "Profile")
+	d := h.pageData(r, "个人资料")
 	d.Flash = flash
 	d.IsError = isErr
 
@@ -252,7 +252,7 @@ func (h *Handler) renderProfileWith2FA(w http.ResponseWriter, r *http.Request, f
 	passkeys, _ := h.st.GetPasskeyCredentialsByUserID(ctx, u.ID)
 	data["Passkeys"] = passkeys
 	if u.TOTPPendingSecret != "" {
-		siteName := orDefault(h.st.GetSetting(ctx, "site_name"), "Team TransMTF")
+		siteName := orDefault(h.st.GetSetting(ctx, "site_name"), "团队站点")
 		data["PendingSecret"] = u.TOTPPendingSecret
 		data["PendingURI"] = buildTOTPUri(siteName, u.Email, u.TOTPPendingSecret)
 	}

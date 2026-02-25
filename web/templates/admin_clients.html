@@ -27,10 +27,10 @@
 
   <main class="panel-content">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
-      <h1 class="panel-title" style="margin:0">OIDC 应用管理</h1>
+      <h1 class="panel-title" style="margin:0">应用管理</h1>
       <a class="btn btn-primary btn-sm" href="/admin/clients/new">+ 新建应用</a>
     </div>
-    <p class="panel-sub">管理 OAuth2/OIDC 客户端。</p>
+    <p class="panel-sub">管理授权登录应用。</p>
 
     {{if .Flash}}
     <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
@@ -41,9 +41,9 @@
         <thead>
           <tr>
             <th>名称</th>
-            <th>Client ID</th>
-            <th>Scopes</th>
-            <th>Redirect URIs</th>
+            <th>应用标识</th>
+            <th>权限范围</th>
+            <th>回调地址列表</th>
             <th>操作</th>
           </tr>
         </thead>

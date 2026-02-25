@@ -23,7 +23,7 @@
 
   <main class="panel-content">
     <h1 class="panel-title">应用公告管理</h1>
-    <p class="panel-sub">为每个应用设置公告，用户登录该应用时可见。公告通过 <code class="mono">/api/announcement/{clientid}</code> 公开访问。</p>
+    <p class="panel-sub">为每个应用设置公告，用户登录该应用时可见。公告通过 <code class="mono">/api/announcement/{应用标识}</code> 公开访问。</p>
 
     {{if .Flash}}
     <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>

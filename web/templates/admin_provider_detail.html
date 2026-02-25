@@ -4,26 +4,26 @@
 <div class="panel-wrap">
   <aside class="sidebar">
     <div class="sidebar-section">
-      <div class="sidebar-title">Admin</div>
-      <a class="sidebar-link" href="/admin">Overview</a>
-      <a class="sidebar-link" href="/admin/users">Users</a>
-      <a class="sidebar-link" href="/admin/groups">Groups</a>
-      <a class="sidebar-link" href="/admin/clients">Clients</a>
-      <a class="sidebar-link active" href="/admin/providers">Providers</a>
-      <a class="sidebar-link" href="/admin/roles">Roles</a>
-      <a class="sidebar-link" href="/admin/announcements">Announcements</a>
-      <a class="sidebar-link" href="/admin/settings">Settings</a>
+      <div class="sidebar-title">管理导航</div>
+      <a class="sidebar-link" href="/admin">概览</a>
+      <a class="sidebar-link" href="/admin/users">用户</a>
+      <a class="sidebar-link" href="/admin/groups">分组</a>
+      <a class="sidebar-link" href="/admin/clients">应用</a>
+      <a class="sidebar-link active" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/roles">角色</a>
+      <a class="sidebar-link" href="/admin/announcements">公告</a>
+      <a class="sidebar-link" href="/admin/settings">设置</a>
     </div>
     <div class="sidebar-section">
-      <div class="sidebar-title">Quick Links</div>
-      <a class="sidebar-link" href="/">Home</a>
-      <a class="sidebar-link" href="/profile">Profile</a>
+      <div class="sidebar-title">快速入口</div>
+      <a class="sidebar-link" href="/">返回首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
     </div>
   </aside>
 
   <main class="panel-content">
     <div style="margin-bottom:.5rem">
-      <a href="/admin/providers" style="color:var(--text2);font-size:.9rem">Back to providers</a>
+      <a href="/admin/providers" style="color:var(--text2);font-size:.9rem">返回登录方式列表</a>
     </div>
 
     {{if .Flash}}
@@ -31,16 +31,16 @@
     {{end}}
 
     {{with .Data}}
-    <h1 class="panel-title">Edit Provider: {{.Name}}</h1>
+    <h1 class="panel-title">编辑登录方式：{{.Name}}</h1>
 
     <div class="detail-section">
-      <div class="detail-section-title">Provider Identity</div>
+      <div class="detail-section-title">提供商标识</div>
       <div class="detail-row">
-        <div class="detail-key">Slug (read-only)</div>
+        <div class="detail-key">路径标识（只读，不可修改）</div>
         <div class="detail-val"><code style="color:var(--blue)">/auth/oidc/{{.Slug}}</code></div>
       </div>
       <div class="detail-row">
-        <div class="detail-key">Callback URL</div>
+        <div class="detail-key">回调地址</div>
         <div class="detail-val"><code style="color:var(--blue)">{{$.Issuer}}/auth/oidc/{{.Slug}}/callback</code></div>
       </div>
     </div>
@@ -51,33 +51,33 @@
 
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Display Name</label>
+            <label class="form-label">显示名称</label>
             <input class="form-control" type="text" name="name" value="{{.Name}}" required>
           </div>
           <div class="form-group">
-            <label class="form-label">Icon (optional)</label>
-            <input class="form-control" type="text" name="icon" value="{{.Icon}}" placeholder="e.g. X / G / key">
+            <label class="form-label">图标（可选）</label>
+            <input class="form-control" type="text" name="icon" value="{{.Icon}}" placeholder="例如：甲 / 乙 / 🔑">
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Client ID</label>
+            <label class="form-label">应用标识</label>
             <input class="form-control" type="text" name="client_id" value="{{.ClientID}}" required>
           </div>
           <div class="form-group">
-            <label class="form-label">Client Secret (leave blank to keep)</label>
-            <input class="form-control" type="password" name="client_secret" placeholder="Keep unchanged when empty">
+            <label class="form-label">客户端密钥（留空表示不修改）</label>
+            <input class="form-control" type="password" name="client_secret" placeholder="留空则保持不变">
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Issuer URL</label>
+            <label class="form-label">发行方地址</label>
             <input class="form-control" type="url" name="issuer_url" value="{{.IssuerURL}}" required>
           </div>
           <div class="form-group">
-            <label class="form-label">Scopes (space-separated)</label>
+            <label class="form-label">权限范围（空格分隔）</label>
             <input class="form-control" type="text" name="scopes" value="{{.Scopes}}">
           </div>
         </div>
@@ -85,13 +85,13 @@
         <div class="form-group" style="margin-bottom:1.2rem">
           <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
             <input type="checkbox" name="auto_register" value="1" {{if .AutoRegister}}checked{{end}}>
-            <span>Allow auto-registration for first-time external users</span>
+            <span>允许首次外部登录用户自动注册</span>
           </label>
         </div>
 
         <div style="display:flex;gap:.8rem">
-          <button class="btn btn-primary" type="submit">Save</button>
-          <a class="btn btn-ghost" href="/admin/providers">Cancel</a>
+          <button class="btn btn-primary" type="submit">保存</button>
+          <a class="btn btn-ghost" href="/admin/providers">取消</a>
         </div>
       </form>
     </div>

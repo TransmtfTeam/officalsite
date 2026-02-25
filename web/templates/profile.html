@@ -2,8 +2,8 @@
 
 {{define "content"}}
 <div class="profile-page" style="margin-top:60px">
-  <h1 style="font-size:1.6rem;font-weight:800;margin-bottom:.3rem">Profile</h1>
-  <p style="color:var(--text2);margin-bottom:1.5rem">Manage your account and security settings.</p>
+  <h1 style="font-size:1.6rem;font-weight:800;margin-bottom:.3rem">个人资料</h1>
+  <p style="color:var(--text2);margin-bottom:1.5rem">管理账户信息与安全设置</p>
 
   {{if .Flash}}
   <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
@@ -12,60 +12,60 @@
 
   {{with .CurrentUser}}
   <div class="card" style="margin-bottom:1.5rem">
-    <p style="font-size:.8rem;color:var(--text2);margin-bottom:1rem">Account Overview</p>
-    <p style="font-size:.9rem;margin-bottom:.3rem">Email: <strong>{{.Email}}</strong></p>
-    <p style="font-size:.9rem;margin-bottom:.3rem">Email Verified:
-      <strong>{{if .EmailVerified}}<span style="color:#16a34a">Yes</span>{{else}}<span style="color:#dc2626">No</span>{{end}}</strong>
+    <p style="font-size:.8rem;color:var(--text2);margin-bottom:1rem">账户概览</p>
+    <p style="font-size:.9rem;margin-bottom:.3rem">邮箱：<strong>{{.Email}}</strong></p>
+    <p style="font-size:.9rem;margin-bottom:.3rem">邮箱验证：
+      <strong>{{if .EmailVerified}}<span style="color:#16a34a">已验证</span>{{else}}<span style="color:#dc2626">未验证</span>{{end}}</strong>
     </p>
-    <p style="font-size:.9rem;margin-bottom:.3rem">Role: <strong>{{.RoleLabel}}</strong></p>
-    <p style="font-size:.9rem;margin-bottom:.3rem">2FA: <strong>{{if .TOTPEnabled}}Enabled{{else}}Disabled{{end}}</strong></p>
+    <p style="font-size:.9rem;margin-bottom:.3rem">角色：<strong>{{.RoleLabel}}</strong></p>
+    <p style="font-size:.9rem;margin-bottom:.3rem">两步验证：<strong>{{if .TOTPEnabled}}已启用{{else}}未启用{{end}}</strong></p>
   </div>
 
   <form method="POST" action="/profile">
     <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
     <div class="card" style="margin-bottom:1.5rem">
-      <p class="form-panel-title">Basic Information</p>
+      <p class="form-panel-title">基础信息</p>
       <div class="form-group">
-        <label class="form-label">Display Name</label>
+        <label class="form-label">显示名称</label>
         <input class="form-control" type="text" name="display_name" value="{{.DisplayName}}" required>
       </div>
       <div class="form-group">
-        <label class="form-label">Avatar URL (optional)</label>
-        <input class="form-control" type="url" name="avatar_url" value="{{.AvatarURL}}" placeholder="https://...">
+        <label class="form-label">头像地址（可选）</label>
+        <input class="form-control" type="url" name="avatar_url" value="{{.AvatarURL}}" placeholder="请输入头像地址">
       </div>
       <hr style="border:none;border-top:1px solid rgba(0,0,0,0.07);margin:1rem 0">
-      <p style="font-size:.85rem;color:var(--text2);margin-bottom:.8rem">Change password (leave blank to keep current password)</p>
+      <p style="font-size:.85rem;color:var(--text2);margin-bottom:.8rem">修改密码（留空表示不修改）</p>
       <div class="form-group">
-        <label class="form-label">Current Password</label>
+        <label class="form-label">当前密码</label>
         <input class="form-control" type="password" name="current_password" autocomplete="current-password">
       </div>
       <div class="form-group">
-        <label class="form-label">New Password (min 8 chars)</label>
+        <label class="form-label">新密码（至少 8 位）</label>
         <input class="form-control" type="password" name="new_password" minlength="8" autocomplete="new-password">
       </div>
       <div class="form-group">
-        <label class="form-label">Confirm New Password</label>
+        <label class="form-label">确认新密码</label>
         <input class="form-control" type="password" name="confirm_password" autocomplete="new-password">
       </div>
-      <button class="btn btn-primary" type="submit">Save Profile</button>
+      <button class="btn btn-primary" type="submit">保存资料</button>
     </div>
   </form>
 
   <div class="card" style="margin-bottom:1.5rem">
-    <p class="form-panel-title">Two-Factor Authentication (TOTP)</p>
+    <p class="form-panel-title">两步验证（动态口令）</p>
     {{if .TOTPEnabled}}
-    <p style="font-size:.9rem;color:var(--text2);margin-bottom:1rem">TOTP is enabled for your account.</p>
-    <button class="btn btn-danger btn-sm" data-modal="totp-disable-modal" type="button">Disable 2FA</button>
+    <p style="font-size:.9rem;color:var(--text2);margin-bottom:1rem">当前账号已启用动态口令。</p>
+    <button class="btn btn-danger btn-sm" data-modal="totp-disable-modal" type="button">关闭双重验证</button>
     {{else}}
-    <p style="font-size:.9rem;color:var(--text2);margin-bottom:1rem">Enable TOTP for stronger account security.</p>
-    <button class="btn btn-primary btn-sm" data-modal="totp-setup-modal" type="button">Enable 2FA</button>
+    <p style="font-size:.9rem;color:var(--text2);margin-bottom:1rem">建议启用动态口令，提升账户安全。</p>
+    <button class="btn btn-primary btn-sm" data-modal="totp-setup-modal" type="button">启用双重验证</button>
     {{end}}
   </div>
 
   <div class="card" style="margin-bottom:1.5rem">
-    <p class="form-panel-title">Passkeys</p>
+    <p class="form-panel-title">通行密钥</p>
     <p style="font-size:.88rem;color:var(--text2);margin-bottom:1rem">
-      Use Face ID, fingerprint, or security key to sign in.
+      使用指纹、面容识别或安全密钥登录。
     </p>
 
     {{with $.Data}}
@@ -77,32 +77,32 @@
     {{$allowDelete := or $hasPassword $canDeleteWithoutPassword}}
     {{range index . "Passkeys"}}
     <div class="passkey-item">
-      <div class="passkey-icon">PK</div>
+      <div class="passkey-icon">🔑</div>
       <div class="passkey-info">
         <div class="passkey-name">{{.Name}}</div>
-        <div class="passkey-date">Created {{.CreatedAt.Format "2006-01-02"}}</div>
+        <div class="passkey-date">注册于 {{.CreatedAt.Format "2006-01-02"}}</div>
       </div>
       {{if not $allowDelete}}
       <button class="btn btn-danger btn-sm" type="button" disabled
-        title="{{if not $hasPassword}}{{if le $passkeyCount 1}}Passwordless accounts must keep at least one passkey{{else}}Enable TOTP or set a password before deleting passkeys{{end}}{{else}}Delete unavailable{{end}}">Delete</button>
+        title="{{if not $hasPassword}}{{if le $passkeyCount 1}}无密码账户必须至少保留一个通行密钥{{else}}删除通行密钥前请先启用动态口令或设置密码{{end}}{{else}}当前不可删除{{end}}">删除</button>
       {{else}}
       <form method="POST" action="/profile/passkey/{{.ID}}/delete">
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
         <input type="hidden" name="current_password" value="">
         <input type="hidden" name="totp_code" value="">
         <button class="btn btn-danger btn-sm" type="submit"
-          onclick="return confirmPasskeyDelete(this.form, {{if $hasPassword}}true{{else}}false{{end}}, {{if $hasTOTP}}true{{else}}false{{end}}, {{if and (eq $passkeyCount 1) $hasPassword (not $hasTOTP)}}true{{else}}false{{end}})">Delete</button>
+          onclick="return confirmPasskeyDelete(this.form, {{if $hasPassword}}true{{else}}false{{end}}, {{if $hasTOTP}}true{{else}}false{{end}}, {{if and (eq $passkeyCount 1) $hasPassword (not $hasTOTP)}}true{{else}}false{{end}})">删除</button>
       </form>
       {{end}}
     </div>
     {{end}}
     {{else}}
-    <p style="font-size:.86rem;color:var(--text2);margin-bottom:.7rem">No passkeys registered.</p>
+    <p style="font-size:.86rem;color:var(--text2);margin-bottom:.7rem">尚未注册通行密钥。</p>
     {{end}}
 
     <div style="display:flex;gap:.6rem;align-items:center;margin-top:.8rem;flex-wrap:wrap">
-      <input class="form-control" type="text" id="passkey-name" placeholder="Passkey name (optional)" style="flex:1">
-      <button id="passkey-register-btn" class="btn btn-ghost btn-sm" type="button">Register Passkey</button>
+      <input class="form-control" type="text" id="passkey-name" placeholder="通行密钥名称（可选）" style="flex:1">
+      <button id="passkey-register-btn" class="btn btn-ghost btn-sm" type="button">注册通行密钥</button>
     </div>
     <div id="passkey-register-msg"></div>
     {{end}}
@@ -113,14 +113,14 @@
   {{$passkeyCount := index . "PasskeyCount"}}
   {{if and $hasPassword (gt $passkeyCount 0)}}
   <div class="card" style="margin-bottom:1.5rem">
-    <p class="form-panel-title" style="color:#dc2626">Delete Password</p>
+    <p class="form-panel-title" style="color:#dc2626">删除密码</p>
     <p style="font-size:.88rem;color:var(--text2);margin-bottom:1rem">
-      After deleting your password, you can only sign in with passkeys.
+      删除密码后，你只能使用通行密钥登录。
     </p>
     <form method="POST" action="/profile/delete-password">
       <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
       <button class="btn btn-danger btn-sm" type="submit"
-        onclick="return confirm('Delete password now? You will need a passkey to sign in.')">Delete Password</button>
+        onclick="return confirm('是否立即删除密码？删除后必须使用通行密钥登录。')">删除密码</button>
     </form>
   </div>
   {{end}}
@@ -132,36 +132,36 @@
 <div id="totp-setup-modal" class="modal">
   <div class="modal-box">
     <div class="modal-close" data-modal-close>&times;</div>
-    <h3 style="margin:0 0 .6rem;font-size:1.1rem">Enable TOTP</h3>
+    <h3 style="margin:0 0 .6rem;font-size:1.1rem">启用动态口令</h3>
 
     {{with .Data}}
     {{if index . "PendingSecret"}}
-    <p style="font-size:.88rem;color:var(--text2);margin-bottom:.8rem">Scan this QR code with your authenticator app, then enter a code to enable TOTP.</p>
+    <p style="font-size:.88rem;color:var(--text2);margin-bottom:.8rem">请使用认证器扫描二维码，然后输入 6 位验证码完成启用。</p>
     <div style="text-align:center;margin:.8rem 0 1rem">
-      <img src="/profile/2fa/qr" alt="TOTP QR Code" width="200" height="200">
+      <img src="/profile/2fa/qr" alt="动态口令二维码" width="200" height="200">
     </div>
     <details style="margin-bottom:.8rem">
-      <summary style="cursor:pointer;font-size:.82rem;color:var(--text2)">Show manual setup key</summary>
+      <summary style="cursor:pointer;font-size:.82rem;color:var(--text2)">显示手动输入密钥</summary>
       <div style="margin-top:.5rem;font-family:monospace;font-size:.82rem;word-break:break-all">{{index . "PendingSecret"}}</div>
     </details>
     <form method="POST" action="/profile/2fa/enable">
       <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
       <div class="form-group">
-        <label class="form-label">Verification Code</label>
+        <label class="form-label">认证器验证码</label>
         <input class="form-control" type="text" name="totp_code" placeholder="123456" required inputmode="numeric" pattern="[0-9]{6}">
       </div>
-      <button class="btn btn-primary" type="submit">Enable 2FA</button>
+      <button class="btn btn-primary" type="submit">启用双重验证</button>
     </form>
-    <div class="divider">Regenerate</div>
+    <div class="divider">重新生成</div>
     <form method="POST" action="/profile/2fa/start">
       <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-      <button class="btn btn-ghost btn-sm" type="submit">Generate New Secret</button>
+      <button class="btn btn-ghost btn-sm" type="submit">生成新密钥</button>
     </form>
     {{else}}
-    <p style="font-size:.88rem;color:var(--text2);margin-bottom:1.2rem">Generate a TOTP secret to begin setup.</p>
+    <p style="font-size:.88rem;color:var(--text2);margin-bottom:1.2rem">点击下方按钮生成动态口令密钥并继续设置。</p>
     <form method="POST" action="/profile/2fa/start">
       <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-      <button class="btn btn-primary" type="submit">Generate TOTP Secret</button>
+      <button class="btn btn-primary" type="submit">生成动态口令密钥</button>
     </form>
     {{end}}
     {{end}}
@@ -172,21 +172,21 @@
 <div id="totp-disable-modal" class="modal">
   <div class="modal-box">
     <div class="modal-close" data-modal-close>&times;</div>
-    <h3 style="margin:0 0 .6rem;font-size:1.1rem;color:#dc2626">Disable 2FA</h3>
+    <h3 style="margin:0 0 .6rem;font-size:1.1rem;color:#dc2626">关闭双重验证</h3>
     <p style="font-size:.88rem;color:var(--text2);margin-bottom:1rem">
-      For safety, provide either your current password or a valid TOTP code.
+      为保障安全，请提供当前密码或有效的动态口令验证码。
     </p>
     <form method="POST" action="/profile/2fa/disable">
       <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
       <div class="form-group">
-        <label class="form-label">Current Password (optional if you provide TOTP code)</label>
+        <label class="form-label">当前密码（若填写了验证码可留空）</label>
         <input class="form-control" type="password" name="current_password">
       </div>
       <div class="form-group">
-        <label class="form-label">TOTP Code (optional if password is provided)</label>
+        <label class="form-label">动态口令验证码（若填写了密码可留空）</label>
         <input class="form-control" type="text" name="totp_code" inputmode="numeric" pattern="[0-9]{6}" placeholder="123456">
       </div>
-      <button class="btn btn-danger" type="submit">Disable 2FA</button>
+      <button class="btn btn-danger" type="submit">关闭双重验证</button>
     </form>
   </div>
 </div>
@@ -196,36 +196,35 @@
 <script>
 function confirmPasskeyDelete(form, hasPassword, hasTOTP, showWeakWarning) {
   if (showWeakWarning) {
-    if (!confirm('Deleting this passkey may leave password-only login, which is weaker. Continue?')) {
+    if (!confirm('删除此通行密钥后可能只剩密码登录，安全性更弱。是否继续？')) {
       return false;
     }
-  } else if (!confirm('Delete this passkey?')) {
+  } else if (!confirm('确定删除此通行密钥吗？')) {
     return false;
   }
 
   var password = '';
   var totp = '';
   if (hasPassword) {
-    password = prompt('Enter current password. Leave blank to use TOTP.') || '';
+    password = prompt('请输入当前密码。留空则改为输入动态口令验证码。') || '';
   }
   if ((!password || password.trim() === '') && hasTOTP) {
-    totp = prompt('Enter TOTP code (6 digits).') || '';
+    totp = prompt('请输入 6 位动态口令验证码。') || '';
   }
   if (hasPassword && (!password || password.trim() === '') && (!hasTOTP || !totp || totp.trim() === '')) {
-    alert('Password or TOTP code is required to delete passkey.');
+    alert('删除通行密钥需要提供当前密码或动态口令验证码。');
     return false;
   }
   if (!hasPassword && hasTOTP && (!totp || totp.trim() === '')) {
-    alert('TOTP code is required to delete passkey.');
+    alert('无密码账户删除通行密钥时必须提供动态口令验证码。');
     return false;
   }
 
-  var p = form.querySelector('input[name=\"current_password\"]');
-  var t = form.querySelector('input[name=\"totp_code\"]');
+  var p = form.querySelector('input[name="current_password"]');
+  var t = form.querySelector('input[name="totp_code"]');
   if (p) p.value = password.trim();
   if (t) t.value = totp.trim();
   return true;
 }
 </script>
 {{end}}
-

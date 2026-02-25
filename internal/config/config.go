@@ -27,23 +27,23 @@ func Load() *Config {
 
 func (c *Config) Validate() error {
 	if strings.TrimSpace(c.Issuer) == "" {
-		return errors.New("ISSUER is required")
+		return errors.New("必须配置 ISSUER")
 	}
 	u, err := url.Parse(c.Issuer)
 	if err != nil || !u.IsAbs() || u.Host == "" {
-		return errors.New("ISSUER must be an absolute URL, e.g. https://auth.example.com")
+		return errors.New("ISSUER 必须是绝对地址，例如 https://auth.example.com")
 	}
 	if len(strings.TrimSpace(c.SessionSecret)) < 32 {
-		return errors.New("SESSION_SECRET must be at least 32 characters")
+		return errors.New("SESSION_SECRET 至少需要 32 个字符")
 	}
 	if c.SessionSecret == "dev_secret_do_not_use_in_prod" {
-		return errors.New("SESSION_SECRET cannot use default value")
+		return errors.New("SESSION_SECRET 不能使用默认值")
 	}
 	if c.AdminPassword == "" || c.AdminPassword == "changeme_in_production" {
-		return errors.New("ADMIN_PASSWORD must be changed from default")
+		return errors.New("ADMIN_PASSWORD 必须修改为非默认值")
 	}
 	if strings.Contains(c.DatabaseURL, "changeme_in_production") && !isLocalIssuer(c.Issuer) {
-		return errors.New("DATABASE_URL appears to use default database password")
+		return errors.New("DATABASE_URL 仍在使用默认数据库密码")
 	}
 	return nil
 }

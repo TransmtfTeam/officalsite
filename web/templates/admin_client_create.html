@@ -30,7 +30,7 @@
       <a href="/admin/clients" style="color:var(--text2);font-size:.9rem">← 返回列表</a>
     </div>
     <h1 class="panel-title">新建应用</h1>
-    <p class="panel-sub">注册一个新的 OAuth2/OIDC 客户端。</p>
+    <p class="panel-sub">注册一个新的授权登录应用。</p>
 
     {{if .Flash}}
     <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
@@ -42,7 +42,7 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">应用名称 <span style="color:#dc2626">*</span></label>
-            <input class="form-control" type="text" name="name" required placeholder="My App">
+            <input class="form-control" type="text" name="name" required placeholder="新应用">
           </div>
           <div class="form-group">
             <label class="form-label">描述（可选）</label>
@@ -50,14 +50,14 @@
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Redirect URIs（每行一个）<span style="color:#dc2626">*</span></label>
+          <label class="form-label">回调地址列表（每行一个）<span style="color:#dc2626">*</span></label>
           <textarea class="form-control" name="redirect_uris" rows="4"
-            placeholder="https://app.example.com/callback&#10;https://app.example.com/auth/oidc/callback" required></textarea>
-          <p style="font-size:.78rem;color:var(--text2);margin-top:.25rem">必须是 HTTPS，或 localhost/127.0.0.1 的 HTTP</p>
+            placeholder="请逐行填写回调地址" required></textarea>
+          <p style="font-size:.78rem;color:var(--text2);margin-top:.25rem">请填写安全协议地址，或本机调试地址。</p>
         </div>
         <div class="form-group">
-          <label class="form-label">Scopes（空格分隔）</label>
-          <input class="form-control" type="text" name="scopes" value="openid profile email">
+          <label class="form-label">权限范围（空格分隔）</label>
+          <input class="form-control" type="text" name="scopes" placeholder="留空使用默认权限项">
         </div>
         <div style="display:flex;gap:.8rem">
           <button class="btn btn-primary" type="submit">创建应用</button>

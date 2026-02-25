@@ -10,7 +10,6 @@ import (
 	"transmtf.com/oidc/internal/store"
 )
 
-
 func (h *Handler) Discovery(w http.ResponseWriter, r *http.Request) {
 	iss := h.cfg.Issuer
 	jsonResp(w, 200, map[string]any{
@@ -35,7 +34,6 @@ func (h *Handler) Discovery(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) JWKS(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, 200, h.keys.JWKSet())
 }
-
 
 type authRequest struct {
 	ClientID            string
@@ -63,25 +61,25 @@ func (h *Handler) Authorize(w http.ResponseWriter, r *http.Request) {
 
 	client, err := h.st.GetClientByClientID(r.Context(), ar.ClientID)
 	if err != nil {
-		oidcError(w, 400, "invalid_client", "unknown client_id")
+		oidcError(w, 400, "invalid_client", "未知应用标识")
 		return
 	}
 	// Validate redirect_uri first - before any redirect-based error response
 	if !validRedirectURI(client.RedirectURIs, ar.RedirectURI) {
-		oidcError(w, 400, "invalid_request", "redirect_uri mismatch")
+		oidcError(w, 400, "invalid_request", "回调地址不匹配")
 		return
 	}
 	if ar.ResponseType != "code" {
-		h.authRedirectError(w, r, ar.RedirectURI, ar.State, "unsupported_response_type", "only 'code' supported")
+		h.authRedirectError(w, r, ar.RedirectURI, ar.State, "unsupported_response_type", "仅支持授权码模式")
 		return
 	}
 	reqScopes := normalizeScopes(scopeList(ar.Scope))
 	if len(reqScopes) == 0 {
-		h.authRedirectError(w, r, ar.RedirectURI, ar.State, "invalid_scope", "at least one scope is required")
+		h.authRedirectError(w, r, ar.RedirectURI, ar.State, "invalid_scope", "至少需要一个权限范围")
 		return
 	}
 	if !scopesSubset(reqScopes, client.Scopes) {
-		h.authRedirectError(w, r, ar.RedirectURI, ar.State, "invalid_scope", "requested scope is not allowed for this client")
+		h.authRedirectError(w, r, ar.RedirectURI, ar.State, "invalid_scope", "请求的权限范围不在应用允许列表中")
 		return
 	}
 	ar.Scope = strings.Join(reqScopes, " ")
@@ -89,19 +87,19 @@ func (h *Handler) Authorize(w http.ResponseWriter, r *http.Request) {
 		ar.CodeChallengeMethod = "plain"
 	}
 	if ar.CodeChallenge != "" && ar.CodeChallengeMethod != "S256" && ar.CodeChallengeMethod != "plain" {
-		h.authRedirectError(w, r, ar.RedirectURI, ar.State, "invalid_request", "unsupported code_challenge_method")
+		h.authRedirectError(w, r, ar.RedirectURI, ar.State, "invalid_request", "不支持的挑战校验方式")
 		return
 	}
 	if ar.CodeChallenge == "" && ar.CodeChallengeMethod != "" {
-		h.authRedirectError(w, r, ar.RedirectURI, ar.State, "invalid_request", "code_challenge required when code_challenge_method is set")
+		h.authRedirectError(w, r, ar.RedirectURI, ar.State, "invalid_request", "设置挑战校验方式时必须提供挑战值")
 		return
 	}
 
 	// Check client access policy (base role policy OR group membership).
 	u := h.currentUser(r)
 	if !h.st.UserCanAccessClient(r.Context(), u, client.BaseAccess, client.AllowedGroups) {
-		d := h.pageData(r, "Access Denied")
-		d.Flash = "You do not have permission to access this client. Please contact an administrator."
+		d := h.pageData(r, "访问受限")
+		d.Flash = "您没有访问此应用的权限，请联系管理员。"
 		d.IsError = true
 		h.render(w, "error", d)
 		return
@@ -110,7 +108,7 @@ func (h *Handler) Authorize(w http.ResponseWriter, r *http.Request) {
 	// Build display scopes: remove "role" if "profile" is already requested.
 	displayScopes := filterRedundantScopes(reqScopes)
 
-	d := h.pageData(r, "Consent")
+	d := h.pageData(r, "授权确认")
 	d.Data = map[string]any{
 		"Client":  client,
 		"Request": ar,
@@ -142,9 +140,9 @@ func filterRedundantScopes(scopes []string) []string {
 	return out
 }
 
-func (h *Handler) AuthorizeConsent(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) AuthorizeConfirm(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", 400)
+		http.Error(w, "请求参数错误", 400)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -154,7 +152,7 @@ func (h *Handler) AuthorizeConsent(w http.ResponseWriter, r *http.Request) {
 
 	action := r.FormValue("action")
 	if action != "allow" && action != "deny" {
-		oidcError(w, 400, "invalid_request", "invalid consent action")
+		oidcError(w, 400, "invalid_request", "授权操作无效")
 		return
 	}
 	ar := authRequest{
@@ -169,38 +167,38 @@ func (h *Handler) AuthorizeConsent(w http.ResponseWriter, r *http.Request) {
 
 	client, err := h.st.GetClientByClientID(r.Context(), ar.ClientID)
 	if err != nil || !validRedirectURI(client.RedirectURIs, ar.RedirectURI) {
-		oidcError(w, 400, "invalid_client", "invalid client or redirect_uri")
+		oidcError(w, 400, "invalid_client", "应用标识或回调地址无效")
 		return
 	}
 	reqScopes := normalizeScopes(scopeList(ar.Scope))
 	if len(reqScopes) == 0 {
-		oidcError(w, 400, "invalid_scope", "at least one scope is required")
+		oidcError(w, 400, "invalid_scope", "至少需要一个权限范围")
 		return
 	}
 	if !scopesSubset(reqScopes, client.Scopes) {
-		oidcError(w, 400, "invalid_scope", "requested scope is not allowed for this client")
+		oidcError(w, 400, "invalid_scope", "请求的权限范围不在应用允许列表中")
 		return
 	}
 	if ar.CodeChallengeMethod == "" && ar.CodeChallenge != "" {
 		ar.CodeChallengeMethod = "plain"
 	}
 	if ar.CodeChallenge != "" && ar.CodeChallengeMethod != "S256" && ar.CodeChallengeMethod != "plain" {
-		oidcError(w, 400, "invalid_request", "unsupported code_challenge_method")
+		oidcError(w, 400, "invalid_request", "不支持的挑战校验方式")
 		return
 	}
 	if ar.CodeChallenge == "" && ar.CodeChallengeMethod != "" {
-		oidcError(w, 400, "invalid_request", "code_challenge required when code_challenge_method is set")
+		oidcError(w, 400, "invalid_request", "设置挑战校验方式时必须提供挑战值")
 		return
 	}
 	if action == "deny" {
-		h.authRedirectError(w, r, ar.RedirectURI, ar.State, "access_denied", "user denied access")
+		h.authRedirectError(w, r, ar.RedirectURI, ar.State, "access_denied", "用户拒绝授权")
 		return
 	}
 
 	u := h.currentUser(r)
 	// Re-validate access policy on POST (don't trust only the GET check).
 	if !h.st.UserCanAccessClient(r.Context(), u, client.BaseAccess, client.AllowedGroups) {
-		oidcError(w, 403, "access_denied", "user does not satisfy client access policy")
+		oidcError(w, 403, "access_denied", "当前账户不满足应用访问策略")
 		return
 	}
 
@@ -218,28 +216,27 @@ func (h *Handler) AuthorizeConsent(w http.ResponseWriter, r *http.Request) {
 		"state": ar.State,
 	})
 	if err != nil {
-		oidcError(w, 400, "invalid_request", "invalid redirect_uri")
+		oidcError(w, 400, "invalid_request", "回调地址无效")
 		return
 	}
 	http.Redirect(w, r, redir, http.StatusFound)
 }
 
-
 func (h *Handler) Token(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		oidcError(w, 400, "invalid_request", "cannot parse form")
+		oidcError(w, 400, "invalid_request", "无法解析请求参数")
 		return
 	}
 
 	clientID, clientSecret := extractClientCreds(r)
 	if clientID == "" {
-		oidcError(w, 401, "invalid_client", "missing client credentials")
+		oidcError(w, 401, "invalid_client", "缺少应用凭据")
 		return
 	}
 
 	client, err := h.st.GetClientByClientID(r.Context(), clientID)
 	if err != nil || !h.st.VerifyClientSecret(client, clientSecret) {
-		oidcError(w, 401, "invalid_client", "client authentication failed")
+		oidcError(w, 401, "invalid_client", "应用身份验证失败")
 		return
 	}
 
@@ -252,40 +249,40 @@ func (h *Handler) Token(w http.ResponseWriter, r *http.Request) {
 	case "client_credentials":
 		h.tokenClientCredentials(w, r, client)
 	default:
-		oidcError(w, 400, "unsupported_grant_type", "unsupported grant_type")
+		oidcError(w, 400, "unsupported_grant_type", "不支持的授权类型")
 	}
 }
 
 func (h *Handler) tokenAuthCode(w http.ResponseWriter, r *http.Request, client *store.OAuthClient) {
-	code        := r.FormValue("code")
+	code := r.FormValue("code")
 	redirectURI := r.FormValue("redirect_uri")
-	verifier    := r.FormValue("code_verifier")
+	verifier := r.FormValue("code_verifier")
 
 	ac, err := h.st.ConsumeAuthCode(r.Context(), code)
 	if err != nil {
-		oidcError(w, 400, "invalid_grant", "invalid or expired code")
+		oidcError(w, 400, "invalid_grant", "授权码无效或已过期")
 		return
 	}
 	if ac.ClientID != client.ClientID {
-		oidcError(w, 400, "invalid_grant", "code was not issued to this client")
+		oidcError(w, 400, "invalid_grant", "该授权码不属于当前应用")
 		return
 	}
 	if ac.RedirectURI != redirectURI {
-		oidcError(w, 400, "invalid_grant", "redirect_uri mismatch")
+		oidcError(w, 400, "invalid_grant", "回调地址不匹配")
 		return
 	}
 	if ac.Challenge != "" && verifier == "" {
-		oidcError(w, 400, "invalid_grant", "missing code_verifier")
+		oidcError(w, 400, "invalid_grant", "缺少挑战校验值")
 		return
 	}
 	if ac.Challenge != "" && !verifyPKCE(verifier, ac.Challenge, ac.Method) {
-		oidcError(w, 400, "invalid_grant", "PKCE verification failed")
+		oidcError(w, 400, "invalid_grant", "挑战校验失败")
 		return
 	}
 
 	u, err := h.st.GetUserByID(r.Context(), ac.UserID)
 	if err != nil {
-		oidcError(w, 500, "server_error", "user not found")
+		oidcError(w, 500, "server_error", "用户不存在")
 		return
 	}
 
@@ -296,11 +293,11 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request, client *s
 	raw := r.FormValue("refresh_token")
 	rt, err := h.st.GetRefreshToken(r.Context(), raw)
 	if err != nil {
-		oidcError(w, 400, "invalid_grant", "invalid or expired refresh_token")
+		oidcError(w, 400, "invalid_grant", "刷新令牌无效或已过期")
 		return
 	}
 	if rt.ClientID != client.ClientID {
-		oidcError(w, 400, "invalid_grant", "refresh_token was not issued to this client")
+		oidcError(w, 400, "invalid_grant", "刷新令牌不属于当前应用")
 		return
 	}
 
@@ -308,7 +305,7 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request, client *s
 
 	u, err := h.st.GetUserByID(r.Context(), rt.UserID)
 	if err != nil {
-		oidcError(w, 500, "server_error", "user not found")
+		oidcError(w, 500, "server_error", "用户不存在")
 		return
 	}
 	h.issueTokens(w, r, u, rt.ClientID, rt.Scopes, "")
@@ -323,7 +320,7 @@ func (h *Handler) tokenClientCredentials(w http.ResponseWriter, r *http.Request,
 		scopeReq = client.Scopes
 	}
 	if !scopesSubset(scopeReq, client.Scopes) {
-		oidcError(w, 400, "invalid_scope", "requested scope is not allowed for this client")
+		oidcError(w, 400, "invalid_scope", "请求的权限范围不在应用允许列表中")
 		return
 	}
 	// Remove openid - client_credentials cannot issue ID tokens (no user context)
@@ -338,7 +335,7 @@ func (h *Handler) tokenClientCredentials(w http.ResponseWriter, r *http.Request,
 	// user_id is empty for client_credentials - no user is involved
 	at, err := h.st.CreateAccessToken(ctx, "", client.ClientID, scopes)
 	if err != nil {
-		oidcError(w, 500, "server_error", "could not create access token")
+		oidcError(w, 500, "server_error", "创建访问令牌失败")
 		return
 	}
 	jsonResp(w, 200, map[string]any{
@@ -353,12 +350,12 @@ func (h *Handler) issueTokens(w http.ResponseWriter, r *http.Request, u *store.U
 	ctx := r.Context()
 	at, err := h.st.CreateAccessToken(ctx, u.ID, clientID, scopes)
 	if err != nil {
-		oidcError(w, 500, "server_error", "could not create access token")
+		oidcError(w, 500, "server_error", "创建访问令牌失败")
 		return
 	}
 	rt, err := h.st.CreateRefreshToken(ctx, u.ID, clientID, scopes)
 	if err != nil {
-		oidcError(w, 500, "server_error", "could not create refresh token")
+		oidcError(w, 500, "server_error", "创建刷新令牌失败")
 		return
 	}
 
@@ -375,7 +372,7 @@ func (h *Handler) issueTokens(w http.ResponseWriter, r *http.Request, u *store.U
 	if containsScope(scopes, "openid") {
 		idTok, err := h.keys.SignIDToken(h.cfg.Issuer, u.ID, clientID, nonce, scopes, u)
 		if err != nil {
-			oidcError(w, 500, "server_error", "could not sign id_token")
+			oidcError(w, 500, "server_error", "签发身份令牌失败")
 			return
 		}
 		resp["id_token"] = idTok
@@ -384,22 +381,21 @@ func (h *Handler) issueTokens(w http.ResponseWriter, r *http.Request, u *store.U
 	jsonResp(w, 200, resp)
 }
 
-
 func (h *Handler) UserInfo(w http.ResponseWriter, r *http.Request) {
 	raw := bearerToken(r)
 	if raw == "" {
 		w.Header().Set("WWW-Authenticate", `Bearer realm="transmtf"`)
-		oidcError(w, 401, "invalid_token", "missing bearer token")
+		oidcError(w, 401, "invalid_token", "缺少访问令牌")
 		return
 	}
 	at, err := h.st.GetAccessToken(r.Context(), raw)
 	if err != nil {
-		oidcError(w, 401, "invalid_token", "token expired or not found")
+		oidcError(w, 401, "invalid_token", "访问令牌已过期或不存在")
 		return
 	}
 	if !containsScope(at.Scopes, "openid") {
 		w.Header().Set("WWW-Authenticate", `Bearer realm="transmtf", error="insufficient_scope", scope="openid"`)
-		oidcError(w, 403, "insufficient_scope", "openid scope required")
+		oidcError(w, 403, "insufficient_scope", "需要核心登录权限")
 		return
 	}
 	// client_credentials tokens have no user_id; return client subject only.
@@ -409,7 +405,7 @@ func (h *Handler) UserInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	u, err := h.st.GetUserByID(r.Context(), at.UserID)
 	if err != nil {
-		oidcError(w, 500, "server_error", "user not found")
+		oidcError(w, 500, "server_error", "用户不存在")
 		return
 	}
 
@@ -428,19 +424,18 @@ func (h *Handler) UserInfo(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, 200, claims)
 }
 
-
 func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		oidcError(w, 400, "invalid_request", "cannot parse form")
+		oidcError(w, 400, "invalid_request", "无法解析请求参数")
 		return
 	}
 	clientID, clientSecret := extractClientCreds(r)
 	client, err := h.st.GetClientByClientID(r.Context(), clientID)
 	if err != nil || !h.st.VerifyClientSecret(client, clientSecret) {
-		oidcError(w, 401, "invalid_client", "client authentication failed")
+		oidcError(w, 401, "invalid_client", "应用身份验证失败")
 		return
 	}
-	token     := r.FormValue("token")
+	token := r.FormValue("token")
 	tokenType := r.FormValue("token_type_hint")
 	ctx := r.Context()
 	if tokenType == "refresh_token" {
@@ -458,16 +453,15 @@ func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 }
 
-
 func (h *Handler) Introspect(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		oidcError(w, 400, "invalid_request", "cannot parse form")
+		oidcError(w, 400, "invalid_request", "无法解析请求参数")
 		return
 	}
 	clientID, clientSecret := extractClientCreds(r)
 	client, err := h.st.GetClientByClientID(r.Context(), clientID)
 	if err != nil || !h.st.VerifyClientSecret(client, clientSecret) {
-		oidcError(w, 401, "invalid_client", "client authentication failed")
+		oidcError(w, 401, "invalid_client", "应用身份验证失败")
 		return
 	}
 	raw := r.FormValue("token")
@@ -502,7 +496,6 @@ func (h *Handler) Introspect(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonResp(w, 200, resp)
 }
-
 
 func extractClientCreds(r *http.Request) (id, secret string) {
 	// Basic auth first
@@ -543,7 +536,7 @@ func (h *Handler) authRedirectError(w http.ResponseWriter, r *http.Request, redi
 		"state":             state,
 	})
 	if err != nil {
-		oidcError(w, 400, "invalid_request", "invalid redirect_uri")
+		oidcError(w, 400, "invalid_request", "回调地址无效")
 		return
 	}
 	http.Redirect(w, r, u, http.StatusFound)
@@ -573,4 +566,3 @@ func containsScope(scopes []string, target string) bool {
 	}
 	return false
 }
-

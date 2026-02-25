@@ -1,7 +1,7 @@
-// profile.js: modal handling, confirm dialogs, and mobile sidebar behavior.
+// 个人资料页脚本：弹窗、确认框与移动端侧栏行为。
 
 document.addEventListener('DOMContentLoaded', function () {
-  // Generic modals.
+  // 通用弹窗。
   document.querySelectorAll('[data-modal]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var modal = document.getElementById(btn.getAttribute('data-modal'));
@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (totpModal) totpModal.classList.add('open');
   }
 
-  // Themed confirm dialog.
+  // 主题确认弹窗。
   var cdOverlay = document.getElementById('cdialog-overlay');
   var cdIcon = document.getElementById('cdialog-icon');
   var cdTitle = document.getElementById('cdialog-title');
@@ -36,48 +36,48 @@ document.addEventListener('DOMContentLoaded', function () {
   var cdCancel = document.getElementById('cdialog-cancel');
   var cdCb = null;
 
-  function showConfirm(opts) {
+  function show确认(opts) {
     if (cdIcon) cdIcon.textContent = opts.icon || '!';
-    if (cdTitle) cdTitle.textContent = opts.title || 'Confirm Action';
+    if (cdTitle) cdTitle.textContent = opts.title || '确认操作';
     if (cdMsg) cdMsg.textContent = opts.msg || '';
     if (cdOK) {
-      cdOK.textContent = opts.confirmLabel || 'Confirm';
+      cdOK.textContent = opts.confirmLabel || '确认';
       cdOK.className = 'btn ' + (opts.danger !== false ? 'btn-danger' : 'btn-primary');
     }
-    cdCb = opts.onConfirm || null;
+    cdCb = opts.on确认 || null;
     if (cdOverlay) cdOverlay.classList.add('active');
   }
 
-  function closeConfirm() {
+  function close确认() {
     if (cdOverlay) cdOverlay.classList.remove('active');
     cdCb = null;
   }
 
-  if (cdCancel) cdCancel.addEventListener('click', closeConfirm);
+  if (cdCancel) cdCancel.addEventListener('click', close确认);
   if (cdOverlay) {
     cdOverlay.addEventListener('click', function (e) {
-      if (e.target === cdOverlay) closeConfirm();
+      if (e.target === cdOverlay) close确认();
     });
   }
   if (cdOK) {
     cdOK.addEventListener('click', function () {
       var fn = cdCb;
-      closeConfirm();
+      close确认();
       if (fn) fn();
     });
   }
 
-  // Attach confirm dialog to elements with data-confirm attribute.
+  // 给带有 data-confirm 的元素绑定确认弹窗。
   document.querySelectorAll('[data-confirm]').forEach(function (el) {
     el.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
-      showConfirm({
+      show确认({
         icon: el.getAttribute('data-confirm-icon') || '!',
-        title: el.getAttribute('data-confirm-title') || 'Confirm Action',
+        title: el.getAttribute('data-confirm-title') || '确认操作',
         msg: el.getAttribute('data-confirm') || '',
-        confirmLabel: el.getAttribute('data-confirm-btn') || 'Confirm',
-        onConfirm: function () {
+        confirmLabel: el.getAttribute('data-confirm-btn') || '确认',
+        on确认: function () {
           var form = el.form || el.closest('form');
           if (form) {
             if (el.name) {
@@ -99,7 +99,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
-  // Mobile sidebar toggle.
+  // 移动端侧栏开关。
   var sidebarToggle = document.getElementById('sidebar-toggle');
   var sidebar = document.querySelector('.sidebar');
   var backdrop = document.getElementById('sidebar-backdrop');

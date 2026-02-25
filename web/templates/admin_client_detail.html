@@ -40,11 +40,11 @@
 
     <h1 class="panel-title">{{$client.Name}}</h1>
 
-    {{/* ── Client info ── */}}
+    {{/* ── 基础信息 ── */}}
     <div class="detail-section">
       <div class="detail-section-title">基本信息</div>
       <div class="detail-row">
-        <div class="detail-key">Client ID</div>
+        <div class="detail-key">应用标识</div>
         <div class="detail-val mono">{{$client.ClientID}}</div>
       </div>
       <div class="detail-row">
@@ -56,11 +56,11 @@
         <div class="detail-val">{{if $client.Description}}{{$client.Description}}{{else}}<span style="color:var(--text2)">（无）</span>{{end}}</div>
       </div>
       <div class="detail-row">
-        <div class="detail-key">Scopes</div>
+        <div class="detail-key">权限范围</div>
         <div class="detail-val">{{range $client.Scopes}}<span class="proj-tag">{{.}}</span> {{end}}</div>
       </div>
       <div class="detail-row">
-        <div class="detail-key">Redirect URIs</div>
+        <div class="detail-key">回调地址列表</div>
         <div class="detail-val">{{range $client.RedirectURIs}}<div class="mono" style="font-size:.82rem">{{.}}</div>{{end}}</div>
       </div>
       <div class="detail-row">
@@ -69,15 +69,15 @@
       </div>
     </div>
 
-    {{/* ── Integration guide ── */}}
+    {{/* ── 接入指南 ── */}}
     <details class="detail-section" style="cursor:pointer">
       <summary style="font-weight:600;font-size:.95rem;list-style:none;display:flex;align-items:center;justify-content:space-between">
-        接入指南 <span style="font-size:.8rem;color:var(--text2);font-weight:400">（填写到第三方服务的 OIDC / SSO 配置页）▾</span>
+        接入指南 <span style="font-size:.8rem;color:var(--text2);font-weight:400">（填写到第三方单点登录配置页）▾</span>
       </summary>
 
       <p style="font-size:.82rem;color:var(--text2);margin:.8rem 0 1rem">
-        将本服务作为 OIDC 身份提供商（IdP）接入 Cloudflare Access、Authentik、Grafana、GitLab 等系统时，按下表填写。
-        支持自动发现的系统只需填写 <strong>发现文档 URL</strong> 即可，其余 URL 会自动获取。
+        将本服务作为身份提供方接入第三方系统时，可按下表填写。
+        若对方支持自动发现，仅需填写 <strong>发现文档地址</strong>，其余地址会自动获取。
       </p>
 
       <table class="data-table" style="margin-bottom:1rem">
@@ -86,69 +86,69 @@
         </thead>
         <tbody>
           <tr>
-            <td>发现文档 URL<br><span style="font-size:.75rem;color:var(--text2)">OIDC Discovery / Well-Known</span></td>
+            <td>发现文档地址<br><span style="font-size:.75rem;color:var(--text2)">自动发现入口</span></td>
             <td><code class="mono">{{$.Issuer}}/.well-known/openid-configuration</code></td>
           </tr>
           <tr>
-            <td>身份验证 URL<br><span style="font-size:.75rem;color:var(--text2)">Authorization Endpoint</span></td>
+            <td>身份验证地址<br><span style="font-size:.75rem;color:var(--text2)">授权端点</span></td>
             <td><code class="mono">{{$.Issuer}}/oauth2/authorize</code></td>
           </tr>
           <tr>
-            <td>令牌 URL<br><span style="font-size:.75rem;color:var(--text2)">Token Endpoint</span></td>
+            <td>令牌地址<br><span style="font-size:.75rem;color:var(--text2)">令牌端点</span></td>
             <td><code class="mono">{{$.Issuer}}/oauth2/token</code></td>
           </tr>
           <tr>
-            <td>证书 URL<br><span style="font-size:.75rem;color:var(--text2)">JWKS URI / Certs Endpoint</span></td>
+            <td>证书地址<br><span style="font-size:.75rem;color:var(--text2)">公钥清单端点</span></td>
             <td><code class="mono">{{$.Issuer}}/.well-known/jwks.json</code></td>
           </tr>
           <tr>
-            <td>Client ID</td>
+            <td>应用标识</td>
             <td><code class="mono">{{$client.ClientID}}</code></td>
           </tr>
           <tr>
-            <td>Client Secret</td>
+            <td>应用密钥</td>
             <td><span style="color:var(--text2);font-size:.85rem">创建时一次性显示；如已丢失请重置</span></td>
           </tr>
           <tr>
-            <td>PKCE<br><span style="font-size:.75rem;color:var(--text2)">Code Challenge Method</span></td>
-            <td><code class="mono">S256</code> <span style="font-size:.82rem;color:var(--text2)">（已支持，推荐开启）</span></td>
+            <td>请求校验方式<br><span style="font-size:.75rem;color:var(--text2)">挑战校验方式</span></td>
+            <td><span style="font-size:.82rem;color:var(--text2)">系统默认开启推荐模式</span></td>
           </tr>
           <tr>
-            <td>SCIM</td>
+            <td>目录同步</td>
             <td><span style="color:var(--text2);font-size:.85rem">不支持，保持关闭</span></td>
           </tr>
           <tr>
-            <td>电子邮件声明<br><span style="font-size:.75rem;color:var(--text2)">Email Claim</span></td>
-            <td><code class="mono">email</code></td>
+            <td>电子邮件字段<br><span style="font-size:.75rem;color:var(--text2)">邮件字段名</span></td>
+            <td><span style="font-size:.82rem;color:var(--text2)">使用系统默认字段</span></td>
           </tr>
           <tr>
-            <td>OIDC 范围<br><span style="font-size:.75rem;color:var(--text2)">Scopes</span></td>
-            <td><code class="mono">openid email profile</code></td>
+            <td>权限范围<br><span style="font-size:.75rem;color:var(--text2)">请求权限项</span></td>
+            <td><span style="font-size:.82rem;color:var(--text2)">默认权限项（核心登录、邮箱、资料）</span></td>
           </tr>
           <tr>
-            <td>可用自定义声明<br><span style="font-size:.75rem;color:var(--text2)">Custom Claims from id_token</span></td>
+            <td>可用附加字段<br><span style="font-size:.75rem;color:var(--text2)">身份令牌可选字段</span></td>
             <td>
-              <code class="mono">role</code> — 用户角色（user / member / admin）<br>
-              <code class="mono">name</code> — 显示名称（需要 profile scope）<br>
-              <code class="mono">picture</code> — 头像 URL（需要 profile scope）
+              用户角色字段（用户 / 成员 / 管理员）<br>
+              显示名称字段（需要个人资料权限）<br>
+              头像地址字段（需要个人资料权限）
             </td>
           </tr>
         </tbody>
       </table>
 
       <div style="background:#f8fafc;border:1px solid var(--glass-b);border-radius:10px;padding:.9rem 1rem;font-size:.82rem;color:var(--text2)">
-        <strong style="color:var(--text)">Cloudflare Access 填写示例：</strong><br>
-        身份验证 URL → <code>{{$.Issuer}}/oauth2/authorize</code><br>
-        令牌 URL → <code>{{$.Issuer}}/oauth2/token</code><br>
-        证书 URL → <code>{{$.Issuer}}/.well-known/jwks.json</code><br>
-        PKCE → <strong>开启</strong>（机密客户端也支持）&emsp;
-        SCIM → <strong>关闭</strong>&emsp;
-        电子邮件声明 → <code>email</code><br>
-        OIDC 范围 → <code>openid email profile</code>（在原有基础上追加）
+        <strong style="color:var(--text)">接入填写示例：</strong><br>
+        身份验证地址 → <code>{{$.Issuer}}/oauth2/authorize</code><br>
+        令牌地址 → <code>{{$.Issuer}}/oauth2/token</code><br>
+        证书地址 → <code>{{$.Issuer}}/.well-known/jwks.json</code><br>
+        请求校验方式 → <strong>开启</strong>（机密应用同样支持）&emsp;
+        目录同步 → <strong>关闭</strong>&emsp;
+        电子邮件字段 → <strong>使用系统默认字段</strong><br>
+        权限范围 → <strong>默认权限项（核心登录、邮箱、资料）</strong>
       </div>
     </details>
 
-    {{/* ── Edit form ── */}}
+    {{/* ── 编辑信息 ── */}}
     <div class="detail-section">
       <div class="detail-section-title">编辑信息</div>
       <form method="POST" action="/admin/clients/{{$client.ID}}/update">
@@ -162,12 +162,12 @@
           <input class="form-control" type="text" name="description" value="{{$client.Description}}">
         </div>
         <div class="form-group">
-          <label class="form-label">Redirect URIs（每行一个）</label>
+          <label class="form-label">回调地址列表（每行一个）</label>
           <textarea class="form-control" name="redirect_uris" rows="4">{{range $client.RedirectURIs}}{{.}}
 {{end}}</textarea>
         </div>
         <div class="form-group">
-          <label class="form-label">Scopes（空格分隔）</label>
+          <label class="form-label">权限范围（空格分隔）</label>
           <input class="form-control" type="text" name="scopes" value="{{range $client.Scopes}}{{.}} {{end}}">
         </div>
         <div class="form-group">
@@ -175,29 +175,28 @@
           <select class="form-control" name="base_access">
             <option value="legacy" {{if eq $client.BaseAccess "legacy"}}selected{{end}}>兼容模式（有分组则仅按分组，无分组则全部可访问）</option>
             <option value="user" {{if eq $client.BaseAccess "user"}}selected{{end}}>所有已登录用户</option>
-            <option value="member" {{if eq $client.BaseAccess "member"}}selected{{end}}>member 及以上</option>
-            <option value="admin" {{if eq $client.BaseAccess "admin"}}selected{{end}}>仅 admin</option>
+            <option value="member" {{if eq $client.BaseAccess "member"}}selected{{end}}>成员及以上</option>
+            <option value="admin" {{if eq $client.BaseAccess "admin"}}selected{{end}}>仅管理员</option>
             <option value="none" {{if eq $client.BaseAccess "none"}}selected{{end}}>不启用基础权限（仅分组）</option>
           </select>
           <span style="font-size:.78rem;color:var(--text2)">
-            访问规则为「基础访问权限 OR 任意命中一个分组」。
+            访问规则为「基础访问权限 或 任意命中一个分组」。
           </span>
         </div>
         <div class="form-group">
           <label class="form-label">可访问分组（空格分隔）</label>
           <input class="form-control" type="text" name="allowed_groups"
             value="{{range $client.AllowedGroups}}{{.}} {{end}}"
-            placeholder="member admin my-group">
+            placeholder="请输入分组代号">
           <span style="font-size:.78rem;color:var(--text2)">
-            内置分组：<code>admin</code>（管理员）、<code>member</code>（成员及以上）、<code>user</code>（所有登录用户）；
-            自定义分组见「分组管理」页。多个分组满足任意一个即可。
+            系统分组由系统自动维护；自定义分组请在「分组管理」页面查看分组代号。多个分组命中任意一个即可。
           </span>
         </div>
         <button class="btn btn-primary btn-sm" type="submit">保存修改</button>
       </form>
     </div>
 
-    {{/* ── Announcement ── */}}
+    {{/* ── 应用公告 ── */}}
     <div class="detail-section">
       <div class="detail-section-title">应用公告</div>
       <p style="font-size:.82rem;color:var(--text2);margin-bottom:.8rem">
@@ -212,14 +211,14 @@
       </form>
     </div>
 
-    {{/* ── Danger zone ── */}}
+    {{/* ── 危险操作 ── */}}
     <div class="detail-section" style="border-color:#fecaca">
       <div class="detail-section-title">危险操作</div>
       <div style="display:flex;gap:.8rem;flex-wrap:wrap">
         <form method="POST" action="/admin/clients/{{$client.ID}}/reset-secret">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           <button class="btn btn-ghost btn-sm" type="submit"
-            data-confirm="重置后旧 Secret 立即失效，所有使用旧 Secret 的应用都需要更新。" data-confirm-title="重置 Client Secret" data-confirm-icon="🔑">重置 Client Secret</button>
+            data-confirm="重置后旧密钥立即失效，所有使用旧密钥的应用都需要更新。" data-confirm-title="重置应用密钥" data-confirm-icon="🔑">重置应用密钥</button>
         </form>
         <form method="POST" action="/admin/clients/{{$client.ID}}/delete">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">

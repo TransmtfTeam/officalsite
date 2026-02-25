@@ -15,13 +15,13 @@ import (
 
 func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
-		h.renderError(w, r, http.StatusNotFound, "Not Found", r.URL.Path)
+		h.renderError(w, r, http.StatusNotFound, "页面不存在", r.URL.Path)
 		return
 	}
 	ctx := r.Context()
 	projects, _ := h.st.ListProjects(ctx)
 	links, _ := h.st.ListFriendLinks(ctx)
-	d := h.pageData(r, "MTF - Team TransMTF")
+	d := h.pageData(r, "首页")
 	d.Data = map[string]any{
 		"Projects": projects,
 		"Links":    links,
@@ -35,7 +35,7 @@ func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	providers, _ := h.st.ListEnabledOIDCProviders(r.Context())
-    d := h.pageData(r, "Login")
+	d := h.pageData(r, "登录")
 	if flash := strings.TrimSpace(r.URL.Query().Get("flash")); flash != "" {
 		d.Flash = flash
 		d.IsError = r.URL.Query().Get("err") == "1"
@@ -49,7 +49,7 @@ func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -65,8 +65,8 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	u, err := h.st.GetUserByEmail(ctx, email)
 	if err != nil || !h.st.VerifyPassword(u, pass) || !u.Active {
 		providers, _ := h.st.ListEnabledOIDCProviders(ctx)
-        d := h.pageData(r, "Login")
-		d.Flash = "Invalid email or password"
+		d := h.pageData(r, "登录")
+		d.Flash = "邮箱或密码错误"
 		d.IsError = true
 		d.Data = map[string]any{"Next": next, "Providers": providers}
 		h.render(w, "login", d)
@@ -76,8 +76,8 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	// Email verification check.
 	if !u.EmailVerified {
 		providers, _ := h.st.ListEnabledOIDCProviders(ctx)
-		d := h.pageData(r, "Login")
-		d.Flash = "Email is not verified. Please check your inbox for the verification email."
+		d := h.pageData(r, "登录")
+		d.Flash = "邮箱尚未验证，请查收验证邮件。"
 		d.IsError = true
 		d.Data = map[string]any{
 			"Next":            next,
@@ -101,7 +101,7 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 
 	sid, err := h.st.CreateSession(ctx, u.ID)
 	if err != nil {
-		h.renderError(w, r, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		h.renderError(w, r, http.StatusInternalServerError, "服务器内部错误", err.Error())
 		return
 	}
 	h.setSessionCookie(w, sid)
@@ -109,13 +109,13 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RegisterPage(w http.ResponseWriter, r *http.Request) {
-    d := h.pageData(r, "Register")
+	d := h.pageData(r, "注册")
 	h.render(w, "register", d)
 }
 
 func (h *Handler) RegisterPost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -129,22 +129,22 @@ func (h *Handler) RegisterPost(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("display_name"))
 
 	fail := func(msg string) {
-        d := h.pageData(r, "Register")
+		d := h.pageData(r, "注册")
 		d.Flash = msg
 		d.IsError = true
 		h.render(w, "register", d)
 	}
 
 	if email == "" || pass == "" || name == "" {
-		fail("Please fill in all required fields")
+		fail("请填写所有必填项")
 		return
 	}
 	if len(pass) < 8 {
-		fail("Password must be at least 8 characters")
+		fail("密码至少需要8位")
 		return
 	}
 	if pass != confirm {
-		fail("Passwords do not match")
+		fail("两次输入的密码不一致")
 		return
 	}
 
@@ -152,9 +152,9 @@ func (h *Handler) RegisterPost(w http.ResponseWriter, r *http.Request) {
 	u, err := h.st.CreateUserWithEmailVerified(ctx, email, pass, name, "user", false)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
-			fail("Email is already registered")
+			fail("邮箱已被注册")
 		} else {
-			fail("Registration failed: " + err.Error())
+			fail("注册失败：" + err.Error())
 		}
 		return
 	}
@@ -171,7 +171,7 @@ func (h *Handler) RegisterPost(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -190,7 +190,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Profile(w http.ResponseWriter, r *http.Request) {
 	u := h.currentUser(r)
-	d := h.pageData(r, "Profile")
+	d := h.pageData(r, "个人资料")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
@@ -202,7 +202,7 @@ func (h *Handler) Profile(w http.ResponseWriter, r *http.Request) {
 		data["HasPassword"] = store.HasPassword(u)
 		data["PasskeyCount"] = h.st.CountPasskeysByUserID(ctx, u.ID)
 		if u.TOTPPendingSecret != "" {
-			siteName := orDefault(h.st.GetSetting(ctx, "site_name"), "Team TransMTF")
+			siteName := orDefault(h.st.GetSetting(ctx, "site_name"), "团队站点")
 			data["PendingSecret"] = u.TOTPPendingSecret
 			data["PendingURI"] = buildTOTPUri(siteName, u.Email, u.TOTPPendingSecret)
 		}
@@ -213,7 +213,7 @@ func (h *Handler) Profile(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ProfilePost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -230,7 +230,7 @@ func (h *Handler) ProfilePost(w http.ResponseWriter, r *http.Request) {
 	currentPass := r.FormValue("current_password")
 
 	fail := func(msg string) {
-		d := h.pageData(r, "Profile")
+		d := h.pageData(r, "个人资料")
 		d.Flash = msg
 		d.IsError = true
 		data := map[string]any{"Passkeys": nil, "HasPassword": false, "PasskeyCount": 0}
@@ -240,7 +240,7 @@ func (h *Handler) ProfilePost(w http.ResponseWriter, r *http.Request) {
 			data["HasPassword"] = store.HasPassword(u)
 			data["PasskeyCount"] = h.st.CountPasskeysByUserID(r.Context(), u.ID)
 			if u.TOTPPendingSecret != "" {
-				siteName := orDefault(h.st.GetSetting(r.Context(), "site_name"), "Team TransMTF")
+				siteName := orDefault(h.st.GetSetting(r.Context(), "site_name"), "团队站点")
 				data["PendingSecret"] = u.TOTPPendingSecret
 				data["PendingURI"] = buildTOTPUri(siteName, u.Email, u.TOTPPendingSecret)
 			}
@@ -250,27 +250,27 @@ func (h *Handler) ProfilePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if name == "" {
-		fail("Display name cannot be empty")
+		fail("显示名称不能为空")
 		return
 	}
 	// Validate password fields BEFORE any writes to avoid partial updates.
 	if newPass != "" {
 		if store.HasPassword(u) && !h.st.VerifyPassword(u, currentPass) {
-			fail("Current password is incorrect")
+			fail("当前密码不正确")
 			return
 		}
 		if len(newPass) < 8 {
-			fail("New password must be at least 8 characters")
+			fail("密码至少需要8位")
 			return
 		}
 		if newPass != confirm {
-			fail("Passwords do not match")
+			fail("两次输入的密码不一致")
 			return
 		}
 	}
 
 	if err := h.st.UpdateUser(ctx, u.ID, name, u.Role, u.Active); err != nil {
-		fail("Save failed: " + err.Error())
+		fail("保存失败：" + err.Error())
 		return
 	}
 	if avatar != "" {
@@ -278,22 +278,22 @@ func (h *Handler) ProfilePost(w http.ResponseWriter, r *http.Request) {
 	}
 	if newPass != "" {
 		if err := h.st.UpdatePassword(ctx, u.ID, newPass); err != nil {
-			fail("Password update failed")
+			fail("密码更新失败")
 			return
 		}
 	}
 
-	http.Redirect(w, r, "/profile?flash=Saved", http.StatusFound)
+	http.Redirect(w, r, "/profile?flash=已保存", http.StatusFound)
 }
 
 func (h *Handler) TOSPage(w http.ResponseWriter, r *http.Request) {
-	d := h.pageData(r, "Terms of Service")
+	d := h.pageData(r, "服务条款")
 	d.Data = h.st.GetSetting(r.Context(), "tos_content")
 	h.render(w, "tos", d)
 }
 
 func (h *Handler) PrivacyPage(w http.ResponseWriter, r *http.Request) {
-	d := h.pageData(r, "Privacy Policy")
+	d := h.pageData(r, "隐私政策")
 	d.Data = h.st.GetSetting(r.Context(), "privacy_content")
 	h.render(w, "privacy", d)
 }
@@ -305,11 +305,11 @@ func (h *Handler) Profile2FAQR(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	siteName := orDefault(h.st.GetSetting(r.Context(), "site_name"), "Team TransMTF")
+	siteName := orDefault(h.st.GetSetting(r.Context(), "site_name"), "团队站点")
 	uri := buildTOTPUri(siteName, u.Email, u.TOTPPendingSecret)
 	png, err := qrcode.Encode(uri, qrcode.Medium, 256)
 	if err != nil {
-		http.Error(w, "qr generation failed", http.StatusInternalServerError)
+		http.Error(w, "二维码生成失败", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "image/png")
@@ -339,8 +339,8 @@ func (h *Handler) VerifyEmailPage(w http.ResponseWriter, r *http.Request) {
 	if token != "" {
 		u, err := h.st.ConsumeEmailVerification(ctx, token)
 		if err != nil {
-			d := h.pageData(r, "Email Verification Failed")
-			d.Flash = "Verification link is invalid or expired. Please request a new one."
+			d := h.pageData(r, "邮箱验证失败")
+			d.Flash = "验证链接无效或已过期，请重新发送验证邮件。"
 			d.IsError = true
 			d.Data = map[string]any{"Email": email}
 			h.render(w, "verify_email", d)
@@ -352,24 +352,24 @@ func (h *Handler) VerifyEmailPage(w http.ResponseWriter, r *http.Request) {
 				h.setSessionCookie(w, sid)
 			}
 		}
-		d := h.pageData(r, "Email Verified")
-		d.Flash = "Email verification succeeded."
+		d := h.pageData(r, "邮箱验证成功")
+		d.Flash = "邮箱验证成功，欢迎加入！"
 		d.Data = map[string]any{"Verified": true}
 		h.render(w, "verify_email", d)
 		return
 	}
 
-	d := h.pageData(r, "Verify Email")
+	d := h.pageData(r, "验证邮箱")
 	switch status {
 	case "sent":
-		d.Flash = "Registration successful. Please check your email to verify your account."
+		d.Flash = "注册成功！请查收验证邮件。"
 	case "resent":
-		d.Flash = "If this email exists and is unverified, a new verification email has been sent."
+		d.Flash = "如果该邮箱已注册且未验证，验证邮件已重新发送，请查收。"
 	case "init_failed":
-		d.Flash = "Registration succeeded, but initializing email verification failed. Please resend verification email."
+		d.Flash = "注册成功，但验证邮件初始化失败，请重新发送。"
 		d.IsError = true
 	case "resend_failed":
-		d.Flash = "Sending failed. Please try again later."
+		d.Flash = "发送失败，请稍后重试。"
 		d.IsError = true
 	}
 	d.Data = map[string]any{"Email": email}
@@ -379,7 +379,7 @@ func (h *Handler) VerifyEmailPage(w http.ResponseWriter, r *http.Request) {
 // VerifyEmailResend handles POST /verify-email/resend
 func (h *Handler) VerifyEmailResend(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -420,7 +420,7 @@ func verifyEmailURL(email, status string) string {
 }
 
 func (h *Handler) ForgotPasswordPage(w http.ResponseWriter, r *http.Request) {
-	d := h.pageData(r, "Forgot Password")
+	d := h.pageData(r, "忘记密码")
 	if flash := strings.TrimSpace(r.URL.Query().Get("flash")); flash != "" {
 		d.Flash = flash
 		d.IsError = r.URL.Query().Get("err") == "1"
@@ -430,7 +430,7 @@ func (h *Handler) ForgotPasswordPage(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ForgotPasswordPost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -458,29 +458,29 @@ func (h *Handler) ForgotPasswordPost(w http.ResponseWriter, r *http.Request) {
 	u, err := h.st.GetUserByEmail(ctx, email)
 	// Keep generic feedback for non-existing users.
 	if err != nil {
-		redirectWithFlash("If the email is registered, a password reset email has been sent.", false)
+		redirectWithFlash("如果该邮箱已注册，系统已发送重置密码邮件。", false)
 		return
 	}
 
 	token, err := h.st.CreatePasswordReset(ctx, u.ID, 7*24*time.Hour, 30*time.Minute)
 	if err != nil {
 		if errors.Is(err, store.ErrPasswordResetTooSoon) {
-			redirectWithFlash("Password reset can be requested once every 7 days. Please contact an admin if needed.", true)
+			redirectWithFlash("7 天内只能发起一次找回密码，请联系管理员。", true)
 			return
 		}
-		redirectWithFlash("Sending failed. Please try again later.", true)
+		redirectWithFlash("发送失败，请稍后重试。", true)
 		return
 	}
 	go h.sendForgotPasswordEmail(context.Background(), u.Email, u.DisplayName, token)
-	redirectWithFlash("Password reset email has been sent. Please check your inbox.", false)
+	redirectWithFlash("重置密码邮件已发送，请查收。", false)
 }
 
 func (h *Handler) ResetPasswordPage(w http.ResponseWriter, r *http.Request) {
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
-	d := h.pageData(r, "Reset Password")
+	d := h.pageData(r, "重置密码")
 	d.Data = map[string]any{"Token": token}
 	if token == "" {
-		d.Flash = "Reset link is invalid. Please request password reset again."
+		d.Flash = "重置链接无效，请重新申请找回密码。"
 		d.IsError = true
 	}
 	h.render(w, "reset_password", d)
@@ -488,7 +488,7 @@ func (h *Handler) ResetPasswordPage(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ResetPasswordPost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -499,7 +499,7 @@ func (h *Handler) ResetPasswordPost(w http.ResponseWriter, r *http.Request) {
 	token := strings.TrimSpace(r.FormValue("token"))
 	pass := r.FormValue("new_password")
 	confirm := r.FormValue("confirm_password")
-	d := h.pageData(r, "Reset Password")
+	d := h.pageData(r, "重置密码")
 	d.Data = map[string]any{"Token": token}
 	fail := func(msg string) {
 		d.Flash = msg
@@ -508,29 +508,29 @@ func (h *Handler) ResetPasswordPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if token == "" {
-		fail("Reset link is invalid. Please request password reset again.")
+		fail("重置链接无效，请重新申请找回密码。")
 		return
 	}
 	if len(pass) < 8 {
-		fail("New password must be at least 8 characters.")
+		fail("新密码至少 8 位。")
 		return
 	}
 	if pass != confirm {
-		fail("Passwords do not match.")
+		fail("两次输入的密码不一致。")
 		return
 	}
 
 	if _, err := h.st.ConsumePasswordReset(r.Context(), token, pass); err != nil {
 		switch {
 		case errors.Is(err, store.ErrPasswordResetTokenExpired):
-			fail("Reset link has expired. Please request password reset again.")
+			fail("重置链接已过期，请重新申请找回密码。")
 		default:
-			fail("Reset failed. Please try again later.")
+			fail("重置失败，请稍后重试。")
 		}
 		return
 	}
 
-	http.Redirect(w, r, "/login?flash="+url.QueryEscape("Password has been reset. Please sign in with your new password.")+"&next="+url.QueryEscape("/profile"), http.StatusSeeOther)
+	http.Redirect(w, r, "/login?flash="+url.QueryEscape("密码已重置，请使用新密码登录。")+"&next="+url.QueryEscape("/profile"), http.StatusSeeOther)
 }
 
 // ProfileForceChangePage shows the forced password change page.
@@ -544,14 +544,14 @@ func (h *Handler) ProfileForceChangePage(w http.ResponseWriter, r *http.Request)
 		http.Redirect(w, r, "/profile", http.StatusFound)
 		return
 	}
-	d := h.pageData(r, "Change Password")
+	d := h.pageData(r, "修改密码")
 	h.render(w, "force_change_password", d)
 }
 
 // ProfileForceChangePost handles the forced password change form submission.
 func (h *Handler) ProfileForceChangePost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -573,31 +573,31 @@ func (h *Handler) ProfileForceChangePost(w http.ResponseWriter, r *http.Request)
 	confirm := r.FormValue("confirm_password")
 
 	fail := func(msg string) {
-		d := h.pageData(r, "Change Password")
+		d := h.pageData(r, "修改密码")
 		d.Flash = msg
 		d.IsError = true
 		h.render(w, "force_change_password", d)
 	}
 
 	if len(newPass) < 8 {
-		fail("New password must be at least 8 characters.")
+		fail("新密码至少 8 位。")
 		return
 	}
 	if newPass != confirm {
-		fail("Passwords do not match.")
+		fail("两次输入的密码不一致。")
 		return
 	}
 	if err := h.st.UpdatePasswordAndClearFlag(r.Context(), u.ID, newPass); err != nil {
-		fail("Password update failed: " + err.Error())
+		fail("密码更新失败：" + err.Error())
 		return
 	}
-	http.Redirect(w, r, "/profile?flash=Password+updated", http.StatusFound)
+	http.Redirect(w, r, "/profile?flash=密码已更新", http.StatusFound)
 }
 
 // ProfileDeletePassword removes the user's password (passkey-only mode).
 func (h *Handler) ProfileDeletePassword(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -611,13 +611,12 @@ func (h *Handler) ProfileDeletePassword(w http.ResponseWriter, r *http.Request) 
 	}
 	ctx := r.Context()
 	if h.st.CountPasskeysByUserID(ctx, u.ID) == 0 {
-		http.Redirect(w, r, "/profile?flash=Must+have+passkey+first", http.StatusFound)
+		http.Redirect(w, r, "/profile?flash=请先添加通行密钥", http.StatusFound)
 		return
 	}
 	if err := h.st.ClearPassword(ctx, u.ID); err != nil {
-		http.Redirect(w, r, "/profile?flash=Failed+to+remove+password", http.StatusFound)
+		http.Redirect(w, r, "/profile?flash=删除密码失败", http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, "/profile?flash=Password+removed", http.StatusFound)
+	http.Redirect(w, r, "/profile?flash=密码已删除", http.StatusFound)
 }
-

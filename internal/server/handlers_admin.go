@@ -25,7 +25,7 @@ const (
 
 func (h *Handler) AdminDashboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	d := h.pageData(r, "Admin Dashboard")
+	d := h.pageData(r, "管理面板")
 	d.Data = map[string]any{
 		"Users":     h.st.CountUsers(ctx),
 		"Clients":   h.st.CountClients(ctx),
@@ -38,7 +38,7 @@ func (h *Handler) AdminDashboard(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) AdminUsers(w http.ResponseWriter, r *http.Request) {
 	users, _ := h.st.ListUsers(r.Context())
 	customRoles, _ := h.st.ListCustomRoles(r.Context())
-	d := h.pageData(r, "User Management")
+	d := h.pageData(r, "用户管理")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
@@ -51,7 +51,7 @@ func (h *Handler) AdminUsers(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) AdminUserCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -69,35 +69,35 @@ func (h *Handler) AdminUserCreate(w http.ResponseWriter, r *http.Request) {
 	requireChange := r.FormValue("require_password_change") == "1"
 
 	ctx := r.Context()
-	d := h.pageData(r, "User Management")
+	d := h.pageData(r, "用户管理")
 	users, _ := h.st.ListUsers(ctx)
 	customRoles, _ := h.st.ListCustomRoles(ctx)
 	d.Data = map[string]any{"Users": users, "CustomRoles": customRoles}
 	if role == "admin" && !h.isSystemAdminUser(h.currentUser(r)) {
-		d.Flash = "Only system admin can assign admin role"
+		d.Flash = "仅系统管理员可以分配管理员角色"
 		d.IsError = true
 		h.render(w, "admin_users", d)
 		return
 	}
 	u, err := h.st.CreateUser(ctx, email, password, name, role)
 	if err != nil {
-		d.Flash = "Create failed: " + err.Error()
+		d.Flash = "创建失败：" + err.Error()
 		d.IsError = true
 		h.render(w, "admin_users", d)
 		return
 	}
 	if requireChange {
 		if err := h.st.SetRequirePasswordChange(ctx, u.ID, true); err != nil {
-			// Non-fatal: user was created, just log the flag-set failure.
+			// 非致命错误：用户已创建，仅忽略强制改密标记写入失败。
 			_ = err
 		}
 	}
-	http.Redirect(w, r, "/admin/users?flash="+url.QueryEscape("User created: "+email), http.StatusFound)
+	http.Redirect(w, r, "/admin/users?flash="+url.QueryEscape("已创建用户："+email), http.StatusFound)
 }
 
 func (h *Handler) AdminUserUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -111,28 +111,28 @@ func (h *Handler) AdminUserUpdate(w http.ResponseWriter, r *http.Request) {
 	active := r.FormValue("active") == "1"
 
 	ctx := r.Context()
-	d := h.pageData(r, "User Management")
+	d := h.pageData(r, "用户管理")
 	users, _ := h.st.ListUsers(ctx)
 	customRoles, _ := h.st.ListCustomRoles(ctx)
 	d.Data = map[string]any{"Users": users, "CustomRoles": customRoles}
 
 	cur := h.currentUser(r)
-	// Protect system admin
+	// 保护系统管理员账户
 	targetUser, err := h.st.GetUserByID(ctx, id)
 	if err != nil {
-		d.Flash = "User not found"
+		d.Flash = "用户不存在"
 		d.IsError = true
 		h.render(w, "admin_users", d)
 		return
 	}
 	if targetUser.IsAdmin() && !h.isSystemAdminUser(cur) {
-		d.Flash = "Cannot modify admin account"
+		d.Flash = "不能修改管理员账户"
 		d.IsError = true
 		h.render(w, "admin_users", d)
 		return
 	}
 	if role == "admin" && !h.isSystemAdminUser(cur) {
-		d.Flash = "Only system admin can assign admin role"
+		d.Flash = "仅系统管理员可以分配管理员角色"
 		d.IsError = true
 		h.render(w, "admin_users", d)
 		return
@@ -143,17 +143,17 @@ func (h *Handler) AdminUserUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.st.UpdateUser(ctx, id, name, role, active); err != nil {
-		d.Flash = "Update failed: " + err.Error()
+		d.Flash = "更新失败: " + err.Error()
 		d.IsError = true
 		h.render(w, "admin_users", d)
 	} else {
-		http.Redirect(w, r, "/admin/users?flash=Updated", http.StatusFound)
+		http.Redirect(w, r, "/admin/users?flash=已更新", http.StatusFound)
 	}
 }
 
 func (h *Handler) AdminUserDelete(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -164,14 +164,14 @@ func (h *Handler) AdminUserDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	cur := h.currentUser(r)
 	ctx := r.Context()
-	d := h.pageData(r, "User Management")
+	d := h.pageData(r, "用户管理")
 
 	targetUser, err := h.st.GetUserByID(ctx, id)
 	if err != nil {
 		users, _ := h.st.ListUsers(ctx)
 		customRoles, _ := h.st.ListCustomRoles(ctx)
 		d.Data = map[string]any{"Users": users, "CustomRoles": customRoles}
-		d.Flash = "User not found"
+		d.Flash = "用户不存在"
 		d.IsError = true
 		h.render(w, "admin_users", d)
 		return
@@ -180,7 +180,7 @@ func (h *Handler) AdminUserDelete(w http.ResponseWriter, r *http.Request) {
 		users, _ := h.st.ListUsers(ctx)
 		customRoles, _ := h.st.ListCustomRoles(ctx)
 		d.Data = map[string]any{"Users": users, "CustomRoles": customRoles}
-		d.Flash = "Cannot modify admin account"
+		d.Flash = "不能修改管理员账户"
 		d.IsError = true
 		h.render(w, "admin_users", d)
 		return
@@ -190,7 +190,7 @@ func (h *Handler) AdminUserDelete(w http.ResponseWriter, r *http.Request) {
 		users, _ := h.st.ListUsers(ctx)
 		customRoles, _ := h.st.ListCustomRoles(ctx)
 		d.Data = map[string]any{"Users": users, "CustomRoles": customRoles}
-		d.Flash = "Cannot delete yourself"
+		d.Flash = "不能删除当前登录账户"
 		d.IsError = true
 		h.render(w, "admin_users", d)
 		return
@@ -200,22 +200,21 @@ func (h *Handler) AdminUserDelete(w http.ResponseWriter, r *http.Request) {
 		users, _ := h.st.ListUsers(ctx)
 		customRoles, _ := h.st.ListCustomRoles(ctx)
 		d.Data = map[string]any{"Users": users, "CustomRoles": customRoles}
-		d.Flash = "Delete failed: " + err.Error()
+		d.Flash = "删除失败：" + err.Error()
 		d.IsError = true
 		h.render(w, "admin_users", d)
 		return
 	}
 
-	http.Redirect(w, r, "/admin/users?flash=Deleted", http.StatusFound)
+	http.Redirect(w, r, "/admin/users?flash=已删除", http.StatusFound)
 }
-
 
 func (h *Handler) AdminUserDetail(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	ctx := r.Context()
 	u, err := h.st.GetUserByID(ctx, id)
 	if err != nil {
-        h.renderError(w, r, http.StatusNotFound, "User not found", id)
+		h.renderError(w, r, http.StatusNotFound, "用户不存在", id)
 		return
 	}
 	identities, _ := h.st.GetUserIdentitiesByUserID(ctx, id)
@@ -236,7 +235,7 @@ func (h *Handler) AdminUserDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	d := h.pageData(r, "User Details")
+	d := h.pageData(r, "用户详情")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
@@ -259,7 +258,7 @@ func (h *Handler) AdminUserDetail(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) AdminUserResetPassword(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -273,34 +272,34 @@ func (h *Handler) AdminUserResetPassword(w http.ResponseWriter, r *http.Request)
 
 	targetUser, err := h.st.GetUserByID(ctx, id)
 	if err != nil {
-		http.Redirect(w, r, "/admin/users/"+id+"?flash=User+not+found", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+id+"?flash=用户不存在", http.StatusFound)
 		return
 	}
-	// Only system admin may modify another admin's password.
+	// 仅系统管理员可修改其他管理员的密码。
 	cur := h.currentUser(r)
 	if targetUser.IsAdmin() && !h.isSystemAdminUser(cur) {
-		http.Redirect(w, r, "/admin/users/"+id+"?flash=Cannot+modify+admin+account", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+id+"?flash=不能修改管理员账户", http.StatusFound)
 		return
 	}
 
 	if len(newPass) < 8 {
-        http.Redirect(w, r, "/admin/users/"+id+"?flash=Password+must+be+at+least+8+chars", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+id+"?flash=密码至少需要8位", http.StatusFound)
 		return
 	}
 	if err := h.st.UpdatePassword(ctx, id, newPass); err != nil {
-		http.Redirect(w, r, "/admin/users/"+id+"?flash=Password+reset+failed", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+id+"?flash=密码重置失败", http.StatusFound)
 		return
 	}
 	if requireChange {
 		_ = h.st.SetRequirePasswordChange(ctx, id, true)
 	}
 	go h.sendPasswordResetEmail(context.Background(), targetUser.Email, targetUser.DisplayName, newPass)
-    http.Redirect(w, r, "/admin/users/"+id+"?flash=Password+reset", http.StatusFound)
+	http.Redirect(w, r, "/admin/users/"+id+"?flash=密码已重置", http.StatusFound)
 }
 
 func (h *Handler) AdminUserDisable2FA(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -312,25 +311,25 @@ func (h *Handler) AdminUserDisable2FA(w http.ResponseWriter, r *http.Request) {
 
 	targetUser, err := h.st.GetUserByID(ctx, id)
 	if err != nil {
-		http.Redirect(w, r, "/admin/users/"+id+"?flash=User+not+found", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+id+"?flash=用户不存在", http.StatusFound)
 		return
 	}
 	cur := h.currentUser(r)
 	if targetUser.IsAdmin() && !h.isSystemAdminUser(cur) {
-		http.Redirect(w, r, "/admin/users/"+id+"?flash=Cannot+modify+admin+account", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+id+"?flash=不能修改管理员账户", http.StatusFound)
 		return
 	}
 
 	if err := h.st.DisableTOTP(ctx, id); err != nil {
-		http.Redirect(w, r, "/admin/users/"+id+"?flash=Disable+2FA+failed", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+id+"?flash=关闭双重验证失败", http.StatusFound)
 		return
 	}
-    http.Redirect(w, r, "/admin/users/"+id+"?flash=2FA+disabled", http.StatusFound)
+	http.Redirect(w, r, "/admin/users/"+id+"?flash=双重验证已关闭", http.StatusFound)
 }
 
 func (h *Handler) AdminUserRevokeSession(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -341,20 +340,20 @@ func (h *Handler) AdminUserRevokeSession(w http.ResponseWriter, r *http.Request)
 	sessID := r.PathValue("sid")
 	targetUser, err := h.st.GetUserByID(r.Context(), userID)
 	if err != nil {
-		http.Redirect(w, r, "/admin/users/"+userID+"?flash=User+not+found", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=用户不存在", http.StatusFound)
 		return
 	}
 	if targetUser.IsAdmin() && !h.isSystemAdminUser(h.currentUser(r)) {
-		http.Redirect(w, r, "/admin/users/"+userID+"?flash=Cannot+modify+admin+account", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=不能修改管理员账户", http.StatusFound)
 		return
 	}
 	_ = h.st.DeleteSession(r.Context(), sessID)
-	http.Redirect(w, r, "/admin/users/"+userID+"?flash=Session+revoked", http.StatusFound)
+	http.Redirect(w, r, "/admin/users/"+userID+"?flash=会话已撤销", http.StatusFound)
 }
 
 func (h *Handler) AdminUserRevokeToken(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -367,11 +366,11 @@ func (h *Handler) AdminUserRevokeToken(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	targetUser, err := h.st.GetUserByID(ctx, userID)
 	if err != nil {
-		http.Redirect(w, r, "/admin/users/"+userID+"?flash=User+not+found", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=用户不存在", http.StatusFound)
 		return
 	}
 	if targetUser.IsAdmin() && !h.isSystemAdminUser(h.currentUser(r)) {
-		http.Redirect(w, r, "/admin/users/"+userID+"?flash=Cannot+modify+admin+account", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=不能修改管理员账户", http.StatusFound)
 		return
 	}
 	if tokenType == "refresh" {
@@ -379,25 +378,24 @@ func (h *Handler) AdminUserRevokeToken(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_ = h.st.RevokeAccessTokenByID(ctx, tokenID)
 	}
-	http.Redirect(w, r, "/admin/users/"+userID+"?flash=Token+revoked", http.StatusFound)
+	http.Redirect(w, r, "/admin/users/"+userID+"?flash=令牌已撤销", http.StatusFound)
 }
 
-
-// allPermissions defines every available permission for custom roles.
+// allPermissions 定义了自定义角色可用的全部权限。
 var allPermissions = []map[string]string{
-	{"name": "manage_projects", "label": "Manage Projects", "desc": "Create, update, and delete projects"},
-	{"name": "manage_clients", "label": "Manage Clients", "desc": "Manage OAuth2/OIDC clients"},
-	{"name": "manage_announcements", "label": "Manage Announcements", "desc": "Edit client announcements"},
-	{"name": "manage_users", "label": "Manage Users", "desc": "View and manage user accounts"},
-	{"name": "manage_groups", "label": "Manage Groups", "desc": "Create and manage user groups"},
-	{"name": "manage_providers", "label": "Manage Providers", "desc": "Configure external OIDC providers"},
-	{"name": "manage_roles", "label": "Manage Roles", "desc": "Create and edit custom roles"},
-	{"name": "manage_settings", "label": "Manage Settings", "desc": "Edit site-wide settings"},
+	{"name": "manage_projects", "label": "管理项目", "desc": "创建、更新和删除项目"},
+	{"name": "manage_clients", "label": "管理应用", "desc": "管理授权登录应用"},
+	{"name": "manage_announcements", "label": "管理公告", "desc": "编辑应用公告"},
+	{"name": "manage_users", "label": "管理用户", "desc": "查看和管理用户账户"},
+	{"name": "manage_groups", "label": "管理分组", "desc": "创建并管理用户分组"},
+	{"name": "manage_providers", "label": "管理登录方式", "desc": "配置外部身份提供商"},
+	{"name": "manage_roles", "label": "管理角色", "desc": "创建并编辑自定义角色"},
+	{"name": "manage_settings", "label": "管理设置", "desc": "编辑全站设置"},
 }
 
 func (h *Handler) AdminRoles(w http.ResponseWriter, r *http.Request) {
 	roles, _ := h.st.ListCustomRoles(r.Context())
-	d := h.pageData(r, "Role Management")
+	d := h.pageData(r, "角色管理")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
@@ -410,7 +408,7 @@ func (h *Handler) AdminRoles(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) AdminRoleCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -421,30 +419,30 @@ func (h *Handler) AdminRoleCreate(w http.ResponseWriter, r *http.Request) {
 	label := strings.TrimSpace(r.FormValue("label"))
 	permissions := r.Form["permissions"] // multi-value checkbox
 	ctx := r.Context()
-	d := h.pageData(r, "Role Management")
+	d := h.pageData(r, "角色管理")
 	roles, _ := h.st.ListCustomRoles(ctx)
 	d.Data = map[string]any{
 		"Roles":       roles,
 		"Permissions": allPermissions,
 	}
 	if name == "" {
-		d.Flash = "Role name cannot be empty"
+		d.Flash = "角色名称不能为空"
 		d.IsError = true
 		h.render(w, "admin_roles", d)
 		return
 	}
 	if err := h.st.CreateCustomRole(ctx, name, label, permissions); err != nil {
-		d.Flash = "Create failed: " + err.Error()
+		d.Flash = "创建失败：" + err.Error()
 		d.IsError = true
 		h.render(w, "admin_roles", d)
 		return
 	}
-	http.Redirect(w, r, "/admin/roles?flash=Role+created", http.StatusFound)
+	http.Redirect(w, r, "/admin/roles?flash=角色已创建", http.StatusFound)
 }
 
 func (h *Handler) AdminRoleDelete(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -453,16 +451,15 @@ func (h *Handler) AdminRoleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PathValue("name")
 	if err := h.st.DeleteCustomRole(r.Context(), name); err != nil {
-		http.Redirect(w, r, "/admin/roles?flash=Delete+failed:+"+err.Error(), http.StatusFound)
+		http.Redirect(w, r, "/admin/roles?flash=删除失败："+err.Error(), http.StatusFound)
 		return
 	}
 	http.Redirect(w, r, "/admin/roles", http.StatusFound)
 }
 
-
 func (h *Handler) AdminClients(w http.ResponseWriter, r *http.Request) {
 	clients, _ := h.st.ListClients(r.Context())
-	d := h.pageData(r, "App Management")
+	d := h.pageData(r, "应用管理")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
@@ -471,13 +468,13 @@ func (h *Handler) AdminClients(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) AdminClientCreatePage(w http.ResponseWriter, r *http.Request) {
-	d := h.pageData(r, "Create App")
+	d := h.pageData(r, "创建应用")
 	h.render(w, "admin_client_create", d)
 }
 
 func (h *Handler) AdminClientCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -502,23 +499,23 @@ func (h *Handler) AdminClientCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	d := h.pageData(r, "Create App")
+	d := h.pageData(r, "创建应用")
 
 	if name == "" {
-		d.Flash = "App name cannot be empty"
+		d.Flash = "应用名称不能为空"
 		d.IsError = true
 		h.render(w, "admin_client_create", d)
 		return
 	}
 	if len(uris) == 0 {
-		d.Flash = "At least one Redirect URI is required"
+		d.Flash = "至少需要一个回调地址"
 		d.IsError = true
 		h.render(w, "admin_client_create", d)
 		return
 	}
 	for _, u := range uris {
 		if !isAllowedAbsoluteURL(u) {
-			d.Flash = "Redirect URI is invalid: " + u
+			d.Flash = "回调地址无效：" + u
 			d.IsError = true
 			h.render(w, "admin_client_create", d)
 			return
@@ -528,9 +525,9 @@ func (h *Handler) AdminClientCreate(w http.ResponseWriter, r *http.Request) {
 	clientID, secret, err := h.st.CreateClient(ctx, name, desc, uris, scopes)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
-            d.Flash = "Client name already exists, use another name"
+			d.Flash = "应用名称已存在，请换一个名称"
 		} else {
-			d.Flash = "Create failed: " + err.Error()
+			d.Flash = "创建失败：" + err.Error()
 		}
 		d.IsError = true
 		h.render(w, "admin_client_create", d)
@@ -551,7 +548,7 @@ func (h *Handler) AdminClientCreate(w http.ResponseWriter, r *http.Request) {
 		NewInternalID: internalID,
 	})
 	if tErr != nil {
-		d.Flash = "Created, but failed to prepare result view: " + tErr.Error()
+		d.Flash = "创建成功，但结果页面准备失败：" + tErr.Error()
 		d.IsError = true
 		h.render(w, "admin_client_create", d)
 		return
@@ -562,17 +559,17 @@ func (h *Handler) AdminClientCreate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) AdminClientCreatedResult(w http.ResponseWriter, r *http.Request) {
 	ticket := strings.TrimSpace(r.URL.Query().Get("ticket"))
 	if ticket == "" {
-		http.Redirect(w, r, "/admin/clients/new?flash=Result+expired", http.StatusFound)
+		http.Redirect(w, r, "/admin/clients/new?flash=结果已过期", http.StatusFound)
 		return
 	}
 
 	var payload oneTimeClientCreatedView
 	if err := h.consumeOneTimeViewTicket(r.Context(), ticket, &payload); err != nil {
-		http.Redirect(w, r, "/admin/clients/new?flash=Result+expired", http.StatusFound)
+		http.Redirect(w, r, "/admin/clients/new?flash=结果已过期", http.StatusFound)
 		return
 	}
 
-	d := h.pageData(r, "App created")
+	d := h.pageData(r, "应用已创建")
 	d.Data = map[string]any{
 		"NewClientID":   payload.NewClientID,
 		"NewSecret":     payload.NewSecret,
@@ -587,7 +584,7 @@ func (h *Handler) AdminClientDetail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	client, err := h.st.GetClientByID(ctx, id)
 	if err != nil {
-        h.renderError(w, r, http.StatusNotFound, "Client not found", id)
+		h.renderError(w, r, http.StatusNotFound, "应用不存在", id)
 		return
 	}
 	ann := h.st.GetClientAnnouncement(ctx, client.ClientID)
@@ -604,7 +601,7 @@ func (h *Handler) AdminClientDetail(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) AdminClientUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -636,7 +633,7 @@ func (h *Handler) AdminClientUpdate(w http.ResponseWriter, r *http.Request) {
 	switch baseAccess {
 	case "legacy", "user", "member", "admin", "none":
 	default:
-		http.Redirect(w, r, "/admin/clients/"+id+"?flash=Invalid+base+access+policy", http.StatusFound)
+		http.Redirect(w, r, "/admin/clients/"+id+"?flash=基础访问策略无效", http.StatusFound)
 		return
 	}
 	allowedGroupsSet := map[string]bool{}
@@ -651,14 +648,14 @@ func (h *Handler) AdminClientUpdate(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	if name == "" {
-		http.Redirect(w, r, "/admin/clients/"+id+"?flash=Name+required", http.StatusFound)
+		http.Redirect(w, r, "/admin/clients/"+id+"?flash=名称不能为空", http.StatusFound)
 		return
 	}
 	// Validate custom groups exist to avoid silent misconfiguration.
 	groupSet := map[string]bool{}
 	groups, err := h.st.ListUserGroups(ctx)
 	if err != nil {
-		http.Redirect(w, r, "/admin/clients/"+id+"?flash=Group+lookup+failed", http.StatusFound)
+		http.Redirect(w, r, "/admin/clients/"+id+"?flash=分组查询失败", http.StatusFound)
 		return
 	}
 	for _, g := range groups {
@@ -670,25 +667,25 @@ func (h *Handler) AdminClientUpdate(w http.ResponseWriter, r *http.Request) {
 			continue
 		default:
 			if !groupSet[g] {
-				http.Redirect(w, r, "/admin/clients/"+id+"?flash=Unknown+group:+"+g, http.StatusFound)
+				http.Redirect(w, r, "/admin/clients/"+id+"?flash=未知分组："+g, http.StatusFound)
 				return
 			}
 		}
 	}
 	if err := h.st.UpdateClient(ctx, id, name, desc, uris, scopes, baseAccess, allowedGroups); err != nil {
-		msg := "Update failed"
+		msg := "更新失败"
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
-            msg = "Client name already exists"
+			msg = "应用名称已存在"
 		}
 		http.Redirect(w, r, "/admin/clients/"+id+"?flash="+msg, http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, "/admin/clients/"+id+"?flash=Updated", http.StatusFound)
+	http.Redirect(w, r, "/admin/clients/"+id+"?flash=已更新", http.StatusFound)
 }
 
 func (h *Handler) AdminClientResetSecret(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -700,7 +697,7 @@ func (h *Handler) AdminClientResetSecret(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	newSecret, err := h.st.ResetClientSecret(ctx, id)
 	if err != nil {
-		http.Redirect(w, r, "/admin/clients/"+id+"?flash=Reset+failed", http.StatusFound)
+		http.Redirect(w, r, "/admin/clients/"+id+"?flash=重置失败", http.StatusFound)
 		return
 	}
 
@@ -709,7 +706,7 @@ func (h *Handler) AdminClientResetSecret(w http.ResponseWriter, r *http.Request)
 		NewSecret:        newSecret,
 	})
 	if tErr != nil {
-		http.Redirect(w, r, "/admin/clients/"+id+"?flash=Reset+succeeded+but+failed+to+prepare+result+view", http.StatusFound)
+		http.Redirect(w, r, "/admin/clients/"+id+"?flash=重置成功但结果页面准备失败", http.StatusFound)
 		return
 	}
 	http.Redirect(w, r, "/admin/clients/"+id+"/secret?ticket="+url.QueryEscape(ticket), http.StatusFound)
@@ -719,28 +716,28 @@ func (h *Handler) AdminClientSecretResult(w http.ResponseWriter, r *http.Request
 	id := r.PathValue("id")
 	ticket := strings.TrimSpace(r.URL.Query().Get("ticket"))
 	if ticket == "" {
-		http.Redirect(w, r, "/admin/clients/"+id+"?flash=Result+expired", http.StatusFound)
+		http.Redirect(w, r, "/admin/clients/"+id+"?flash=结果已过期", http.StatusFound)
 		return
 	}
 
 	var payload oneTimeClientSecretView
 	if err := h.consumeOneTimeViewTicket(r.Context(), ticket, &payload); err != nil {
-		http.Redirect(w, r, "/admin/clients/"+id+"?flash=Result+expired", http.StatusFound)
+		http.Redirect(w, r, "/admin/clients/"+id+"?flash=结果已过期", http.StatusFound)
 		return
 	}
 	if payload.ClientInternalID != id {
-		http.Redirect(w, r, "/admin/clients/"+id+"?flash=Invalid+result+ticket", http.StatusFound)
+		http.Redirect(w, r, "/admin/clients/"+id+"?flash=结果票据无效", http.StatusFound)
 		return
 	}
 
 	client, err := h.st.GetClientByID(r.Context(), id)
 	if err != nil {
-		http.Redirect(w, r, "/admin/clients?flash=Client+not+found", http.StatusFound)
+		http.Redirect(w, r, "/admin/clients?flash=应用不存在", http.StatusFound)
 		return
 	}
 
-	d := h.pageData(r, "Secret reset")
-	d.Flash = "Client Secret has been reset. Save it now (shown only once)."
+	d := h.pageData(r, "密钥已重置")
+	d.Flash = "应用密钥已重置，请立即保存（仅显示一次）。"
 	d.Data = map[string]any{
 		"Client":    client,
 		"NewSecret": payload.NewSecret,
@@ -750,7 +747,7 @@ func (h *Handler) AdminClientSecretResult(w http.ResponseWriter, r *http.Request
 
 func (h *Handler) AdminClientDelete(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -760,18 +757,17 @@ func (h *Handler) AdminClientDelete(w http.ResponseWriter, r *http.Request) {
 
 	id := r.PathValue("id")
 	ctx := r.Context()
-	d := h.pageData(r, "App Management")
+	d := h.pageData(r, "应用管理")
 	if err := h.st.DeleteClient(ctx, id); err != nil {
-		d.Flash = "Delete failed: " + err.Error()
+		d.Flash = "删除失败：" + err.Error()
 		d.IsError = true
 		clients, _ := h.st.ListClients(ctx)
 		d.Data = map[string]any{"Clients": clients}
 		h.render(w, "admin_clients", d)
 		return
 	}
-	http.Redirect(w, r, "/admin/clients?flash=Deleted", http.StatusFound)
+	http.Redirect(w, r, "/admin/clients?flash=已删除", http.StatusFound)
 }
-
 
 func (h *Handler) AdminAnnouncements(w http.ResponseWriter, r *http.Request) {
 	clients, _ := h.st.ListClients(r.Context())
@@ -786,7 +782,7 @@ func (h *Handler) AdminAnnouncements(w http.ResponseWriter, r *http.Request) {
 			Announcement: h.st.GetClientAnnouncement(r.Context(), c.ClientID),
 		})
 	}
-	d := h.pageData(r, "App Announcements")
+	d := h.pageData(r, "应用公告")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
@@ -796,7 +792,7 @@ func (h *Handler) AdminAnnouncements(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) AdminAnnouncementSave(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -808,21 +804,21 @@ func (h *Handler) AdminAnnouncementSave(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	_, err := h.st.GetClientByClientID(ctx, clientID)
 	if err != nil {
-        http.Redirect(w, r, "/admin/announcements?flash=Client+not+found", http.StatusFound)
+		http.Redirect(w, r, "/admin/announcements?flash=应用不存在", http.StatusFound)
 		return
 	}
 	if err := h.st.SetClientAnnouncement(ctx, clientID, content); err != nil {
-		http.Redirect(w, r, "/admin/announcements?flash=Save+failed", http.StatusFound)
+		http.Redirect(w, r, "/admin/announcements?flash=保存失败", http.StatusFound)
 		return
 	}
-    http.Redirect(w, r, "/admin/announcements?flash=Announcement+saved", http.StatusFound)
+	http.Redirect(w, r, "/admin/announcements?flash=公告已保存", http.StatusFound)
 }
 
 func (h *Handler) AdminSettingsUploadIcon(w http.ResponseWriter, r *http.Request) {
 	// Limit upload size to 512 KB.
 	r.Body = http.MaxBytesReader(w, r.Body, 512*1024)
 	if err := r.ParseMultipartForm(512 * 1024); err != nil {
-		http.Redirect(w, r, "/admin/settings?flash=File+too+large+(max+512KB)", http.StatusFound)
+		http.Redirect(w, r, "/admin/settings?flash=文件过大（最大512KB）", http.StatusFound)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -831,29 +827,29 @@ func (h *Handler) AdminSettingsUploadIcon(w http.ResponseWriter, r *http.Request
 	}
 	file, _, err := r.FormFile("icon_file")
 	if err != nil {
-		http.Redirect(w, r, "/admin/settings?flash=No+file+selected", http.StatusFound)
+		http.Redirect(w, r, "/admin/settings?flash=未选择文件", http.StatusFound)
 		return
 	}
 	defer file.Close()
 
 	data, err := io.ReadAll(file)
 	if err != nil {
-		http.Redirect(w, r, "/admin/settings?flash=Failed+to+read+file", http.StatusFound)
+		http.Redirect(w, r, "/admin/settings?flash=读取文件失败", http.StatusFound)
 		return
 	}
 	if len(data) == 0 {
-		http.Redirect(w, r, "/admin/settings?flash=Empty+file", http.StatusFound)
+		http.Redirect(w, r, "/admin/settings?flash=文件为空", http.StatusFound)
 		return
 	}
 	mimeType := http.DetectContentType(data)
 	fileName, ok := uploadedFaviconFileName(mimeType)
 	if !ok {
-		http.Redirect(w, r, "/admin/settings?flash=Only+PNG+or+JPG+is+supported", http.StatusFound)
+		http.Redirect(w, r, "/admin/settings?flash=仅支持图片上传", http.StatusFound)
 		return
 	}
 	fullPath := filepath.Join(".", fileName)
 	if err := os.WriteFile(fullPath, data, 0o644); err != nil {
-		http.Redirect(w, r, "/admin/settings?flash=Failed+to+save+icon", http.StatusFound)
+		http.Redirect(w, r, "/admin/settings?flash=保存图标失败", http.StatusFound)
 		return
 	}
 	removeLegacyFavicons(fileName)
@@ -861,12 +857,12 @@ func (h *Handler) AdminSettingsUploadIcon(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	_ = h.st.SetSetting(ctx, "site_icon_url", "/"+fileName)
 
-	http.Redirect(w, r, "/admin/settings?flash=Icon+uploaded+as+"+fileName, http.StatusFound)
+	http.Redirect(w, r, "/admin/settings?flash=图标已上传："+fileName, http.StatusFound)
 }
 
 func (h *Handler) AdminSettings(w http.ResponseWriter, r *http.Request) {
 	cfg := h.st.GetAllSettings(r.Context())
-	d := h.pageData(r, "Site Settings")
+	d := h.pageData(r, "站点设置")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
@@ -876,7 +872,7 @@ func (h *Handler) AdminSettings(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) AdminSettingsSave(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -897,18 +893,18 @@ func (h *Handler) AdminSettingsSave(w http.ResponseWriter, r *http.Request) {
 	for _, k := range keys {
 		_ = h.st.SetSetting(ctx, k, r.FormValue(k))
 	}
-	// Password/key fields: only overwrite when a new value is provided.
+	// 密码/密钥字段：只有提供了新值才覆盖。
 	for _, k := range []string{"smtp_pass", "resend_api_key"} {
 		if v := r.FormValue(k); v != "" {
 			_ = h.st.SetSetting(ctx, k, v)
 		}
 	}
-	http.Redirect(w, r, "/admin/settings?flash=Settings+saved", http.StatusFound)
+	http.Redirect(w, r, "/admin/settings?flash=设置已保存", http.StatusFound)
 }
 
 func (h *Handler) AdminProviders(w http.ResponseWriter, r *http.Request) {
 	providers, _ := h.st.ListOIDCProviders(r.Context())
-	d := h.pageData(r, "Login Providers")
+	d := h.pageData(r, "登录方式")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
@@ -918,7 +914,7 @@ func (h *Handler) AdminProviders(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) AdminProviderCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -939,7 +935,7 @@ func (h *Handler) AdminProviderCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderErr := func(msg string) {
-		d := h.pageData(r, "Login Providers")
+		d := h.pageData(r, "登录方式")
 		providers, _ := h.st.ListOIDCProviders(r.Context())
 		d.Data = providers
 		d.Flash = msg
@@ -948,33 +944,33 @@ func (h *Handler) AdminProviderCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if name == "" || slug == "" || clientID == "" || clientSecret == "" || issuerURL == "" {
-        renderErr("Please fill all provider fields")
+		renderErr("请完整填写登录方式信息")
 		return
 	}
 	if !providerSlugRe.MatchString(slug) {
-		renderErr("Slug may contain only lowercase letters, numbers, and hyphens")
+		renderErr("路径标识只能包含小写字母、数字和连字符")
 		return
 	}
 	if !isAllowedAbsoluteURL(issuerURL) {
-		renderErr("Issuer URL must be HTTPS, or HTTP for localhost/127.0.0.1")
+		renderErr("发行方地址必须是安全协议地址，或本机调试地址")
 		return
 	}
 	if !containsScope(scopes, "openid") {
-		renderErr("Scopes must include openid")
+		renderErr("权限范围必须包含核心登录权限")
 		return
 	}
 
 	ctx := r.Context()
 	if err := h.st.CreateOIDCProvider(ctx, name, slug, icon, clientID, clientSecret, issuerURL, strings.Join(scopes, " "), autoRegister); err != nil {
-		renderErr("Create failed: " + err.Error())
+		renderErr("创建失败：" + err.Error())
 		return
 	}
-	http.Redirect(w, r, "/admin/providers?flash=Provider+added", http.StatusFound)
+	http.Redirect(w, r, "/admin/providers?flash=登录方式已添加", http.StatusFound)
 }
 
 func (h *Handler) AdminProviderToggle(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -985,7 +981,7 @@ func (h *Handler) AdminProviderToggle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	p, err := h.st.GetOIDCProviderByID(ctx, id)
 	if err != nil {
-        h.renderError(w, r, http.StatusNotFound, "Not found", id)
+		h.renderError(w, r, http.StatusNotFound, "未找到", id)
 		return
 	}
 	_ = h.st.UpdateOIDCProvider(ctx, p.ID, p.Name, p.Icon, p.ClientID, p.ClientSecret, p.IssuerURL, p.Scopes, !p.Enabled, p.AutoRegister)
@@ -994,7 +990,7 @@ func (h *Handler) AdminProviderToggle(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) AdminProviderDelete(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -1006,11 +1002,11 @@ func (h *Handler) AdminProviderDelete(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/providers", http.StatusFound)
 }
 
-// User Group Management.
+// 用户分组管理。
 
 func (h *Handler) AdminGroups(w http.ResponseWriter, r *http.Request) {
 	groups, _ := h.st.ListUserGroups(r.Context())
-	d := h.pageData(r, "Group Management")
+	d := h.pageData(r, "分组管理")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
@@ -1020,7 +1016,7 @@ func (h *Handler) AdminGroups(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) AdminGroupCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -1033,7 +1029,7 @@ func (h *Handler) AdminGroupCreate(w http.ResponseWriter, r *http.Request) {
 
 	renderErr := func(msg string) {
 		groups, _ := h.st.ListUserGroups(ctx)
-		d := h.pageData(r, "Group Management")
+		d := h.pageData(r, "分组管理")
 		d.Flash = msg
 		d.IsError = true
 		d.Data = groups
@@ -1041,22 +1037,22 @@ func (h *Handler) AdminGroupCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if name == "" {
-		renderErr("Group name cannot be empty")
+		renderErr("分组名称不能为空")
 		return
 	}
 	if name == "admin" || name == "member" || name == "user" {
-		renderErr("Reserved group names are not allowed (admin/member/user)")
+		renderErr("不能使用内置分组名称（管理员/成员/用户）")
 		return
 	}
 	if err := h.st.CreateUserGroup(ctx, name, label); err != nil {
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
-			renderErr("Group name already exists")
+			renderErr("分组名称已存在")
 		} else {
-			renderErr("Create failed: " + err.Error())
+			renderErr("创建失败：" + err.Error())
 		}
 		return
 	}
-	http.Redirect(w, r, "/admin/groups?flash=Group+created", http.StatusFound)
+	http.Redirect(w, r, "/admin/groups?flash=分组已创建", http.StatusFound)
 }
 
 func (h *Handler) AdminGroupDetail(w http.ResponseWriter, r *http.Request) {
@@ -1064,12 +1060,12 @@ func (h *Handler) AdminGroupDetail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	g, err := h.st.GetUserGroupByID(ctx, id)
 	if err != nil {
-		h.renderError(w, r, http.StatusNotFound, "Group not found", id)
+		h.renderError(w, r, http.StatusNotFound, "分组不存在", id)
 		return
 	}
 	members, _ := h.st.GetGroupMembers(ctx, id)
 	users, _ := h.st.ListUsers(ctx)
-	d := h.pageData(r, g.Label+" Group")
+	d := h.pageData(r, g.Label+" 分组")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
@@ -1083,7 +1079,7 @@ func (h *Handler) AdminGroupDetail(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) AdminGroupDelete(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -1092,15 +1088,15 @@ func (h *Handler) AdminGroupDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	if err := h.st.DeleteUserGroup(r.Context(), id); err != nil {
-		http.Redirect(w, r, "/admin/groups?flash=Delete+failed:+"+err.Error(), http.StatusFound)
+		http.Redirect(w, r, "/admin/groups?flash=删除失败："+err.Error(), http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, "/admin/groups?flash=Group+deleted", http.StatusFound)
+	http.Redirect(w, r, "/admin/groups?flash=分组已删除", http.StatusFound)
 }
 
 func (h *Handler) AdminGroupAddMember(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -1110,15 +1106,15 @@ func (h *Handler) AdminGroupAddMember(w http.ResponseWriter, r *http.Request) {
 	groupID := r.PathValue("id")
 	userID := r.FormValue("user_id")
 	if err := h.st.AddUserToGroup(r.Context(), userID, groupID); err != nil {
-		http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=Add+failed:+"+err.Error(), http.StatusFound)
+		http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=添加失败："+err.Error(), http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=Member+added", http.StatusFound)
+	http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=成员已添加", http.StatusFound)
 }
 
 func (h *Handler) AdminGroupRemoveMember(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -1128,16 +1124,16 @@ func (h *Handler) AdminGroupRemoveMember(w http.ResponseWriter, r *http.Request)
 	groupID := r.PathValue("id")
 	userID := r.PathValue("uid")
 	if err := h.st.RemoveUserFromGroup(r.Context(), userID, groupID); err != nil {
-		http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=Remove+failed:+"+err.Error(), http.StatusFound)
+		http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=移除失败："+err.Error(), http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=Member+removed", http.StatusFound)
+	http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=成员已移除", http.StatusFound)
 }
 
-// AdminUserGroupAdd adds a user to a group from the user-detail page.
+// AdminUserGroupAdd：在用户详情页将用户加入分组。
 func (h *Handler) AdminUserGroupAdd(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -1147,24 +1143,24 @@ func (h *Handler) AdminUserGroupAdd(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	groupID := strings.TrimSpace(r.FormValue("group_id"))
 	if groupID == "" {
-		http.Redirect(w, r, "/admin/users/"+userID+"?flash=Please+select+a+group", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=请选择分组", http.StatusFound)
 		return
 	}
 	if _, err := h.st.GetUserGroupByID(r.Context(), groupID); err != nil {
-		http.Redirect(w, r, "/admin/users/"+userID+"?flash=Group+not+found", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=分组不存在", http.StatusFound)
 		return
 	}
 	if err := h.st.AddUserToGroup(r.Context(), userID, groupID); err != nil {
-		http.Redirect(w, r, "/admin/users/"+userID+"?flash=Add+group+failed:+"+err.Error(), http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=添加分组失败："+err.Error(), http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, "/admin/users/"+userID+"?flash=Added+to+group", http.StatusFound)
+	http.Redirect(w, r, "/admin/users/"+userID+"?flash=已加入分组", http.StatusFound)
 }
 
-// AdminUserGroupRemove removes a user from a group from the user-detail page.
+// AdminUserGroupRemove：在用户详情页将用户移出分组。
 func (h *Handler) AdminUserGroupRemove(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -1174,10 +1170,10 @@ func (h *Handler) AdminUserGroupRemove(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	groupID := r.PathValue("gid")
 	if err := h.st.RemoveUserFromGroup(r.Context(), userID, groupID); err != nil {
-		http.Redirect(w, r, "/admin/users/"+userID+"?flash=Remove+group+failed:+"+err.Error(), http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=移除分组失败："+err.Error(), http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, "/admin/users/"+userID+"?flash=Removed+from+group", http.StatusFound)
+	http.Redirect(w, r, "/admin/users/"+userID+"?flash=已移出分组", http.StatusFound)
 }
 
 func uploadedFaviconFileName(mimeType string) (string, bool) {
@@ -1215,17 +1211,17 @@ func (h *Handler) SiteFaviconFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, path)
 }
 
-// AdminSiteIcon serves the site icon stored in settings (used for PWA manifest / email avatars).
+// AdminSiteIcon 提供设置中保存的站点图标（用于站点清单与邮件头像）。
 func (h *Handler) AdminSiteIcon(w http.ResponseWriter, r *http.Request) {
 	iconURL := h.st.GetSetting(r.Context(), "site_icon_url")
 	if iconURL == "" {
 		http.NotFound(w, r)
 		return
 	}
-	// Data URL: decode and serve directly.
+	// 数据地址：直接解码并返回。
 	const dataPrefix = "data:"
 	if strings.HasPrefix(iconURL, dataPrefix) {
-		// Format: data:<mime>;base64,<data>
+		// 格式：data:<mime>;base64,<data>
 		rest := iconURL[len(dataPrefix):]
 		semi := strings.Index(rest, ";")
 		if semi < 0 {
@@ -1248,14 +1244,14 @@ func (h *Handler) AdminSiteIcon(w http.ResponseWriter, r *http.Request) {
 		w.Write(decoded)
 		return
 	}
-	// Regular URL: redirect.
+	// 普通地址：直接重定向。
 	http.Redirect(w, r, iconURL, http.StatusFound)
 }
 
-// AdminVerifyEmail manually marks a user's email as verified.
+// AdminVerifyEmail：管理员手动标记用户邮箱为已验证。
 func (h *Handler) AdminVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -1266,25 +1262,25 @@ func (h *Handler) AdminVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	targetUser, err := h.st.GetUserByID(ctx, id)
 	if err != nil {
-		http.Redirect(w, r, "/admin/users/"+id+"?flash=User+not+found", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+id+"?flash=用户不存在", http.StatusFound)
 		return
 	}
 	cur := h.currentUser(r)
 	if targetUser.IsAdmin() && !h.isSystemAdminUser(cur) {
-		http.Redirect(w, r, "/admin/users/"+id+"?flash=Cannot+modify+admin+account", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+id+"?flash=不能修改管理员账户", http.StatusFound)
 		return
 	}
 	if err := h.st.SetEmailVerified(ctx, id, true); err != nil {
-		http.Redirect(w, r, "/admin/users/"+id+"?flash=Failed+to+verify+email", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+id+"?flash=邮箱验证失败", http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, "/admin/users/"+id+"?flash=Email+verified", http.StatusFound)
+	http.Redirect(w, r, "/admin/users/"+id+"?flash=邮箱已验证", http.StatusFound)
 }
 
-// AdminUnverifyEmail marks a user's email as unverified.
+// AdminUnverifyEmail：管理员将用户邮箱标记为未验证。
 func (h *Handler) AdminUnverifyEmail(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -1295,31 +1291,31 @@ func (h *Handler) AdminUnverifyEmail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	targetUser, err := h.st.GetUserByID(ctx, id)
 	if err != nil {
-		http.Redirect(w, r, "/admin/users/"+id+"?flash=User+not+found", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+id+"?flash=用户不存在", http.StatusFound)
 		return
 	}
 	cur := h.currentUser(r)
 	if targetUser.IsAdmin() && !h.isSystemAdminUser(cur) {
-		http.Redirect(w, r, "/admin/users/"+id+"?flash=Cannot+modify+admin+account", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+id+"?flash=不能修改管理员账户", http.StatusFound)
 		return
 	}
 	if err := h.st.SetEmailVerified(ctx, id, false); err != nil {
-		http.Redirect(w, r, "/admin/users/"+id+"?flash=Failed+to+unverify+email", http.StatusFound)
+		http.Redirect(w, r, "/admin/users/"+id+"?flash=取消邮箱验证失败", http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, "/admin/users/"+id+"?flash=Re-verification+required", http.StatusFound)
+	http.Redirect(w, r, "/admin/users/"+id+"?flash=已设为未验证", http.StatusFound)
 }
 
-// AdminProviderEditPage shows the edit form for an existing OIDC provider.
+// AdminProviderEditPage：显示现有登录方式的编辑页面。
 func (h *Handler) AdminProviderEditPage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	ctx := r.Context()
 	p, err := h.st.GetOIDCProviderByID(ctx, id)
 	if err != nil {
-		h.renderError(w, r, http.StatusNotFound, "Provider not found", id)
+		h.renderError(w, r, http.StatusNotFound, "提供商不存在", id)
 		return
 	}
-	d := h.pageData(r, "Edit Login Provider")
+	d := h.pageData(r, "编辑登录方式")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
@@ -1327,10 +1323,10 @@ func (h *Handler) AdminProviderEditPage(w http.ResponseWriter, r *http.Request) 
 	h.render(w, "admin_provider_detail", d)
 }
 
-// AdminProviderEdit handles POST to update an existing OIDC provider.
+// AdminProviderEdit：处理更新登录方式的提交。
 func (h *Handler) AdminProviderEdit(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -1341,7 +1337,7 @@ func (h *Handler) AdminProviderEdit(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	p, err := h.st.GetOIDCProviderByID(ctx, id)
 	if err != nil {
-		h.renderError(w, r, http.StatusNotFound, "Provider not found", id)
+		h.renderError(w, r, http.StatusNotFound, "提供商不存在", id)
 		return
 	}
 
@@ -1358,7 +1354,7 @@ func (h *Handler) AdminProviderEdit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderErr := func(msg string) {
-		d := h.pageData(r, "Edit Login Provider")
+		d := h.pageData(r, "编辑登录方式")
 		d.Data = p
 		d.Flash = msg
 		d.IsError = true
@@ -1366,19 +1362,19 @@ func (h *Handler) AdminProviderEdit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if name == "" {
-		renderErr("Name cannot be empty")
+		renderErr("名称不能为空")
 		return
 	}
 	if !isAllowedAbsoluteURL(issuerURL) {
-		renderErr("Issuer URL must be HTTPS, or HTTP for localhost/127.0.0.1")
+		renderErr("发行方地址必须是安全协议地址，或本机调试地址")
 		return
 	}
 	if !containsScope(scopes, "openid") {
-		renderErr("Scopes must include openid")
+		renderErr("权限范围必须包含核心登录权限")
 		return
 	}
 
-	// Keep existing client secret if blank.
+	// 若密钥留空，保持原有值。
 	if clientSecret == "" {
 		clientSecret = p.ClientSecret
 	}
@@ -1387,10 +1383,10 @@ func (h *Handler) AdminProviderEdit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.st.UpdateOIDCProvider(ctx, p.ID, name, icon, clientID, clientSecret, issuerURL, strings.Join(scopes, " "), p.Enabled, autoRegister); err != nil {
-		renderErr("Update failed: " + err.Error())
+		renderErr("更新失败: " + err.Error())
 		return
 	}
-	http.Redirect(w, r, "/admin/providers/"+id+"/edit?flash=Updated", http.StatusFound)
+	http.Redirect(w, r, "/admin/providers/"+id+"/edit?flash=已更新", http.StatusFound)
 }
 
 type oneTimeClientCreatedView struct {
@@ -1425,4 +1421,3 @@ func (h *Handler) consumeOneTimeViewTicket(ctx context.Context, ticket string, o
 	defer h.st.DeleteWebAuthnSession(ctx, ticket)
 	return json.Unmarshal([]byte(raw), out)
 }
-

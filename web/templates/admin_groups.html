@@ -27,7 +27,7 @@
 
   <main class="panel-content">
     <h1 class="panel-title">分组管理</h1>
-    <p class="panel-sub">创建自定义分组并管理成员。内置分组 <code>admin</code>、<code>member</code> 由角色自动决定，无需手动管理。</p>
+    <p class="panel-sub">创建自定义分组并管理成员。系统内置分组会随角色自动维护，无需手动管理。</p>
 
     {{if .Flash}}
     <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
@@ -37,12 +37,12 @@
     <div class="detail-section" style="margin-bottom:1.5rem">
       <div class="detail-section-title">内置分组（系统自动）</div>
       <div class="detail-row">
-        <div class="detail-key"><span class="role-badge role-admin">admin</span></div>
-        <div class="detail-val" style="font-size:.88rem;color:var(--text2)">拥有 admin 角色的所有用户</div>
+        <div class="detail-key"><span class="role-badge role-admin">管理员组</span></div>
+        <div class="detail-val" style="font-size:.88rem;color:var(--text2)">拥有管理员角色的所有用户</div>
       </div>
       <div class="detail-row">
-        <div class="detail-key"><span class="role-badge role-member">member</span></div>
-        <div class="detail-val" style="font-size:.88rem;color:var(--text2)">拥有 member 或 admin 角色的所有用户</div>
+        <div class="detail-key"><span class="role-badge role-member">成员组</span></div>
+        <div class="detail-val" style="font-size:.88rem;color:var(--text2)">拥有成员或管理员角色的所有用户</div>
       </div>
     </div>
 
@@ -53,8 +53,8 @@
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">分组标识（英文小写，如 dev-team）</label>
-            <input class="form-control" type="text" name="name" placeholder="my-group"
+            <label class="form-label">分组代号（仅小写字母、数字、连接符和下划线）</label>
+            <input class="form-control" type="text" name="name" placeholder="请输入分组代号"
               pattern="[a-z0-9\-_]+" title="仅允许小写字母、数字、连字符和下划线" required>
           </div>
           <div class="form-group">

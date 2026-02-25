@@ -30,10 +30,10 @@ func buildTOTPUri(issuer, account, secret string) string {
 	issuer = strings.TrimSpace(issuer)
 	account = strings.TrimSpace(account)
 	if issuer == "" {
-		issuer = "TeamTransMTF"
+		issuer = "团队站点"
 	}
 	if account == "" {
-		account = "user"
+		account = "用户"
 	}
 	label := url.PathEscape(issuer + ":" + account)
 	v := url.Values{}

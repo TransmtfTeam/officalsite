@@ -8,11 +8,11 @@ import (
 	"transmtf.com/oidc/internal/store"
 )
 
-// Projects
+// 项目管理
 
 func (h *Handler) MemberProjects(w http.ResponseWriter, r *http.Request) {
 	projects, _ := h.st.ListProjects(r.Context())
-	d := h.pageData(r, "Project Management")
+	d := h.pageData(r, "项目管理")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
@@ -22,7 +22,7 @@ func (h *Handler) MemberProjects(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) MemberProjectCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -32,27 +32,27 @@ func (h *Handler) MemberProjectCreate(w http.ResponseWriter, r *http.Request) {
 
 	p := projectFromForm(r)
 	ctx := r.Context()
-	d := h.pageData(r, "Project Management")
+	d := h.pageData(r, "项目管理")
 	if err := h.st.CreateProject(ctx, p); err != nil {
 		projects, _ := h.st.ListProjects(ctx)
 		d.Data = projects
-		d.Flash = "Create failed: " + err.Error()
+		d.Flash = "创建失败：" + err.Error()
 		d.IsError = true
 		h.render(w, "member_projects", d)
 		return
 	}
 
-	http.Redirect(w, r, "/member/projects?flash=Project+created", http.StatusFound)
+	http.Redirect(w, r, "/member/projects?flash=项目已创建", http.StatusFound)
 }
 
 func (h *Handler) MemberProjectEdit(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	p, err := h.st.GetProject(r.Context(), id)
 	if err != nil {
-		h.renderError(w, r, http.StatusNotFound, "Project not found", id)
+		h.renderError(w, r, http.StatusNotFound, "项目不存在", id)
 		return
 	}
-	d := h.pageData(r, "Edit Project")
+	d := h.pageData(r, "编辑项目")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
@@ -62,7 +62,7 @@ func (h *Handler) MemberProjectEdit(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) MemberProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -74,20 +74,20 @@ func (h *Handler) MemberProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	p := projectFromForm(r)
 	p.ID = id
 	ctx := r.Context()
-	d := h.pageData(r, "Edit Project")
+	d := h.pageData(r, "编辑项目")
 	if err := h.st.UpdateProject(ctx, p); err != nil {
 		d.Data = p
-		d.Flash = "Save failed: " + err.Error()
+		d.Flash = "保存失败：" + err.Error()
 		d.IsError = true
 		h.render(w, "member_project_edit", d)
 		return
 	}
-	http.Redirect(w, r, "/member/projects/"+id+"/edit?flash=Saved", http.StatusFound)
+	http.Redirect(w, r, "/member/projects/"+id+"/edit?flash=已保存", http.StatusFound)
 }
 
 func (h *Handler) MemberProjectDelete(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -116,11 +116,11 @@ func projectFromForm(r *http.Request) *store.Project {
 	}
 }
 
-// Friend Links
+// 友情链接
 
 func (h *Handler) MemberLinks(w http.ResponseWriter, r *http.Request) {
 	links, _ := h.st.ListFriendLinks(r.Context())
-	d := h.pageData(r, "Friend Links Management")
+	d := h.pageData(r, "友情链接管理")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
@@ -130,7 +130,7 @@ func (h *Handler) MemberLinks(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) MemberLinkCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -145,7 +145,7 @@ func (h *Handler) MemberLinkCreate(w http.ResponseWriter, r *http.Request) {
 
 	renderErr := func(msg string) {
 		links, _ := h.st.ListFriendLinks(ctx)
-		d := h.pageData(r, "Friend Links Management")
+		d := h.pageData(r, "友情链接管理")
 		d.Data = links
 		d.Flash = msg
 		d.IsError = true
@@ -153,35 +153,35 @@ func (h *Handler) MemberLinkCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if name == "" || url == "" {
-		renderErr("Name and link URL are required")
+		renderErr("名称和链接地址不能为空")
 		return
 	}
 	if !isAllowedAbsoluteURL(url) {
-		renderErr("Link URL must be HTTPS, or HTTP on localhost/127.0.0.1")
+		renderErr("链接地址必须是安全协议地址，或本机调试地址")
 		return
 	}
 	if err := h.st.CreateFriendLink(ctx, name, url, icon, sortOrder); err != nil {
-		renderErr("Create failed: " + err.Error())
+		renderErr("创建失败：" + err.Error())
 		return
 	}
-	http.Redirect(w, r, "/member/links?flash=Link+created", http.StatusFound)
+	http.Redirect(w, r, "/member/links?flash=链接已创建", http.StatusFound)
 }
 
 func (h *Handler) MemberLinkEdit(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	l, err := h.st.GetFriendLink(r.Context(), id)
 	if err != nil {
-		h.renderError(w, r, http.StatusNotFound, "Link not found", id)
+		h.renderError(w, r, http.StatusNotFound, "链接不存在", id)
 		return
 	}
-	d := h.pageData(r, "Edit Friend Link")
+	d := h.pageData(r, "编辑友情链接")
 	d.Data = l
 	h.render(w, "member_link_edit", d)
 }
 
 func (h *Handler) MemberLinkUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -197,7 +197,7 @@ func (h *Handler) MemberLinkUpdate(w http.ResponseWriter, r *http.Request) {
 
 	renderErr := func(msg string) {
 		l, _ := h.st.GetFriendLink(ctx, id)
-		d := h.pageData(r, "Edit Friend Link")
+		d := h.pageData(r, "编辑友情链接")
 		d.Data = l
 		d.Flash = msg
 		d.IsError = true
@@ -205,23 +205,23 @@ func (h *Handler) MemberLinkUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if name == "" || url == "" {
-		renderErr("Name and link URL are required")
+		renderErr("名称和链接地址不能为空")
 		return
 	}
 	if !isAllowedAbsoluteURL(url) {
-		renderErr("Link URL must be HTTPS, or HTTP on localhost/127.0.0.1")
+		renderErr("链接地址必须是安全协议地址，或本机调试地址")
 		return
 	}
 	if err := h.st.UpdateFriendLink(ctx, id, name, url, icon, sortOrder); err != nil {
-		renderErr("Save failed: " + err.Error())
+		renderErr("保存失败：" + err.Error())
 		return
 	}
-	http.Redirect(w, r, "/member/links?flash=Saved", http.StatusFound)
+	http.Redirect(w, r, "/member/links?flash=已保存", http.StatusFound)
 }
 
 func (h *Handler) MemberLinkDelete(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -231,6 +231,3 @@ func (h *Handler) MemberLinkDelete(w http.ResponseWriter, r *http.Request) {
 	_ = h.st.DeleteFriendLink(r.Context(), r.PathValue("id"))
 	http.Redirect(w, r, "/member/links", http.StatusFound)
 }
-
-
-
