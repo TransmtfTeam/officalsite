@@ -327,6 +327,15 @@ func (s *Store) CreateUserWithEmailVerified(ctx context.Context, email, password
 	return s.GetUserByID(ctx, id)
 }
 
+// CreateExternalUser creates a member account for external (OIDC/OAuth2) auto-registration.
+// A random placeholder e-mail is used so the UNIQUE constraint is satisfied when the
+// provider does not supply a verified e-mail address. The account has no usable password.
+func (s *Store) CreateExternalUser(ctx context.Context, displayName string) (*User, error) {
+	placeholder := "ext-" + uuid.New().String() + "@no-email.placeholder"
+	randPass := uuid.New().String() + "-" + uuid.New().String()
+	return s.CreateUserWithEmailVerified(ctx, placeholder, randPass, displayName, "member", false)
+}
+
 func (s *Store) GetUserByID(ctx context.Context, id string) (*User, error) {
 	return scanUser(s.db.QueryRowContext(ctx, `SELECT `+userCols+` FROM users WHERE id=$1`, id))
 }

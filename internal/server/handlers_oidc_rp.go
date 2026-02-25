@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -268,7 +269,14 @@ func resolveRPProviderConfig(provider *store.OIDCProvider) (*rpDiscovery, bool, 
 }
 
 func (h *Handler) providerCallbackURL(r *http.Request, slug string) string {
-	base := strings.TrimRight(strings.TrimSpace(h.cfg.Issuer), "/")
+	// Prefer the statically configured issuer so that redirect_uri is identical
+	// across the authorization request and the token-exchange callback, regardless
+	// of how reverse-proxy headers are set on each individual HTTP request.
+	if base := strings.TrimRight(strings.TrimSpace(h.cfg.Issuer), "/"); base != "" && isAllowedAbsoluteURL(base) {
+		return base + "/auth/oidc/" + slug + "/callback"
+	}
+	// Fallback: derive from request headers when issuer is not configured.
+	base := ""
 	if host := strings.TrimSpace(r.Host); host != "" {
 		scheme := "https"
 		if fp := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]); fp != "" {
@@ -377,7 +385,7 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusBadRequest, "Login failed", "Missing state parameter.")
 		return
 	}
-	st, err := h.st.GetOIDCState(r.Context(), stateVal)
+	st, err := h.st.ConsumeOIDCState(r.Context(), stateVal)
 	if err != nil || st.Provider != slug {
 		h.renderError(w, r, http.StatusBadRequest, "Invalid login state", "Please start login again.")
 		return
@@ -496,10 +504,6 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusBadGateway, "User identity missing", "Provider response did not include a stable subject identifier.")
 		return
 	}
-	if err := h.st.DeleteOIDCState(r.Context(), stateVal); err != nil {
-		h.renderError(w, r, http.StatusInternalServerError, "Login state cleanup failed", "Please start login again.")
-		return
-	}
 
 	ctx := r.Context()
 	if st.UserID != "" {
@@ -514,6 +518,33 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	if !isErrNoRows(err) {
 		h.renderError(w, r, http.StatusInternalServerError, "Identity lookup failed", err.Error())
+		return
+	}
+
+	// Auto-registration: when enabled for this provider, create a member account
+	// immediately without requiring the user to choose "bind or register".
+	if provider.AutoRegister {
+		displayName := strings.TrimSpace(name)
+		if displayName == "" {
+			displayName = strings.TrimSpace(username)
+		}
+		if displayName == "" {
+			displayName = subject
+		}
+		autoUser, autoErr := h.st.CreateExternalUser(ctx, displayName)
+		if autoErr != nil {
+			h.renderError(w, r, http.StatusInternalServerError, "Auto-registration failed", autoErr.Error())
+			return
+		}
+		if av := strings.TrimSpace(avatar); av != "" {
+			_ = h.st.UpdateUserAvatar(ctx, autoUser.ID, av)
+			autoUser.AvatarURL = av
+		}
+		if linkErr := h.st.LinkIdentity(ctx, autoUser.ID, slug, subject); linkErr != nil {
+			h.renderError(w, r, http.StatusInternalServerError, "Auto-registration failed", linkErr.Error())
+			return
+		}
+		h.finishExternalLogin(w, r, autoUser, st.Redirect)
 		return
 	}
 
@@ -807,7 +838,9 @@ func rpUserInfo(endpoint, accessToken string) (sub, email string, emailVerified 
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	var claims map[string]any
-	if err = json.Unmarshal(body, &claims); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber() // preserve large integer IDs without float64 precision loss
+	if err = dec.Decode(&claims); err != nil {
 		return
 	}
 
@@ -824,8 +857,13 @@ func rpUserInfo(endpoint, accessToken string) (sub, email string, emailVerified 
 		sub = stringClaim(source, "user_id")
 	}
 	if sub == "" {
-		if n, ok := source["id"].(float64); ok {
-			sub = strconv.FormatInt(int64(n), 10)
+		// Some providers return id as a JSON number; UseNumber() gives us json.Number
+		// which preserves the full 64-bit integer without float64 precision loss.
+		switch v := source["id"].(type) {
+		case json.Number:
+			sub = v.String()
+		case float64:
+			sub = strconv.FormatInt(int64(v), 10)
 		}
 	}
 	if sub == "" {
@@ -893,8 +931,11 @@ func rpUserInfo(endpoint, accessToken string) (sub, email string, emailVerified 
 
 func stringClaim(m map[string]any, key string) string {
 	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
+		switch s := v.(type) {
+		case string:
 			return s
+		case json.Number:
+			return s.String()
 		}
 	}
 	return ""

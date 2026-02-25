@@ -1043,7 +1043,10 @@ func (h *Handler) AdminProviderToggle(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusNotFound, "未找到", id)
 		return
 	}
-	_ = h.st.UpdateOIDCProvider(ctx, p.ID, p.Name, normalizeProviderType(p.ProviderType), p.Icon, p.ClientID, p.ClientSecret, p.IssuerURL, p.AuthorizationURL, p.TokenURL, p.UserinfoURL, p.Scopes, !p.Enabled, p.AutoRegister)
+	if err := h.st.UpdateOIDCProvider(ctx, p.ID, p.Name, normalizeProviderType(p.ProviderType), p.Icon, p.ClientID, p.ClientSecret, p.IssuerURL, p.AuthorizationURL, p.TokenURL, p.UserinfoURL, p.Scopes, !p.Enabled, p.AutoRegister); err != nil {
+		http.Redirect(w, r, "/admin/providers?flash="+url.QueryEscape("操作失败："+err.Error()), http.StatusFound)
+		return
+	}
 	http.Redirect(w, r, "/admin/providers", http.StatusFound)
 }
 

@@ -43,7 +43,7 @@
       authorizationURL: "https://x.com/i/oauth2/authorize",
       tokenURL: "https://api.x.com/2/oauth2/token",
       userinfoURL: "https://api.x.com/2/users/me?user.fields=id,name,username,profile_image_url",
-      scopes: "users.read",
+      scopes: "users.read tweet.read",
     },
   };
 
