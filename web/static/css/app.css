@@ -78,6 +78,22 @@ img { max-width: 100%; }
 }
 .btn-sm      { padding: .35rem .8rem; font-size: .82rem; }
 
+.provider-icon {
+  display: inline-flex;
+  width: 1.15rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+}
+.provider-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.provider-icon-lg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
 /* ── Form elements ─────────────────────────────────────────── */
 .form-group { display: flex; flex-direction: column; gap: .35rem; margin-bottom: 1rem; }
 .form-label { font-size: .88rem; color: var(--text2); font-weight: 500; }
@@ -728,6 +744,39 @@ footer {
   font-weight: 500;
 }
 .detail-val { color: var(--text); word-break: break-all; }
+
+/* ── Provider preset buttons ───────────────────────────────── */
+.provider-template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: .7rem;
+  margin: .75rem 0 1rem;
+}
+.provider-template-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+  padding: .6rem .7rem;
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #fff;
+  color: var(--text);
+  font-size: .85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s, transform .1s;
+}
+.provider-template-btn:hover {
+  border-color: rgba(2,132,199,0.42);
+  box-shadow: 0 4px 12px rgba(2,132,199,0.12);
+  transform: translateY(-1px);
+}
+.provider-template-btn.active {
+  border-color: rgba(2,132,199,0.52);
+  background: #f0f9ff;
+  color: #0f3d56;
+}
 
 /* ── Monospace code ──────────────────────────────────────────── */
 .mono { font-family: monospace; font-size: .85rem; }

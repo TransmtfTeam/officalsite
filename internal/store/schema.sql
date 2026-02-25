@@ -116,11 +116,34 @@ CREATE TABLE IF NOT EXISTS user_identities (
 CREATE TABLE IF NOT EXISTS oidc_states (
     state      TEXT PRIMARY KEY,
     provider   TEXT NOT NULL,
+    user_id    TEXT NOT NULL DEFAULT '', -- non-empty when started from profile identity binding
     nonce      TEXT NOT NULL DEFAULT '',
     verifier   TEXT NOT NULL DEFAULT '', -- PKCE code_verifier
     redirect   TEXT NOT NULL DEFAULT '', -- redirect after external login
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS oidc_link_challenges (
+    id         TEXT PRIMARY KEY,
+    provider   TEXT NOT NULL,
+    subject    TEXT NOT NULL,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    redirect   TEXT NOT NULL DEFAULT '',
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS oidc_login_challenges (
+    id             TEXT PRIMARY KEY,
+    provider       TEXT NOT NULL,
+    subject        TEXT NOT NULL,
+    profile_name   TEXT NOT NULL DEFAULT '',
+    profile_avatar TEXT NOT NULL DEFAULT '',
+    profile_email  TEXT NOT NULL DEFAULT '',
+    redirect       TEXT NOT NULL DEFAULT '',
+    expires_at     TIMESTAMPTZ NOT NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS login_2fa_challenges (
@@ -176,6 +199,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAU
 ALTER TABLE users ALTER COLUMN email_verified SET DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS require_password_change BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE oidc_states ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '10 minutes');
+ALTER TABLE oidc_states ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT '';
 ALTER TABLE custom_roles ADD COLUMN IF NOT EXISTS permissions TEXT NOT NULL DEFAULT '';
 ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS allowed_groups TEXT NOT NULL DEFAULT '';
 ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS base_access TEXT NOT NULL DEFAULT 'legacy';
@@ -226,6 +250,8 @@ CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash)
 CREATE INDEX IF NOT EXISTS idx_projects_sort ON projects(sort_order, created_at);
 CREATE INDEX IF NOT EXISTS idx_friend_links_sort ON friend_links(sort_order, created_at);
 CREATE INDEX IF NOT EXISTS idx_oidc_states_expires ON oidc_states(expires_at);
+CREATE INDEX IF NOT EXISTS idx_oidc_link_challenges_expires ON oidc_link_challenges(expires_at);
+CREATE INDEX IF NOT EXISTS idx_oidc_login_challenges_expires ON oidc_login_challenges(expires_at);
 CREATE INDEX IF NOT EXISTS idx_user_identities_lookup ON user_identities(provider, subject);
 CREATE INDEX IF NOT EXISTS idx_login_2fa_expires ON login_2fa_challenges(expires_at);
 CREATE INDEX IF NOT EXISTS idx_passkey_user ON passkey_credentials(user_id);

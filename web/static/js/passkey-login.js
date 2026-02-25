@@ -78,7 +78,21 @@
         },
       };
 
-      var finishResp = await fetch('/login/passkey/finish', {
+      var nextInput = document.querySelector('input[name="next"]');
+      var oidcChallengeInput = document.querySelector('input[name="oidc_challenge"]');
+      var finishURL = '/login/passkey/finish';
+      var params = [];
+      if (nextInput && nextInput.value) {
+        params.push('next=' + encodeURIComponent(nextInput.value));
+      }
+      if (oidcChallengeInput && oidcChallengeInput.value) {
+        params.push('oidc_challenge=' + encodeURIComponent(oidcChallengeInput.value));
+      }
+      if (params.length > 0) {
+        finishURL += '?' + params.join('&');
+      }
+
+      var finishResp = await fetch(finishURL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -102,4 +116,3 @@
     }
   });
 })();
-

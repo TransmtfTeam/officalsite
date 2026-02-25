@@ -142,10 +142,31 @@ type UserIdentity struct {
 type OIDCState struct {
 	State     string
 	Provider  string
+	UserID    string
 	Nonce     string
 	Verifier  string
 	Redirect  string
 	ExpiresAt time.Time
+}
+
+type OIDCLinkChallenge struct {
+	ID        string
+	Provider  string
+	Subject   string
+	UserID    string
+	Redirect  string
+	ExpiresAt time.Time
+}
+
+type OIDCLoginChallenge struct {
+	ID            string
+	Provider      string
+	Subject       string
+	ProfileName   string
+	ProfileAvatar string
+	ProfileEmail  string
+	Redirect      string
+	ExpiresAt     time.Time
 }
 
 type Login2FAChallenge struct {
@@ -765,6 +786,27 @@ func (s *Store) LinkIdentity(ctx context.Context, userID, provider, subject stri
 	return err
 }
 
+func (s *Store) GetUserIdentityByUserAndProvider(ctx context.Context, userID, provider string) (*UserIdentity, error) {
+	id := &UserIdentity{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id,user_id,provider,subject,created_at FROM user_identities WHERE user_id=$1 AND provider=$2 ORDER BY created_at DESC LIMIT 1`,
+		userID, provider,
+	).Scan(&id.ID, &id.UserID, &id.Provider, &id.Subject, &id.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return id, nil
+}
+
+func (s *Store) DeleteUserIdentityByUserAndProvider(ctx context.Context, userID, provider string) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM user_identities WHERE user_id=$1 AND provider=$2`, userID, provider)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 func (s *Store) GetUserByIdentity(ctx context.Context, provider, subject string) (*User, error) {
 	var userID string
 	err := s.db.QueryRowContext(ctx,
@@ -776,10 +818,10 @@ func (s *Store) GetUserByIdentity(ctx context.Context, provider, subject string)
 	return s.GetUserByID(ctx, userID)
 }
 
-func (s *Store) CreateOIDCState(ctx context.Context, state, provider, nonce, verifier, redirect string) error {
+func (s *Store) CreateOIDCState(ctx context.Context, state, provider, userID, nonce, verifier, redirect string) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO oidc_states(state,provider,nonce,verifier,redirect,expires_at) VALUES($1,$2,$3,$4,$5,$6)`,
-		state, provider, nonce, verifier, redirect, time.Now().Add(10*time.Minute))
+		`INSERT INTO oidc_states(state,provider,user_id,nonce,verifier,redirect,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7)`,
+		state, provider, userID, nonce, verifier, redirect, time.Now().Add(10*time.Minute))
 	return err
 }
 
@@ -791,8 +833,8 @@ func (s *Store) ConsumeOIDCState(ctx context.Context, state string) (*OIDCState,
 	defer tx.Rollback()
 	st := &OIDCState{}
 	err = tx.QueryRowContext(ctx,
-		`SELECT state,provider,nonce,verifier,redirect,expires_at FROM oidc_states WHERE state=$1 AND expires_at > now() FOR UPDATE`,
-		state).Scan(&st.State, &st.Provider, &st.Nonce, &st.Verifier, &st.Redirect, &st.ExpiresAt)
+		`SELECT state,provider,user_id,nonce,verifier,redirect,expires_at FROM oidc_states WHERE state=$1 AND expires_at > now() FOR UPDATE`,
+		state).Scan(&st.State, &st.Provider, &st.UserID, &st.Nonce, &st.Verifier, &st.Redirect, &st.ExpiresAt)
 	if err != nil {
 		return nil, err
 	}
@@ -800,6 +842,110 @@ func (s *Store) ConsumeOIDCState(ctx context.Context, state string) (*OIDCState,
 		return nil, err
 	}
 	return st, tx.Commit()
+}
+
+func (s *Store) CreateOIDCLinkChallenge(ctx context.Context, provider, subject, userID, redirect string) (string, error) {
+	id := uuid.New().String()
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO oidc_link_challenges(id,provider,subject,user_id,redirect,expires_at) VALUES($1,$2,$3,$4,$5,$6)`,
+		id, provider, subject, userID, redirect, time.Now().Add(10*time.Minute))
+	return id, err
+}
+
+func (s *Store) GetOIDCLinkChallenge(ctx context.Context, id string) (*OIDCLinkChallenge, error) {
+	ch := &OIDCLinkChallenge{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id,provider,subject,user_id,redirect,expires_at FROM oidc_link_challenges WHERE id=$1`,
+		id,
+	).Scan(&ch.ID, &ch.Provider, &ch.Subject, &ch.UserID, &ch.Redirect, &ch.ExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+	if time.Now().After(ch.ExpiresAt) {
+		_, _ = s.db.ExecContext(ctx, `DELETE FROM oidc_link_challenges WHERE id=$1`, id)
+		return nil, sql.ErrNoRows
+	}
+	return ch, nil
+}
+
+func (s *Store) ConsumeOIDCLinkChallenge(ctx context.Context, id string) (*OIDCLinkChallenge, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	ch := &OIDCLinkChallenge{}
+	err = tx.QueryRowContext(ctx,
+		`SELECT id,provider,subject,user_id,redirect,expires_at FROM oidc_link_challenges WHERE id=$1 FOR UPDATE`,
+		id,
+	).Scan(&ch.ID, &ch.Provider, &ch.Subject, &ch.UserID, &ch.Redirect, &ch.ExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+	if time.Now().After(ch.ExpiresAt) {
+		_, _ = tx.ExecContext(ctx, `DELETE FROM oidc_link_challenges WHERE id=$1`, id)
+		return nil, sql.ErrNoRows
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM oidc_link_challenges WHERE id=$1`, id); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return ch, nil
+}
+
+func (s *Store) CreateOIDCLoginChallenge(ctx context.Context, provider, subject, profileName, profileAvatar, profileEmail, redirect string) (string, error) {
+	id := uuid.New().String()
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO oidc_login_challenges(id,provider,subject,profile_name,profile_avatar,profile_email,redirect,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+		id, provider, subject, profileName, profileAvatar, profileEmail, redirect, time.Now().Add(15*time.Minute))
+	return id, err
+}
+
+func (s *Store) GetOIDCLoginChallenge(ctx context.Context, id string) (*OIDCLoginChallenge, error) {
+	ch := &OIDCLoginChallenge{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id,provider,subject,profile_name,profile_avatar,profile_email,redirect,expires_at FROM oidc_login_challenges WHERE id=$1`,
+		id,
+	).Scan(&ch.ID, &ch.Provider, &ch.Subject, &ch.ProfileName, &ch.ProfileAvatar, &ch.ProfileEmail, &ch.Redirect, &ch.ExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+	if time.Now().After(ch.ExpiresAt) {
+		_, _ = s.db.ExecContext(ctx, `DELETE FROM oidc_login_challenges WHERE id=$1`, id)
+		return nil, sql.ErrNoRows
+	}
+	return ch, nil
+}
+
+func (s *Store) ConsumeOIDCLoginChallenge(ctx context.Context, id string) (*OIDCLoginChallenge, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	ch := &OIDCLoginChallenge{}
+	err = tx.QueryRowContext(ctx,
+		`SELECT id,provider,subject,profile_name,profile_avatar,profile_email,redirect,expires_at FROM oidc_login_challenges WHERE id=$1 FOR UPDATE`,
+		id,
+	).Scan(&ch.ID, &ch.Provider, &ch.Subject, &ch.ProfileName, &ch.ProfileAvatar, &ch.ProfileEmail, &ch.Redirect, &ch.ExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+	if time.Now().After(ch.ExpiresAt) {
+		_, _ = tx.ExecContext(ctx, `DELETE FROM oidc_login_challenges WHERE id=$1`, id)
+		return nil, sql.ErrNoRows
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM oidc_login_challenges WHERE id=$1`, id); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return ch, nil
 }
 
 func (s *Store) CreateLogin2FAChallenge(ctx context.Context, userID, redirect string) (string, error) {

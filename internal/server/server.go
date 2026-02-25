@@ -444,6 +444,8 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	// OIDC RP - external provider login
 	mux.HandleFunc("GET /auth/oidc/{slug}", h.OIDCProviderLogin)
 	mux.HandleFunc("GET /auth/oidc/{slug}/callback", h.OIDCProviderCallback)
+	mux.HandleFunc("GET /auth/oidc/first-login", h.OIDCFirstLoginPage)
+	mux.HandleFunc("POST /auth/oidc/first-login", h.OIDCFirstLoginPost)
 
 	// OIDC discovery
 	mux.HandleFunc("GET /.well-known/openid-configuration", h.Discovery)
@@ -461,6 +463,8 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	// Authenticated user
 	mux.HandleFunc("GET /profile", h.requireLogin(h.Profile))
 	mux.HandleFunc("POST /profile", h.requireLogin(h.ProfilePost))
+	mux.HandleFunc("POST /profile/identities/{slug}/bind", h.requireLogin(h.ProfileIdentityBind))
+	mux.HandleFunc("POST /profile/identities/{slug}/unbind", h.requireLogin(h.ProfileIdentityUnbind))
 	mux.HandleFunc("GET /profile/change-password", h.requireLogin(h.ProfileForceChangePage))
 	mux.HandleFunc("POST /profile/change-password", h.requireLogin(h.ProfileForceChangePost))
 	mux.HandleFunc("POST /profile/delete-password", h.requireLogin(h.ProfileDeletePassword))
@@ -618,11 +622,10 @@ func safeNextPath(next, fallback string) string {
 	if next == "" {
 		return fallback
 	}
-	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.Contains(next, `\`) {
-		return fallback
-	}
-	u, err := url.Parse(next)
-	if err != nil || u.IsAbs() || u.Host != "" {
+	// Must be a server-relative path to prevent open redirects.
+	// Reject protocol-relative (//) and anything with backslash or newlines.
+	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") ||
+		strings.ContainsAny(next, "\r\n\\") {
 		return fallback
 	}
 	return next

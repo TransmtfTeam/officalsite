@@ -13,6 +13,54 @@ import (
 	"transmtf.com/oidc/internal/store"
 )
 
+func (h *Handler) loadOIDCLoginChallenge(ctx context.Context, challengeID string) (*store.OIDCLoginChallenge, string, error) {
+	ch, err := h.st.GetOIDCLoginChallenge(ctx, strings.TrimSpace(challengeID))
+	if err != nil {
+		return nil, "", err
+	}
+	providerName := ch.Provider
+	if p, pErr := h.st.GetOIDCProviderBySlug(ctx, ch.Provider); pErr == nil && p != nil {
+		providerName = p.Name
+	}
+	return ch, providerName, nil
+}
+
+func (h *Handler) appendOIDCChallengeToLoginData(ctx context.Context, data map[string]any, challengeID string) error {
+	if strings.TrimSpace(challengeID) == "" {
+		return nil
+	}
+	ch, providerName, err := h.loadOIDCLoginChallenge(ctx, challengeID)
+	if err != nil {
+		return err
+	}
+	data["OIDCChallenge"] = ch.ID
+	data["OIDCProviderName"] = providerName
+	return nil
+}
+
+func (h *Handler) appendOIDCChallengeToRegisterData(ctx context.Context, data map[string]any, challengeID string) error {
+	if strings.TrimSpace(challengeID) == "" {
+		return nil
+	}
+	ch, providerName, err := h.loadOIDCLoginChallenge(ctx, challengeID)
+	if err != nil {
+		return err
+	}
+	data["OIDCChallenge"] = ch.ID
+	data["OIDCProviderName"] = providerName
+	data["OIDCProviderSlug"] = ch.Provider
+	if strings.TrimSpace(ch.ProfileName) != "" {
+		data["PrefillDisplayName"] = strings.TrimSpace(ch.ProfileName)
+	}
+	if strings.TrimSpace(ch.ProfileEmail) != "" {
+		data["PrefillEmail"] = strings.TrimSpace(ch.ProfileEmail)
+	}
+	if strings.TrimSpace(ch.ProfileAvatar) != "" {
+		data["PrefillAvatar"] = strings.TrimSpace(ch.ProfileAvatar)
+	}
+	return nil
+}
+
 func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		h.renderError(w, r, http.StatusNotFound, "页面不存在", r.URL.Path)
@@ -36,14 +84,21 @@ func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
 	}
 	providers, _ := h.st.ListEnabledOIDCProviders(r.Context())
 	d := h.pageData(r, "登录")
+	next := safeNextPath(r.URL.Query().Get("next"), "")
+	oidcChallenge := strings.TrimSpace(r.URL.Query().Get("oidc_challenge"))
 	if flash := strings.TrimSpace(r.URL.Query().Get("flash")); flash != "" {
 		d.Flash = flash
 		d.IsError = r.URL.Query().Get("err") == "1"
 	}
-	d.Data = map[string]any{
-		"Next":      safeNextPath(r.URL.Query().Get("next"), ""),
+	data := map[string]any{
+		"Next":      next,
 		"Providers": providers,
 	}
+	if err := h.appendOIDCChallengeToLoginData(r.Context(), data, oidcChallenge); err != nil {
+		d.Flash = "外部登录流程已过期，请重新发起授权登录。"
+		d.IsError = true
+	}
+	d.Data = data
 	h.render(w, "login", d)
 }
 
@@ -60,16 +115,25 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	email := strings.TrimSpace(r.FormValue("email"))
 	pass := r.FormValue("password")
 	next := safeNextPath(r.FormValue("next"), "/profile")
+	oidcChallenge := strings.TrimSpace(r.FormValue("oidc_challenge"))
 
 	ctx := r.Context()
-	u, err := h.st.GetUserByEmail(ctx, email)
-	if err != nil || !h.st.VerifyPassword(u, pass) || !u.Active {
+	renderLoginErr := func(msg string) {
 		providers, _ := h.st.ListEnabledOIDCProviders(ctx)
 		d := h.pageData(r, "登录")
-		d.Flash = "邮箱或密码错误"
+		d.Flash = msg
 		d.IsError = true
-		d.Data = map[string]any{"Next": next, "Providers": providers}
+		data := map[string]any{"Next": next, "Providers": providers}
+		if err := h.appendOIDCChallengeToLoginData(ctx, data, oidcChallenge); err != nil {
+			d.Flash = "外部登录流程已过期，请重新发起授权登录。"
+		}
+		d.Data = data
 		h.render(w, "login", d)
+	}
+
+	u, err := h.st.GetUserByEmail(ctx, email)
+	if err != nil || !h.st.VerifyPassword(u, pass) || !u.Active {
+		renderLoginErr("邮箱或密码错误")
 		return
 	}
 
@@ -79,13 +143,29 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 		d := h.pageData(r, "登录")
 		d.Flash = "邮箱尚未验证，请查收验证邮件。"
 		d.IsError = true
-		d.Data = map[string]any{
+		data := map[string]any{
 			"Next":            next,
 			"Providers":       providers,
 			"UnverifiedEmail": email,
+			"OIDCChallenge":   oidcChallenge,
 		}
+		if err := h.appendOIDCChallengeToLoginData(ctx, data, oidcChallenge); err != nil {
+			d.Flash = "外部登录流程已过期，请重新发起授权登录。"
+		}
+		d.Data = data
 		h.render(w, "login", d)
 		return
+	}
+
+	if oidcChallenge != "" {
+		challengeNext, linkErr := h.consumeOIDCLoginChallengeAndLink(ctx, u, oidcChallenge)
+		if linkErr != nil {
+			renderLoginErr(linkErr.Error())
+			return
+		}
+		if challengeNext != "" {
+			next = challengeNext
+		}
 	}
 
 	if h.startSecondFactor(w, r, u, next) {
@@ -110,6 +190,15 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) RegisterPage(w http.ResponseWriter, r *http.Request) {
 	d := h.pageData(r, "注册")
+	data := map[string]any{
+		"Next": safeNextPath(r.URL.Query().Get("next"), ""),
+	}
+	oidcChallenge := strings.TrimSpace(r.URL.Query().Get("oidc_challenge"))
+	if err := h.appendOIDCChallengeToRegisterData(r.Context(), data, oidcChallenge); err != nil {
+		d.Flash = "外部登录流程已过期，请重新发起授权登录。"
+		d.IsError = true
+	}
+	d.Data = data
 	h.render(w, "register", d)
 }
 
@@ -127,36 +216,65 @@ func (h *Handler) RegisterPost(w http.ResponseWriter, r *http.Request) {
 	pass := r.FormValue("password")
 	confirm := r.FormValue("confirm")
 	name := strings.TrimSpace(r.FormValue("display_name"))
+	next := safeNextPath(r.FormValue("next"), "")
+	oidcChallenge := strings.TrimSpace(r.FormValue("oidc_challenge"))
 
-	fail := func(msg string) {
+	ctx := r.Context()
+	_, _, challengeErr := h.loadOIDCLoginChallenge(ctx, oidcChallenge)
+
+	fail := func(msg string, keepChallenge bool) {
 		d := h.pageData(r, "注册")
 		d.Flash = msg
 		d.IsError = true
+		data := map[string]any{
+			"Next":               next,
+			"PrefillEmail":       email,
+			"PrefillDisplayName": name,
+		}
+		if keepChallenge && oidcChallenge != "" {
+			if err := h.appendOIDCChallengeToRegisterData(ctx, data, oidcChallenge); err != nil {
+				d.Flash = "外部登录流程已过期，请重新发起授权登录。"
+			}
+		}
+		d.Data = data
 		h.render(w, "register", d)
 	}
 
+	if oidcChallenge != "" && challengeErr != nil {
+		fail("外部登录流程已过期，请重新发起授权登录。", false)
+		return
+	}
 	if email == "" || pass == "" || name == "" {
-		fail("请填写所有必填项")
+		fail("请填写所有必填项", oidcChallenge != "")
 		return
 	}
 	if len(pass) < 8 {
-		fail("密码至少需要8位")
+		fail("密码至少需要8位", oidcChallenge != "")
 		return
 	}
 	if pass != confirm {
-		fail("两次输入的密码不一致")
+		fail("两次输入的密码不一致", oidcChallenge != "")
 		return
 	}
 
-	ctx := r.Context()
 	u, err := h.st.CreateUserWithEmailVerified(ctx, email, pass, name, "user", false)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
-			fail("邮箱已被注册")
+			fail("邮箱已被注册", oidcChallenge != "")
 		} else {
-			fail("注册失败：" + err.Error())
+			fail("注册失败："+err.Error(), oidcChallenge != "")
 		}
 		return
+	}
+
+	if oidcChallenge != "" {
+		if _, linkErr := h.consumeOIDCLoginChallengeAndLink(ctx, u, oidcChallenge); linkErr != nil {
+			d := h.pageData(r, "注册结果")
+			d.Flash = "账号已创建，但外部登录绑定失败：" + linkErr.Error()
+			d.IsError = true
+			h.render(w, "error", d)
+			return
+		}
 	}
 
 	token, err := h.st.CreateEmailVerification(ctx, u.ID)
@@ -188,26 +306,54 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
+func (h *Handler) buildProfileViewData(ctx context.Context, u *store.User) map[string]any {
+	data := map[string]any{
+		"Passkeys":          nil,
+		"HasPassword":       false,
+		"PasskeyCount":      0,
+		"ExternalProviders": []map[string]any{},
+	}
+	if u == nil {
+		return data
+	}
+
+	passkeys, _ := h.st.GetPasskeyCredentialsByUserID(ctx, u.ID)
+	data["Passkeys"] = passkeys
+	data["HasPassword"] = store.HasPassword(u)
+	data["PasskeyCount"] = h.st.CountPasskeysByUserID(ctx, u.ID)
+	if u.TOTPPendingSecret != "" {
+		siteName := orDefault(h.st.GetSetting(ctx, "site_name"), "团队站点")
+		data["PendingSecret"] = u.TOTPPendingSecret
+		data["PendingURI"] = buildTOTPUri(siteName, u.Email, u.TOTPPendingSecret)
+	}
+
+	identities, _ := h.st.GetUserIdentitiesByUserID(ctx, u.ID)
+	boundProviders := map[string]bool{}
+	for _, id := range identities {
+		boundProviders[id.Provider] = true
+	}
+	providers, _ := h.st.ListOIDCProviders(ctx)
+	items := make([]map[string]any, 0, len(providers))
+	for _, p := range providers {
+		items = append(items, map[string]any{
+			"Slug":    p.Slug,
+			"Name":    p.Name,
+			"Icon":    p.Icon,
+			"Enabled": p.Enabled,
+			"Bound":   boundProviders[p.Slug],
+		})
+	}
+	data["ExternalProviders"] = items
+	return data
+}
+
 func (h *Handler) Profile(w http.ResponseWriter, r *http.Request) {
 	u := h.currentUser(r)
 	d := h.pageData(r, "个人资料")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
-	ctx := r.Context()
-	data := map[string]any{"Passkeys": nil, "HasPassword": false, "PasskeyCount": 0}
-	if u != nil {
-		passkeys, _ := h.st.GetPasskeyCredentialsByUserID(ctx, u.ID)
-		data["Passkeys"] = passkeys
-		data["HasPassword"] = store.HasPassword(u)
-		data["PasskeyCount"] = h.st.CountPasskeysByUserID(ctx, u.ID)
-		if u.TOTPPendingSecret != "" {
-			siteName := orDefault(h.st.GetSetting(ctx, "site_name"), "团队站点")
-			data["PendingSecret"] = u.TOTPPendingSecret
-			data["PendingURI"] = buildTOTPUri(siteName, u.Email, u.TOTPPendingSecret)
-		}
-	}
-	d.Data = data
+	d.Data = h.buildProfileViewData(r.Context(), u)
 	h.render(w, "profile", d)
 }
 
@@ -233,19 +379,7 @@ func (h *Handler) ProfilePost(w http.ResponseWriter, r *http.Request) {
 		d := h.pageData(r, "个人资料")
 		d.Flash = msg
 		d.IsError = true
-		data := map[string]any{"Passkeys": nil, "HasPassword": false, "PasskeyCount": 0}
-		if u != nil {
-			passkeys, _ := h.st.GetPasskeyCredentialsByUserID(r.Context(), u.ID)
-			data["Passkeys"] = passkeys
-			data["HasPassword"] = store.HasPassword(u)
-			data["PasskeyCount"] = h.st.CountPasskeysByUserID(r.Context(), u.ID)
-			if u.TOTPPendingSecret != "" {
-				siteName := orDefault(h.st.GetSetting(r.Context(), "site_name"), "团队站点")
-				data["PendingSecret"] = u.TOTPPendingSecret
-				data["PendingURI"] = buildTOTPUri(siteName, u.Email, u.TOTPPendingSecret)
-			}
-		}
-		d.Data = data
+		d.Data = h.buildProfileViewData(r.Context(), u)
 		h.render(w, "profile", d)
 	}
 
@@ -284,6 +418,95 @@ func (h *Handler) ProfilePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/profile?flash=已保存", http.StatusFound)
+}
+
+func (h *Handler) ProfileIdentityBind(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
+		return
+	}
+	if !h.verifyCSRFToken(r) {
+		h.csrfFailed(w, r)
+		return
+	}
+	u := h.currentUser(r)
+	if u == nil {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	if !store.HasPassword(u) {
+		http.Redirect(w, r, "/profile?flash="+url.QueryEscape("请先设置密码，再绑定登录方式"), http.StatusFound)
+		return
+	}
+	pass := r.FormValue("current_password")
+	if !h.st.VerifyPassword(u, pass) {
+		http.Redirect(w, r, "/profile?flash="+url.QueryEscape("当前密码不正确"), http.StatusFound)
+		return
+	}
+
+	slug := r.PathValue("slug")
+	ctx := r.Context()
+	p, err := h.st.GetOIDCProviderBySlug(ctx, slug)
+	if err != nil || !p.Enabled {
+		http.Redirect(w, r, "/profile?flash="+url.QueryEscape("该登录方式不可用"), http.StatusFound)
+		return
+	}
+	if _, err := h.st.GetUserIdentityByUserAndProvider(ctx, u.ID, slug); err == nil {
+		http.Redirect(w, r, "/profile?flash="+url.QueryEscape("该登录方式已绑定"), http.StatusFound)
+		return
+	} else if !isErrNoRows(err) {
+		http.Redirect(w, r, "/profile?flash="+url.QueryEscape("读取绑定状态失败"), http.StatusFound)
+		return
+	}
+
+	p.ProviderType = normalizeProviderType(p.ProviderType)
+	_ = h.startProviderAuthFlow(w, r, p, "/profile", u.ID)
+}
+
+func (h *Handler) ProfileIdentityUnbind(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
+		return
+	}
+	if !h.verifyCSRFToken(r) {
+		h.csrfFailed(w, r)
+		return
+	}
+	u := h.currentUser(r)
+	if u == nil {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	if !store.HasPassword(u) {
+		http.Redirect(w, r, "/profile?flash="+url.QueryEscape("请先设置密码，再解绑登录方式"), http.StatusFound)
+		return
+	}
+	pass := r.FormValue("current_password")
+	if !h.st.VerifyPassword(u, pass) {
+		http.Redirect(w, r, "/profile?flash="+url.QueryEscape("当前密码不正确"), http.StatusFound)
+		return
+	}
+
+	slug := r.PathValue("slug")
+	ctx := r.Context()
+	if _, err := h.st.GetUserIdentityByUserAndProvider(ctx, u.ID, slug); err != nil {
+		if isErrNoRows(err) {
+			http.Redirect(w, r, "/profile?flash="+url.QueryEscape("该登录方式尚未绑定"), http.StatusFound)
+			return
+		}
+		http.Redirect(w, r, "/profile?flash="+url.QueryEscape("读取绑定状态失败"), http.StatusFound)
+		return
+	}
+	affected, err := h.st.DeleteUserIdentityByUserAndProvider(ctx, u.ID, slug)
+	if err != nil {
+		http.Redirect(w, r, "/profile?flash="+url.QueryEscape("解绑失败"), http.StatusFound)
+		return
+	}
+	if affected == 0 {
+		http.Redirect(w, r, "/profile?flash="+url.QueryEscape("该登录方式尚未绑定"), http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, "/profile?flash="+url.QueryEscape("登录方式解绑成功"), http.StatusFound)
 }
 
 func (h *Handler) TOSPage(w http.ResponseWriter, r *http.Request) {
@@ -425,6 +648,9 @@ func (h *Handler) ForgotPasswordPage(w http.ResponseWriter, r *http.Request) {
 		d.Flash = flash
 		d.IsError = r.URL.Query().Get("err") == "1"
 	}
+	d.Data = map[string]any{
+		"Next": safeNextPath(r.URL.Query().Get("next"), ""),
+	}
 	h.render(w, "forgot_password", d)
 }
 
@@ -439,6 +665,7 @@ func (h *Handler) ForgotPasswordPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	email := strings.ToLower(strings.TrimSpace(r.FormValue("email")))
+	next := safeNextPath(r.FormValue("next"), "")
 	ctx := r.Context()
 	redirectWithFlash := func(flash string, isErr bool) {
 		v := url.Values{}
@@ -447,6 +674,9 @@ func (h *Handler) ForgotPasswordPost(w http.ResponseWriter, r *http.Request) {
 		}
 		if isErr {
 			v.Set("err", "1")
+		}
+		if next != "" {
+			v.Set("next", next)
 		}
 		target := "/forgot-password"
 		if len(v) > 0 {

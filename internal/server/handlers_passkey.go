@@ -542,6 +542,19 @@ func (h *Handler) PasskeyPrimaryLoginFinish(w http.ResponseWriter, r *http.Reque
 	}
 	_ = resolvedWAU
 
+	redirectNext := safeNextPath(r.URL.Query().Get("next"), "/profile")
+	oidcChallenge := strings.TrimSpace(r.URL.Query().Get("oidc_challenge"))
+	if oidcChallenge != "" {
+		challengeNext, linkErr := h.consumeOIDCLoginChallengeAndLink(ctx, resolvedUser, oidcChallenge)
+		if linkErr != nil {
+			jsonResp(w, http.StatusBadRequest, map[string]string{"error": linkErr.Error()})
+			return
+		}
+		if challengeNext != "" {
+			redirectNext = challengeNext
+		}
+	}
+
 	// Update sign count in DB.
 	if credential != nil {
 		if updatedCred, merr := json.Marshal(credential); merr == nil {
@@ -563,5 +576,5 @@ func (h *Handler) PasskeyPrimaryLoginFinish(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	h.setSessionCookie(w, sid)
-	jsonResp(w, http.StatusOK, map[string]string{"redirect": "/profile"})
+	jsonResp(w, http.StatusOK, map[string]string{"redirect": redirectNext})
 }

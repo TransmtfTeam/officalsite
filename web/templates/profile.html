@@ -21,6 +21,61 @@
     <p style="font-size:.9rem;margin-bottom:.3rem">两步验证：<strong>{{if .TOTPEnabled}}已启用{{else}}未启用{{end}}</strong></p>
   </div>
 
+  <div class="card" style="margin-bottom:1.5rem">
+    <p class="form-panel-title">外部登录方式</p>
+    <p style="font-size:.88rem;color:var(--text2);margin-bottom:1rem">
+      绑定后可使用外部账号登录。绑定和解绑都需要输入当前密码。
+    </p>
+    {{with $.Data}}
+    {{$items := index . "ExternalProviders"}}
+    {{if $items}}
+    {{range $items}}
+    <div class="passkey-item">
+      <div class="passkey-icon">
+        {{$svg := providerIconSVG .Slug .Icon}}
+        {{if $svg}}
+        <span class="provider-icon">{{$svg}}</span>
+        {{else if .Icon}}
+        {{.Icon}}
+        {{else}}
+        🔐
+        {{end}}
+      </div>
+      <div class="passkey-info">
+        <div class="passkey-name">{{.Name}}</div>
+        <div class="passkey-date">
+          {{if .Bound}}
+          已绑定{{if not .Enabled}}（该方式已停用）{{end}}
+          {{else if .Enabled}}
+          未绑定
+          {{else}}
+          未绑定（管理员已停用，暂不可绑定）
+          {{end}}
+        </div>
+      </div>
+      {{if .Bound}}
+      <form method="POST" action="/profile/identities/{{.Slug}}/unbind" style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <input class="form-control" style="width:160px" type="password" name="current_password" placeholder="当前密码" required>
+        <button class="btn btn-danger btn-sm" type="submit">解绑</button>
+      </form>
+      {{else if .Enabled}}
+      <form method="POST" action="/profile/identities/{{.Slug}}/bind" style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <input class="form-control" style="width:160px" type="password" name="current_password" placeholder="当前密码" required>
+        <button class="btn btn-primary btn-sm" type="submit">绑定</button>
+      </form>
+      {{else}}
+      <button class="btn btn-ghost btn-sm" type="button" disabled>暂不可绑定</button>
+      {{end}}
+    </div>
+    {{end}}
+    {{else}}
+    <p style="font-size:.86rem;color:var(--text2)">管理员尚未配置外部登录方式。</p>
+    {{end}}
+    {{end}}
+  </div>
+
   <form method="POST" action="/profile">
     <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
     <div class="card" style="margin-bottom:1.5rem">

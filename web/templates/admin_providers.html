@@ -37,6 +37,23 @@
       <form method="POST" action="/admin/providers" data-provider-form="1">
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
 
+        <div class="form-group" style="margin-bottom:1rem">
+          <label class="form-label">内置模板（可一键填充）</label>
+          <div class="provider-template-grid">
+            <button class="provider-template-btn" type="button" data-provider-template="google">
+              <span class="provider-icon provider-icon-lg">{{providerIconSVG "google" ""}}</span>
+              <span>Google（OIDC）</span>
+            </button>
+            <button class="provider-template-btn" type="button" data-provider-template="xcom">
+              <span class="provider-icon provider-icon-lg">{{providerIconSVG "x" ""}}</span>
+              <span>X.com（OAuth2）</span>
+            </button>
+          </div>
+          <p style="font-size:.8rem;color:var(--text2);margin:.2rem 0 0">
+            点击模板会覆盖当前表单中的协议、端点和权限范围字段。
+          </p>
+        </div>
+
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">显示名称</label>
@@ -48,7 +65,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">图标（可选）</label>
-            <input class="form-control" type="text" name="icon" placeholder="例：G">
+            <input class="form-control" type="text" name="icon" placeholder="留空将使用内置图标（Google/X.com）">
           </div>
         </div>
 
@@ -102,12 +119,9 @@
           </div>
         </div>
 
-        <div class="form-group" style="margin-bottom:1rem">
-          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
-            <input type="checkbox" name="auto_register" value="1" checked>
-            <span>首次外部登录成功后自动创建账户</span>
-          </label>
-        </div>
+        <p style="font-size:.82rem;color:var(--text2);margin:0 0 1rem">
+          首次外部登录将固定进入“绑定已有账户 / 注册新账户”选择页，不会自动创建账户。
+        </p>
 
         <button class="btn btn-primary btn-sm" type="submit">添加</button>
       </form>
@@ -121,8 +135,11 @@
       <p style="font-size:.82rem;color:var(--text2);margin:0 0 .4rem">
         选择 OAuth2 时，请填写授权地址、令牌地址、用户信息地址。
       </p>
+      <p style="font-size:.82rem;color:var(--text2);margin:0 0 .4rem">
+        使用 X.com 模板时，系统仅使用用户名和头像，不会自动使用外部邮箱。
+      </p>
       <p style="font-size:.82rem;color:var(--text2);margin:0">
-        登录入口路径固定为 <code>/auth/oidc/{slug}</code>。
+        登录入口路径固定为 <code>/auth/oidc/{slug}</code>，首次登录统一走绑定/注册选择流程。
       </p>
     </div>
 
@@ -135,14 +152,16 @@
             <th>协议</th>
             <th>发行方 / 授权地址</th>
             <th>状态</th>
-            <th>自动注册</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody>
           {{range .Data}}
           <tr>
-            <td>{{if .Icon}}<span style="margin-right:.4rem">{{.Icon}}</span>{{end}}{{.Name}}</td>
+            <td>
+              {{$svg := providerIconSVG .Slug .Icon}}
+              {{if $svg}}<span class="provider-icon" style="margin-right:.4rem">{{$svg}}</span>{{else if .Icon}}<span style="margin-right:.4rem">{{.Icon}}</span>{{end}}{{.Name}}
+            </td>
             <td><code style="font-size:.8rem;color:var(--blue)">/auth/oidc/{{.Slug}}</code></td>
             <td>{{if eq .ProviderType "oauth2"}}OAuth2{{else}}OIDC{{end}}</td>
             <td style="font-size:.8rem;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
@@ -153,13 +172,6 @@
               <span style="color:#16a34a;font-size:.82rem">已启用</span>
               {{else}}
               <span style="color:var(--text2);font-size:.82rem">已停用</span>
-              {{end}}
-            </td>
-            <td>
-              {{if .AutoRegister}}
-              <span style="color:#16a34a;font-size:.82rem">开启</span>
-              {{else}}
-              <span style="color:#dc2626;font-size:.82rem">关闭</span>
               {{end}}
             </td>
             <td style="white-space:nowrap">
@@ -177,7 +189,7 @@
             </td>
           </tr>
           {{else}}
-          <tr><td colspan="7" style="color:var(--text2);text-align:center;padding:2rem">当前还没有配置任何登录方式。</td></tr>
+          <tr><td colspan="6" style="color:var(--text2);text-align:center;padding:2rem">当前还没有配置任何登录方式。</td></tr>
           {{end}}
         </tbody>
       </table>

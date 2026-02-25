@@ -31,7 +31,10 @@
     {{end}}
 
     {{with .Data}}
-    <h1 class="panel-title">编辑登录方式：{{.Name}}</h1>
+    <h1 class="panel-title">
+      {{$svg := providerIconSVG .Slug .Icon}}
+      {{if $svg}}<span class="provider-icon" style="margin-right:.35rem">{{$svg}}</span>{{end}}编辑登录方式：{{.Name}}
+    </h1>
 
     <div class="detail-section">
       <div class="detail-section-title">登录方式标识</div>
@@ -46,8 +49,28 @@
     </div>
 
     <div class="form-panel">
-      <form method="POST" action="/admin/providers/{{.ID}}/edit" data-provider-form="1">
+      <form method="POST" action="/admin/providers/{{.ID}}/edit" data-provider-form="1" data-provider-slug="{{.Slug}}">
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+
+        <div class="form-group" style="margin-bottom:1rem">
+          <label class="form-label">内置模板（可一键填充）</label>
+          <div class="provider-template-grid">
+            <button class="provider-template-btn" type="button" data-provider-template="google">
+              <span class="provider-icon provider-icon-lg">{{providerIconSVG "google" ""}}</span>
+              <span>Google（OIDC）</span>
+            </button>
+            <button class="provider-template-btn" type="button" data-provider-template="xcom">
+              <span class="provider-icon provider-icon-lg">{{providerIconSVG "x" ""}}</span>
+              <span>X.com（OAuth2）</span>
+            </button>
+          </div>
+          <p style="font-size:.8rem;color:var(--text2);margin:.2rem 0 0">
+            点击模板会覆盖当前表单中的协议、端点和权限范围字段。
+          </p>
+          <p style="font-size:.8rem;color:var(--text2);margin:.3rem 0 0">
+            使用 X.com 模板时，系统仅使用用户名和头像，不会自动使用外部邮箱。
+          </p>
+        </div>
 
         <div class="form-row">
           <div class="form-group">
@@ -56,7 +79,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">图标（可选）</label>
-            <input class="form-control" type="text" name="icon" value="{{.Icon}}">
+            <input class="form-control" type="text" name="icon" value="{{.Icon}}" placeholder="留空将使用内置图标（Google/X.com）">
           </div>
           <div class="form-group">
             <label class="form-label">协议</label>
@@ -110,12 +133,9 @@
           </div>
         </div>
 
-        <div class="form-group" style="margin-bottom:1.2rem">
-          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
-            <input type="checkbox" name="auto_register" value="1" {{if .AutoRegister}}checked{{end}}>
-            <span>首次外部登录成功后自动创建账户</span>
-          </label>
-        </div>
+        <p style="font-size:.82rem;color:var(--text2);margin:0 0 1.2rem">
+          首次外部登录将固定进入“绑定已有账户 / 注册新账户”选择页，不会自动创建账户。
+        </p>
 
         <div style="display:flex;gap:.8rem">
           <button class="btn btn-primary" type="submit">保存</button>

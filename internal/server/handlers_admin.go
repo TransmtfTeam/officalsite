@@ -990,7 +990,7 @@ func (h *Handler) AdminProviderCreate(w http.ResponseWriter, r *http.Request) {
 	tokenURL := strings.TrimSpace(r.FormValue("token_url"))
 	userinfoURL := strings.TrimSpace(r.FormValue("userinfo_url"))
 	scopes := normalizeScopes(strings.Fields(strings.TrimSpace(r.FormValue("scopes"))))
-	autoRegister := r.FormValue("auto_register") == "1"
+	autoRegister := false
 	if len(scopes) == 0 {
 		scopes = defaultProviderScopes(providerType)
 	}
@@ -1411,7 +1411,7 @@ func (h *Handler) AdminProviderEdit(w http.ResponseWriter, r *http.Request) {
 	tokenURL := strings.TrimSpace(r.FormValue("token_url"))
 	userinfoURL := strings.TrimSpace(r.FormValue("userinfo_url"))
 	scopes := normalizeScopes(strings.Fields(strings.TrimSpace(r.FormValue("scopes"))))
-	autoRegister := r.FormValue("auto_register") == "1"
+	autoRegister := p.AutoRegister
 
 	if len(scopes) == 0 {
 		scopes = defaultProviderScopes(providerType)

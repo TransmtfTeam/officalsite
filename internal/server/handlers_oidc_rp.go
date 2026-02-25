@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
@@ -286,20 +287,11 @@ func (h *Handler) providerCallbackURL(r *http.Request, slug string) string {
 	return base + "/auth/oidc/" + slug + "/callback"
 }
 
-// GET /auth/oidc/{slug}
-func (h *Handler) OIDCProviderLogin(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("slug")
-	provider, err := h.st.GetOIDCProviderBySlug(r.Context(), slug)
-	if err != nil || !provider.Enabled {
-		h.renderError(w, r, http.StatusNotFound, "Login method unavailable", "The requested external login method does not exist or is disabled.")
-		return
-	}
-	provider.ProviderType = normalizeProviderType(provider.ProviderType)
-
+func (h *Handler) startProviderAuthFlow(w http.ResponseWriter, r *http.Request, provider *store.OIDCProvider, next, stateUserID string) bool {
 	doc, isOIDC, err := resolveRPProviderConfig(provider)
 	if err != nil {
 		h.renderError(w, r, http.StatusBadGateway, "Provider configuration error", "Failed to load external login configuration.")
-		return
+		return false
 	}
 
 	state := store.RandomHex(16)
@@ -308,7 +300,6 @@ func (h *Handler) OIDCProviderLogin(w http.ResponseWriter, r *http.Request) {
 		nonce = store.RandomHex(16)
 	}
 	verifier := store.RandomHex(32)
-	next := safeNextPath(r.URL.Query().Get("next"), "/profile")
 	scopes := normalizeScopes(strings.Fields(provider.Scopes))
 	if len(scopes) == 0 {
 		if isOIDC {
@@ -319,12 +310,12 @@ func (h *Handler) OIDCProviderLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if isOIDC && !containsScope(scopes, "openid") {
 		h.renderError(w, r, http.StatusBadRequest, "Invalid provider scopes", "OIDC providers must request the openid scope.")
-		return
+		return false
 	}
 
-	if err := h.st.CreateOIDCState(r.Context(), state, slug, nonce, verifier, next); err != nil {
+	if err := h.st.CreateOIDCState(r.Context(), state, provider.Slug, stateUserID, nonce, verifier, safeNextPath(next, "/profile")); err != nil {
 		h.renderError(w, r, http.StatusInternalServerError, "Login state creation failed", "Please retry in a moment.")
-		return
+		return false
 	}
 
 	hv := sha256.Sum256([]byte(verifier))
@@ -333,7 +324,7 @@ func (h *Handler) OIDCProviderLogin(w http.ResponseWriter, r *http.Request) {
 	params := url.Values{}
 	params.Set("response_type", "code")
 	params.Set("client_id", provider.ClientID)
-	params.Set("redirect_uri", h.providerCallbackURL(r, slug))
+	params.Set("redirect_uri", h.providerCallbackURL(r, provider.Slug))
 	params.Set("scope", strings.Join(scopes, " "))
 	params.Set("state", state)
 	params.Set("code_challenge", challenge)
@@ -343,6 +334,20 @@ func (h *Handler) OIDCProviderLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, doc.AuthorizationEndpoint+"?"+params.Encode(), http.StatusFound)
+	return true
+}
+
+// GET /auth/oidc/{slug}
+func (h *Handler) OIDCProviderLogin(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	provider, err := h.st.GetOIDCProviderBySlug(r.Context(), slug)
+	if err != nil || !provider.Enabled {
+		h.renderError(w, r, http.StatusNotFound, "Login method unavailable", "The requested external login method does not exist or is disabled.")
+		return
+	}
+	provider.ProviderType = normalizeProviderType(provider.ProviderType)
+	next := safeNextPath(r.URL.Query().Get("next"), "/profile")
+	_ = h.startProviderAuthFlow(w, r, provider, next, "")
 }
 
 // GET /auth/oidc/{slug}/callback
@@ -394,6 +399,7 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 		email         string
 		emailVerified bool
 		name          string
+		username      string
 		avatar        string
 	)
 
@@ -413,11 +419,12 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 		email = strings.ToLower(strings.TrimSpace(stringClaim(idClaims, "email")))
 		emailVerified = boolClaim(idClaims, "email_verified")
 		name = stringClaim(idClaims, "name")
-		if name == "" {
-			name = stringClaim(idClaims, "preferred_username")
+		username = stringClaim(idClaims, "preferred_username")
+		if username == "" {
+			username = stringClaim(idClaims, "username")
 		}
 		if name == "" {
-			name = stringClaim(idClaims, "username")
+			name = username
 		}
 		avatar = stringClaim(idClaims, "picture")
 		if avatar == "" {
@@ -428,7 +435,7 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if doc.UserinfoEndpoint != "" {
-			usub, uemail, uverified, uname, upic, uiErr := rpUserInfo(doc.UserinfoEndpoint, tok.AccessToken)
+			usub, uemail, uverified, uname, uusername, upic, uiErr := rpUserInfo(doc.UserinfoEndpoint, tok.AccessToken)
 			if uiErr == nil {
 				if subject != "" && usub != "" && usub != subject {
 					h.renderError(w, r, http.StatusBadGateway, "Login failed", "UserInfo subject does not match ID token subject.")
@@ -443,6 +450,9 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 				if !emailVerified {
 					emailVerified = uverified
 				}
+				if username == "" {
+					username = uusername
+				}
 				if name == "" {
 					name = uname
 				}
@@ -452,7 +462,7 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else {
-		usub, uemail, uverified, uname, upic, uiErr := rpUserInfo(doc.UserinfoEndpoint, tok.AccessToken)
+		usub, uemail, uverified, uname, uusername, upic, uiErr := rpUserInfo(doc.UserinfoEndpoint, tok.AccessToken)
 		if uiErr != nil {
 			h.renderError(w, r, http.StatusBadGateway, "User profile fetch failed", uiErr.Error())
 			return
@@ -461,7 +471,17 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 		email = strings.ToLower(strings.TrimSpace(uemail))
 		emailVerified = uverified
 		name = uname
+		username = uusername
 		avatar = upic
+	}
+
+	if isXProviderSlug(slug) {
+		// X 的邮箱返回不稳定，避免自动使用外部邮箱。
+		email = ""
+		emailVerified = false
+		if username != "" {
+			name = username
+		}
 	}
 
 	if subject == "" {
@@ -470,78 +490,194 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	u, err := h.st.GetUserByIdentity(ctx, slug, subject)
-	if err != nil {
-		if !isErrNoRows(err) {
-			h.renderError(w, r, http.StatusInternalServerError, "Identity lookup failed", err.Error())
-			return
-		}
-		if email != "" {
-			existing, emailErr := h.st.GetUserByEmail(ctx, email)
-			if emailErr == nil {
-				u = existing
-			} else if !isErrNoRows(emailErr) {
-				h.renderError(w, r, http.StatusInternalServerError, "User lookup failed", emailErr.Error())
-				return
-			}
-		}
-
-		if u == nil {
-			if !provider.AutoRegister {
-				h.renderError(w, r, http.StatusForbidden, "Registration disabled", "Auto registration is disabled for this provider.")
-				return
-			}
-			if name == "" {
-				if email != "" {
-					name = email
-				} else {
-					name = "External Login User"
-				}
-			}
-			createEmail := email
-			if createEmail == "" || !emailVerified {
-				createEmail = syntheticOIDCEmail(slug, subject)
-			}
-			isVerifiedEmail := emailVerified && email != "" && strings.EqualFold(createEmail, email)
-			u, err = h.st.CreateUserWithEmailVerified(ctx, createEmail, store.RandomHex(32), name, "user", isVerifiedEmail)
-			if err != nil {
-				h.renderError(w, r, http.StatusInternalServerError, "User creation failed", err.Error())
-				return
-			}
-			if err := h.st.ClearPassword(ctx, u.ID); err != nil {
-				h.renderError(w, r, http.StatusInternalServerError, "Account hardening failed", err.Error())
-				return
-			}
-			u.PassHash = ""
-			_ = h.st.SetRequirePasswordChange(ctx, u.ID, true)
-			u.RequirePasswordChange = true
-			if avatar != "" {
-				_ = h.st.UpdateUserAvatar(ctx, u.ID, avatar)
-			}
-		}
-
-		if err := h.st.LinkIdentity(ctx, u.ID, slug, subject); err != nil {
-			h.renderError(w, r, http.StatusInternalServerError, "Identity binding failed", err.Error())
-			return
-		}
+	if st.UserID != "" {
+		h.finishProfileIdentityBinding(w, r, st, slug, subject)
+		return
 	}
 
+	u, err := h.st.GetUserByIdentity(ctx, slug, subject)
+	if err == nil {
+		h.finishExternalLogin(w, r, u, st.Redirect)
+		return
+	}
+	if !isErrNoRows(err) {
+		h.renderError(w, r, http.StatusInternalServerError, "Identity lookup failed", err.Error())
+		return
+	}
+
+	chID, chErr := h.st.CreateOIDCLoginChallenge(
+		ctx,
+		slug,
+		subject,
+		strings.TrimSpace(name),
+		strings.TrimSpace(avatar),
+		strings.TrimSpace(email),
+		st.Redirect,
+	)
+	if chErr != nil {
+		h.renderError(w, r, http.StatusInternalServerError, "Login flow setup failed", chErr.Error())
+		return
+	}
+	http.Redirect(w, r, "/auth/oidc/first-login?challenge="+url.QueryEscape(chID), http.StatusFound)
+}
+
+// GET /auth/oidc/first-login
+func (h *Handler) OIDCFirstLoginPage(w http.ResponseWriter, r *http.Request) {
+	chID := strings.TrimSpace(r.URL.Query().Get("challenge"))
+	if chID == "" {
+		h.renderError(w, r, http.StatusBadRequest, "首次登录流程无效", "缺少流程挑战参数。")
+		return
+	}
+
+	ctx := r.Context()
+	ch, err := h.st.GetOIDCLoginChallenge(ctx, chID)
+	if err != nil {
+		h.renderError(w, r, http.StatusBadRequest, "首次登录流程已过期", "请重新发起外部授权登录。")
+		return
+	}
+	providerName := ch.Provider
+	if p, pErr := h.st.GetOIDCProviderBySlug(ctx, ch.Provider); pErr == nil && p != nil {
+		providerName = p.Name
+	}
+
+	d := h.pageData(r, "首次使用外部登录")
+	d.Data = map[string]any{
+		"Challenge":    ch.ID,
+		"ProviderSlug": ch.Provider,
+		"ProviderName": providerName,
+		"ProfileName":  ch.ProfileName,
+		"ProfileAvatar": ch.ProfileAvatar,
+		"ProfileEmail": ch.ProfileEmail,
+	}
+	h.render(w, "oidc_first_login", d)
+}
+
+// POST /auth/oidc/first-login
+func (h *Handler) OIDCFirstLoginPost(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if !h.verifyCSRFToken(r) {
+		h.csrfFailed(w, r)
+		return
+	}
+
+	chID := strings.TrimSpace(r.FormValue("challenge"))
+	if chID == "" {
+		h.renderError(w, r, http.StatusBadRequest, "首次登录流程无效", "缺少流程挑战参数。")
+		return
+	}
+	ch, err := h.st.GetOIDCLoginChallenge(r.Context(), chID)
+	if err != nil {
+		h.renderError(w, r, http.StatusBadRequest, "首次登录流程已过期", "请重新发起外部授权登录。")
+		return
+	}
+
+	action := strings.TrimSpace(r.FormValue("action"))
+	switch action {
+	case "bind":
+		http.Redirect(w, r, "/login?oidc_challenge="+url.QueryEscape(ch.ID), http.StatusFound)
+		return
+	case "register":
+		http.Redirect(w, r, "/register?oidc_challenge="+url.QueryEscape(ch.ID), http.StatusFound)
+		return
+	default:
+		h.renderError(w, r, http.StatusBadRequest, "无效操作", "请选择绑定已有账户或注册新账户。")
+		return
+	}
+}
+
+func (h *Handler) finishProfileIdentityBinding(w http.ResponseWriter, r *http.Request, st *store.OIDCState, providerSlug, subject string) {
+	ctx := r.Context()
+	cur := h.currentUser(r)
+	if cur == nil || cur.ID != st.UserID {
+		h.renderError(w, r, http.StatusForbidden, "绑定失败", "当前会话与绑定账户不一致，请从个人资料页重新发起绑定。")
+		return
+	}
+	existing, err := h.st.GetUserByIdentity(ctx, providerSlug, subject)
+	if err == nil {
+		if existing.ID == st.UserID {
+			http.Redirect(w, r, "/profile?flash="+url.QueryEscape("该登录方式已绑定"), http.StatusFound)
+			return
+		}
+		h.renderError(w, r, http.StatusConflict, "绑定失败", "该外部账号已绑定到其他本地账户。")
+		return
+	}
+	if !isErrNoRows(err) {
+		h.renderError(w, r, http.StatusInternalServerError, "绑定失败", err.Error())
+		return
+	}
+	if err := h.st.LinkIdentity(ctx, st.UserID, providerSlug, subject); err != nil {
+		h.renderError(w, r, http.StatusInternalServerError, "绑定失败", err.Error())
+		return
+	}
+	bound, bindErr := h.st.GetUserByIdentity(ctx, providerSlug, subject)
+	if bindErr != nil || bound == nil || bound.ID != st.UserID {
+		h.renderError(w, r, http.StatusConflict, "绑定失败", "该外部账号已绑定到其他本地账户。")
+		return
+	}
+	http.Redirect(w, r, "/profile?flash="+url.QueryEscape("登录方式绑定成功"), http.StatusFound)
+}
+
+func (h *Handler) consumeOIDCLoginChallengeAndLink(ctx context.Context, u *store.User, challengeID string) (string, error) {
+	if strings.TrimSpace(challengeID) == "" {
+		return "", nil
+	}
+	ch, err := h.st.ConsumeOIDCLoginChallenge(ctx, strings.TrimSpace(challengeID))
+	if err != nil {
+		return "", fmt.Errorf("外部登录流程已过期，请重新发起授权")
+	}
+
+	existing, lookupErr := h.st.GetUserByIdentity(ctx, ch.Provider, ch.Subject)
+	if lookupErr == nil {
+		if existing.ID != u.ID {
+			return "", fmt.Errorf("该外部账号已绑定到其他本地账户")
+		}
+		return safeNextPath(ch.Redirect, "/profile"), nil
+	}
+	if !isErrNoRows(lookupErr) {
+		return "", lookupErr
+	}
+
+	if err := h.st.LinkIdentity(ctx, u.ID, ch.Provider, ch.Subject); err != nil {
+		return "", err
+	}
+	bound, bindErr := h.st.GetUserByIdentity(ctx, ch.Provider, ch.Subject)
+	if bindErr != nil || bound == nil || bound.ID != u.ID {
+		return "", fmt.Errorf("该外部账号已绑定到其他本地账户")
+	}
+	// 首次绑定时，若本地头像/显示名为空，则用外部资料补齐。
+	if strings.TrimSpace(u.AvatarURL) == "" && strings.TrimSpace(ch.ProfileAvatar) != "" {
+		_ = h.st.UpdateUserAvatar(ctx, u.ID, strings.TrimSpace(ch.ProfileAvatar))
+		u.AvatarURL = strings.TrimSpace(ch.ProfileAvatar)
+	}
+	if strings.TrimSpace(u.DisplayName) == "" && strings.TrimSpace(ch.ProfileName) != "" {
+		_ = h.st.UpdateUser(ctx, u.ID, strings.TrimSpace(ch.ProfileName), u.Role, u.Active)
+		u.DisplayName = strings.TrimSpace(ch.ProfileName)
+	}
+	return safeNextPath(ch.Redirect, "/profile"), nil
+}
+
+func isXProviderSlug(slug string) bool {
+	switch strings.ToLower(strings.TrimSpace(slug)) {
+	case "x", "xcom", "x.com", "twitter":
+		return true
+	default:
+		return false
+	}
+}
+
+func (h *Handler) finishExternalLogin(w http.ResponseWriter, r *http.Request, u *store.User, next string) {
 	if !u.Active {
 		h.renderError(w, r, http.StatusForbidden, "Account disabled", "Please contact an administrator.")
 		return
 	}
-	if name != "" && strings.TrimSpace(u.DisplayName) == "" {
-		_ = h.st.UpdateUser(ctx, u.ID, name, u.Role, u.Active)
-		u.DisplayName = name
-	}
-	if avatar != "" && strings.TrimSpace(u.AvatarURL) == "" {
-		_ = h.st.UpdateUserAvatar(ctx, u.ID, avatar)
-		u.AvatarURL = avatar
-	}
-	if h.startSecondFactor(w, r, u, st.Redirect) {
+	if h.startSecondFactor(w, r, u, next) {
 		return
 	}
 
+	ctx := r.Context()
 	if u.RequirePasswordChange {
 		sid, _ := h.st.CreateSession(ctx, u.ID)
 		h.setSessionCookie(w, sid)
@@ -555,8 +691,9 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.setSessionCookie(w, sid)
-	http.Redirect(w, r, safeNextPath(st.Redirect, "/profile"), http.StatusFound)
+	http.Redirect(w, r, safeNextPath(next, "/profile"), http.StatusFound)
 }
+
 type rpTokenResp struct {
 	AccessToken string `json:"access_token"`
 	IDToken     string `json:"id_token"`
@@ -628,7 +765,7 @@ func rpExchangeCodeOnce(tokenEndpoint string, p *store.OIDCProvider, code, redir
 	return &t, resp.StatusCode, nil
 }
 
-func rpUserInfo(endpoint, accessToken string) (sub, email string, emailVerified bool, name, picture string, err error) {
+func rpUserInfo(endpoint, accessToken string) (sub, email string, emailVerified bool, name, username, picture string, err error) {
 	if strings.TrimSpace(endpoint) == "" {
 		err = fmt.Errorf("缺少用户信息端点")
 		return
@@ -656,31 +793,77 @@ func rpUserInfo(endpoint, accessToken string) (sub, email string, emailVerified 
 		return
 	}
 
-	sub = stringClaim(claims, "sub")
+	source := claims
+	if dataObj, ok := claims["data"].(map[string]any); ok && len(dataObj) > 0 {
+		source = dataObj
+	}
+
+	sub = stringClaim(source, "sub")
 	if sub == "" {
-		sub = stringClaim(claims, "id")
+		sub = stringClaim(source, "id")
 	}
 	if sub == "" {
-		sub = stringClaim(claims, "user_id")
+		sub = stringClaim(source, "user_id")
 	}
 	if sub == "" {
-		if n, ok := claims["id"].(float64); ok {
+		if n, ok := source["id"].(float64); ok {
 			sub = strconv.FormatInt(int64(n), 10)
 		}
 	}
-	email = stringClaim(claims, "email")
+	if sub == "" {
+		sub = stringClaim(claims, "sub")
+	}
+
+	email = stringClaim(source, "email")
+	if email == "" {
+		email = stringClaim(claims, "email")
+	}
+	if email == "" {
+		email = stringClaim(source, "upn")
+	}
 	if email == "" {
 		email = stringClaim(claims, "upn")
 	}
-	emailVerified = boolClaim(claims, "email_verified")
-	name = stringClaim(claims, "name")
+	emailVerified = boolClaim(source, "email_verified") || boolClaim(claims, "email_verified")
+
+	username = stringClaim(source, "preferred_username")
+	if username == "" {
+		username = stringClaim(source, "username")
+	}
+	if username == "" {
+		username = stringClaim(source, "screen_name")
+	}
+	if username == "" {
+		username = stringClaim(claims, "preferred_username")
+	}
+	if username == "" {
+		username = stringClaim(claims, "username")
+	}
+	if username == "" {
+		username = stringClaim(claims, "screen_name")
+	}
+
+	name = stringClaim(source, "name")
 	if name == "" {
-		name = stringClaim(claims, "preferred_username")
+		name = username
 	}
 	if name == "" {
-		name = stringClaim(claims, "username")
+		name = stringClaim(claims, "name")
 	}
-	picture = stringClaim(claims, "picture")
+
+	picture = stringClaim(source, "picture")
+	if picture == "" {
+		picture = stringClaim(source, "profile_image_url")
+	}
+	if picture == "" {
+		picture = stringClaim(source, "profile_image_url_https")
+	}
+	if picture == "" {
+		picture = stringClaim(source, "avatar_url")
+	}
+	if picture == "" {
+		picture = stringClaim(claims, "picture")
+	}
 	if picture == "" {
 		picture = stringClaim(claims, "profile_image_url")
 	}
@@ -714,9 +897,4 @@ func boolClaim(m map[string]any, key string) bool {
 	default:
 		return false
 	}
-}
-
-func syntheticOIDCEmail(provider, subject string) string {
-	sum := sha256.Sum256([]byte(provider + ":" + subject))
-	return "oidc_" + base64.RawURLEncoding.EncodeToString(sum[:10]) + "@oidc.local"
 }

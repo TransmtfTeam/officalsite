@@ -19,12 +19,18 @@
     {{end}}
 
     {{with .Data}}
-    {{if .Providers}}
+    {{if .OIDCChallenge}}
+    <div class="flash flash-ok" style="margin-bottom:1rem">
+      你正在完成 <strong>{{.OIDCProviderName}}</strong> 首次登录，请先登录已有账户完成绑定。
+    </div>
+    {{end}}
+    {{if and .Providers (not .OIDCChallenge)}}
     <div style="display:flex;flex-direction:column;gap:.6rem;margin-bottom:1.2rem">
       {{range .Providers}}
       <a class="btn btn-ghost" style="justify-content:center;gap:.6rem"
          href="/auth/oidc/{{.Slug}}{{if $.Data}}{{with $.Data}}{{if .Next}}?next={{.Next | urlEncode}}{{end}}{{end}}{{end}}">
-        {{if .Icon}}<span>{{.Icon}}</span>{{end}}
+        {{$svg := providerIconSVG .Slug .Icon}}
+        {{if $svg}}<span class="provider-icon">{{$svg}}</span>{{else if .Icon}}<span>{{.Icon}}</span>{{end}}
         使用 {{.Name}} 登录
       </a>
       {{end}}
@@ -34,12 +40,19 @@
       <span style="font-size:.8rem;color:#666">或使用邮箱密码</span>
       <div style="flex:1;height:1px;background:rgba(255,255,255,.12)"></div>
     </div>
+    {{else if and .Providers .OIDCChallenge}}
+    <p style="font-size:.85rem;color:var(--text2);margin:0 0 1rem">
+      绑定流程中已隐藏其他外部登录入口，请使用邮箱密码或通行密钥完成已有账户登录。
+    </p>
     {{end}}
     {{end}}
 
     <form method="POST" action="/login">
       <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-      {{with .Data}}{{if .Next}}<input type="hidden" name="next" value="{{.Next}}">{{end}}{{end}}
+      {{with .Data}}
+      {{if .Next}}<input type="hidden" name="next" value="{{.Next}}">{{end}}
+      {{if .OIDCChallenge}}<input type="hidden" name="oidc_challenge" value="{{.OIDCChallenge}}">{{end}}
+      {{end}}
       <div class="form-group">
         <label class="form-label">邮箱</label>
         <input class="form-control" type="email" name="email" placeholder="请输入邮箱地址" required autofocus>
@@ -51,7 +64,7 @@
       <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.5rem" type="submit">登录</button>
     </form>
     <p style="text-align:right;font-size:.85rem;margin-top:.6rem">
-      <a href="/forgot-password">忘记密码？</a>
+      <a href="/forgot-password{{with .Data}}{{if .Next}}?next={{.Next | urlEncode}}{{end}}{{end}}">忘记密码？</a>
     </p>
 
     <div style="display:flex;align-items:center;gap:.8rem;margin:1rem 0">
@@ -65,7 +78,7 @@
     </button>
     <div id="primary-passkey-login-msg" style="font-size:.85rem;color:#dc2626;margin-top:.4rem;display:none"></div>
 
-    <p class="auth-footer-link">还没有账号？<a href="/register">立即注册</a></p>
+    <p class="auth-footer-link">还没有账号？<a href="/register{{with .Data}}{{if .OIDCChallenge}}?oidc_challenge={{.OIDCChallenge | urlEncode}}{{else if .Next}}?next={{.Next | urlEncode}}{{end}}{{end}}">立即注册</a></p>
   </div>
 </div>
 <script src="/static/js/passkey-login.js"></script>
