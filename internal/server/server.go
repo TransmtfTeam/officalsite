@@ -356,7 +356,7 @@ func (h *Handler) pageData(r *http.Request, title string) PageData {
 		name = "团队站点"
 	}
 	csrf := h.csrfTokenFromRequest(r)
-	if csrf == "" {
+	if !isValidCSRFToken(csrf) {
 		if tok, ok := r.Context().Value(ctxCSRF).(string); ok {
 			csrf = tok
 		}
