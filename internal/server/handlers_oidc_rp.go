@@ -333,12 +333,15 @@ func (h *Handler) startProviderAuthFlow(w http.ResponseWriter, r *http.Request, 
 		params.Set("nonce", nonce)
 	}
 
-	statusCode := http.StatusFound
+	authURL := doc.AuthorizationEndpoint + "?" + params.Encode()
 	if r.Method == http.MethodPost {
-		// POST 发起的绑定流程使用 303，确保浏览器按导航跳转到授权页。
-		statusCode = http.StatusSeeOther
+		// POST-initiated flows (e.g., profile binding form) use metaRedirect so that
+		// the browser navigates via script rather than a 303 Location header, which
+		// Chrome blocks when CSP form-action 'self' is set.
+		metaRedirect(w, authURL)
+	} else {
+		http.Redirect(w, r, authURL, http.StatusFound)
 	}
-	http.Redirect(w, r, doc.AuthorizationEndpoint+"?"+params.Encode(), statusCode)
 	return true
 }
 
@@ -395,7 +398,7 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 
 	tok, err := rpExchangeCode(doc.TokenEndpoint, provider, code, h.providerCallbackURL(r, slug), st.Verifier)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadGateway, "Token exchange failed", "Failed to exchange authorization code.")
+		h.renderError(w, r, http.StatusBadGateway, "Token exchange failed", err.Error())
 		return
 	}
 
@@ -711,14 +714,16 @@ type rpTokenResp struct {
 }
 
 func rpExchangeCode(tokenEndpoint string, p *store.OIDCProvider, code, redirectURI, verifier string) (*rpTokenResp, error) {
-	// 大多数提供商支持基础认证；失败时回退为表单提交密钥。
-	tok, status, err := rpExchangeCodeOnce(tokenEndpoint, p, code, redirectURI, verifier, true)
+	// 优先使用表单体认证（兼容 X/Twitter 等要求 client_secret 在 body 中的提供商）；
+	// 若失败且错误为认证相关，再回退到 HTTP Basic 认证。
+	tok, status, err := rpExchangeCodeOnce(tokenEndpoint, p, code, redirectURI, verifier, false)
 	if err == nil {
 		return tok, nil
 	}
 	msg := strings.ToLower(err.Error())
-	if status == http.StatusUnauthorized || status == http.StatusBadRequest || strings.Contains(msg, "invalid_client") {
-		tok2, _, err2 := rpExchangeCodeOnce(tokenEndpoint, p, code, redirectURI, verifier, false)
+	if status == http.StatusUnauthorized || status == http.StatusBadRequest ||
+		strings.Contains(msg, "invalid_client") || strings.Contains(msg, "unauthorized_client") {
+		tok2, _, err2 := rpExchangeCodeOnce(tokenEndpoint, p, code, redirectURI, verifier, true)
 		if err2 == nil {
 			return tok2, nil
 		}
@@ -732,10 +737,13 @@ func rpExchangeCodeOnce(tokenEndpoint string, p *store.OIDCProvider, code, redir
 	form.Set("grant_type", "authorization_code")
 	form.Set("code", code)
 	form.Set("redirect_uri", redirectURI)
-	form.Set("client_id", p.ClientID)
 	form.Set("code_verifier", verifier)
 	if !useBasic {
-		form.Set("client_secret", p.ClientSecret)
+		// 表单体认证：client_id 和 client_secret 均放在 body 中。
+		form.Set("client_id", p.ClientID)
+		if p.ClientSecret != "" {
+			form.Set("client_secret", p.ClientSecret)
+		}
 	}
 
 	req, err := http.NewRequest(http.MethodPost, tokenEndpoint, strings.NewReader(form.Encode()))
@@ -745,6 +753,7 @@ func rpExchangeCodeOnce(tokenEndpoint string, p *store.OIDCProvider, code, redir
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 	if useBasic {
+		// Basic 认证：凭据仅放在 Authorization 头中，不在 body 中重复。
 		req.SetBasicAuth(p.ClientID, p.ClientSecret)
 	}
 
