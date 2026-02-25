@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -238,6 +239,33 @@ func canonicalIssuerURL(raw string) (string, error) {
 	return strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host) + u.Path, nil
 }
 
+func resolveRPProviderConfig(provider *store.OIDCProvider) (*rpDiscovery, bool, error) {
+	mode := normalizeProviderType(provider.ProviderType)
+	if mode == providerTypeOAuth2 {
+		authorizationURL := strings.TrimSpace(provider.AuthorizationURL)
+		tokenURL := strings.TrimSpace(provider.TokenURL)
+		userinfoURL := strings.TrimSpace(provider.UserinfoURL)
+		if authorizationURL == "" || tokenURL == "" || userinfoURL == "" {
+			return nil, false, fmt.Errorf("oauth2 provider endpoints are incomplete")
+		}
+		if !isAllowedAbsoluteURL(authorizationURL) ||
+			!isAllowedAbsoluteURL(tokenURL) ||
+			!isAllowedAbsoluteURL(userinfoURL) {
+			return nil, false, fmt.Errorf("oauth2 provider endpoints are invalid")
+		}
+		return &rpDiscovery{
+			AuthorizationEndpoint: authorizationURL,
+			TokenEndpoint:         tokenURL,
+			UserinfoEndpoint:      userinfoURL,
+		}, false, nil
+	}
+	doc, err := fetchRPDiscovery(strings.TrimSpace(provider.IssuerURL))
+	if err != nil {
+		return nil, true, err
+	}
+	return doc, true, nil
+}
+
 func (h *Handler) providerCallbackURL(r *http.Request, slug string) string {
 	base := strings.TrimRight(strings.TrimSpace(h.cfg.Issuer), "/")
 	if host := strings.TrimSpace(r.Host); host != "" {
@@ -263,31 +291,39 @@ func (h *Handler) OIDCProviderLogin(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 	provider, err := h.st.GetOIDCProviderBySlug(r.Context(), slug)
 	if err != nil || !provider.Enabled {
-		h.renderError(w, r, http.StatusNotFound, "登录方式不可用", "该登录方式不存在或已停用")
+		h.renderError(w, r, http.StatusNotFound, "Login method unavailable", "The requested external login method does not exist or is disabled.")
 		return
 	}
+	provider.ProviderType = normalizeProviderType(provider.ProviderType)
 
-	doc, err := fetchRPDiscovery(provider.IssuerURL)
+	doc, isOIDC, err := resolveRPProviderConfig(provider)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadGateway, "无法加载登录配置", "请检查发行方配置是否正确")
+		h.renderError(w, r, http.StatusBadGateway, "Provider configuration error", "Failed to load external login configuration.")
 		return
 	}
 
 	state := store.RandomHex(16)
-	nonce := store.RandomHex(16)
+	nonce := ""
+	if isOIDC {
+		nonce = store.RandomHex(16)
+	}
 	verifier := store.RandomHex(32)
 	next := safeNextPath(r.URL.Query().Get("next"), "/profile")
 	scopes := normalizeScopes(strings.Fields(provider.Scopes))
 	if len(scopes) == 0 {
-		scopes = []string{"openid", "email", "profile"}
+		if isOIDC {
+			scopes = defaultProviderScopes(providerTypeOIDC)
+		} else {
+			scopes = defaultProviderScopes(providerTypeOAuth2)
+		}
 	}
-	if !containsScope(scopes, "openid") {
-		h.renderError(w, r, http.StatusBadRequest, "登录方式配置无效", "登录方式权限范围必须包含核心登录权限")
+	if isOIDC && !containsScope(scopes, "openid") {
+		h.renderError(w, r, http.StatusBadRequest, "Invalid provider scopes", "OIDC providers must request the openid scope.")
 		return
 	}
 
 	if err := h.st.CreateOIDCState(r.Context(), state, slug, nonce, verifier, next); err != nil {
-		h.renderError(w, r, http.StatusInternalServerError, "登录状态创建失败", "请稍后重试")
+		h.renderError(w, r, http.StatusInternalServerError, "Login state creation failed", "Please retry in a moment.")
 		return
 	}
 
@@ -300,9 +336,11 @@ func (h *Handler) OIDCProviderLogin(w http.ResponseWriter, r *http.Request) {
 	params.Set("redirect_uri", h.providerCallbackURL(r, slug))
 	params.Set("scope", strings.Join(scopes, " "))
 	params.Set("state", state)
-	params.Set("nonce", nonce)
 	params.Set("code_challenge", challenge)
 	params.Set("code_challenge_method", "S256")
+	if isOIDC {
+		params.Set("nonce", nonce)
+	}
 
 	http.Redirect(w, r, doc.AuthorizationEndpoint+"?"+params.Encode(), http.StatusFound)
 }
@@ -311,102 +349,123 @@ func (h *Handler) OIDCProviderLogin(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 
-	if errCode := r.URL.Query().Get("error"); errCode != "" {
-		_ = r.URL.Query().Get("error_description")
-		h.renderError(w, r, http.StatusBadRequest, "登录被拒绝", "外部登录返回拒绝信息，请重试或联系管理员")
+	if r.URL.Query().Get("error") != "" {
+		h.renderError(w, r, http.StatusBadRequest, "External login denied", "The provider rejected this login request.")
 		return
 	}
 
-	code := r.URL.Query().Get("code")
-	if strings.TrimSpace(code) == "" {
-		h.renderError(w, r, http.StatusBadRequest, "登录失败", "缺少授权码")
+	code := strings.TrimSpace(r.URL.Query().Get("code"))
+	if code == "" {
+		h.renderError(w, r, http.StatusBadRequest, "Login failed", "Missing authorization code.")
 		return
 	}
-	stateVal := r.URL.Query().Get("state")
-	if strings.TrimSpace(stateVal) == "" {
-		h.renderError(w, r, http.StatusBadRequest, "登录失败", "缺少状态参数")
+	stateVal := strings.TrimSpace(r.URL.Query().Get("state"))
+	if stateVal == "" {
+		h.renderError(w, r, http.StatusBadRequest, "Login failed", "Missing state parameter.")
 		return
 	}
 	st, err := h.st.ConsumeOIDCState(r.Context(), stateVal)
 	if err != nil || st.Provider != slug {
-		h.renderError(w, r, http.StatusBadRequest, "登录状态无效", "请重新发起登录")
+		h.renderError(w, r, http.StatusBadRequest, "Invalid login state", "Please start login again.")
 		return
 	}
 
 	provider, err := h.st.GetOIDCProviderBySlug(r.Context(), slug)
 	if err != nil || !provider.Enabled {
-		h.renderError(w, r, http.StatusNotFound, "登录方式不可用", "该登录方式不存在或已停用")
+		h.renderError(w, r, http.StatusNotFound, "Login method unavailable", "The requested external login method does not exist or is disabled.")
 		return
 	}
+	provider.ProviderType = normalizeProviderType(provider.ProviderType)
 
-	doc, err := fetchRPDiscovery(provider.IssuerURL)
+	doc, isOIDC, err := resolveRPProviderConfig(provider)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadGateway, "无法加载登录配置", "请检查发行方配置是否正确")
+		h.renderError(w, r, http.StatusBadGateway, "Provider configuration error", "Failed to load external login configuration.")
 		return
 	}
 
 	tok, err := rpExchangeCode(doc.TokenEndpoint, provider, code, h.providerCallbackURL(r, slug), st.Verifier)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadGateway, "换取令牌失败", "请检查应用标识、应用密钥和回调地址配置")
-		return
-	}
-	if tok.IDToken == "" {
-		h.renderError(w, r, http.StatusBadGateway, "登录失败", "缺少身份令牌")
+		h.renderError(w, r, http.StatusBadGateway, "Token exchange failed", "Failed to exchange authorization code.")
 		return
 	}
 
-	idClaims, err := verifyProviderIDToken(tok.IDToken, doc, provider.ClientID, st.Nonce)
-	if err != nil {
-		h.renderError(w, r, http.StatusBadGateway, "身份令牌校验失败", "请检查发行方证书与签名算法配置")
-		return
-	}
+	var (
+		subject       string
+		email         string
+		emailVerified bool
+		name          string
+		avatar        string
+	)
 
-	subject := stringClaim(idClaims, "sub")
-	email := strings.ToLower(strings.TrimSpace(stringClaim(idClaims, "email")))
-	emailVerified := boolClaim(idClaims, "email_verified")
-	name := stringClaim(idClaims, "name")
-	if name == "" {
-		name = stringClaim(idClaims, "preferred_username")
-	}
-	if name == "" {
-		name = stringClaim(idClaims, "username")
-	}
-	avatar := stringClaim(idClaims, "picture")
-	if avatar == "" {
-		avatar = stringClaim(idClaims, "profile_image_url")
-	}
-	if avatar == "" {
-		avatar = stringClaim(idClaims, "avatar_url")
-	}
+	if isOIDC {
+		if tok.IDToken == "" {
+			h.renderError(w, r, http.StatusBadGateway, "Login failed", "Missing ID token from OIDC provider.")
+			return
+		}
 
-	// 拉取用户信息补全声明；若返回主体标识则强制与身份令牌保持一致。
-	if doc.UserinfoEndpoint != "" {
-		usub, uemail, uverified, uname, upic, uiErr := rpUserInfo(doc.UserinfoEndpoint, tok.AccessToken)
-		if uiErr == nil {
-			if subject != "" && usub != "" && usub != subject {
-				h.renderError(w, r, http.StatusBadGateway, "登录失败", "用户信息主体不匹配")
-				return
-			}
-			if subject == "" {
-				subject = usub
-			}
-			if email == "" {
-				email = strings.ToLower(strings.TrimSpace(uemail))
-			}
-			if !emailVerified {
-				emailVerified = uverified
-			}
-			if name == "" {
-				name = uname
-			}
-			if avatar == "" {
-				avatar = upic
+		idClaims, verifyErr := verifyProviderIDToken(tok.IDToken, doc, provider.ClientID, st.Nonce)
+		if verifyErr != nil {
+			h.renderError(w, r, http.StatusBadGateway, "ID token verification failed", verifyErr.Error())
+			return
+		}
+
+		subject = stringClaim(idClaims, "sub")
+		email = strings.ToLower(strings.TrimSpace(stringClaim(idClaims, "email")))
+		emailVerified = boolClaim(idClaims, "email_verified")
+		name = stringClaim(idClaims, "name")
+		if name == "" {
+			name = stringClaim(idClaims, "preferred_username")
+		}
+		if name == "" {
+			name = stringClaim(idClaims, "username")
+		}
+		avatar = stringClaim(idClaims, "picture")
+		if avatar == "" {
+			avatar = stringClaim(idClaims, "profile_image_url")
+		}
+		if avatar == "" {
+			avatar = stringClaim(idClaims, "avatar_url")
+		}
+
+		if doc.UserinfoEndpoint != "" {
+			usub, uemail, uverified, uname, upic, uiErr := rpUserInfo(doc.UserinfoEndpoint, tok.AccessToken)
+			if uiErr == nil {
+				if subject != "" && usub != "" && usub != subject {
+					h.renderError(w, r, http.StatusBadGateway, "Login failed", "UserInfo subject does not match ID token subject.")
+					return
+				}
+				if subject == "" {
+					subject = usub
+				}
+				if email == "" {
+					email = strings.ToLower(strings.TrimSpace(uemail))
+				}
+				if !emailVerified {
+					emailVerified = uverified
+				}
+				if name == "" {
+					name = uname
+				}
+				if avatar == "" {
+					avatar = upic
+				}
 			}
 		}
+	} else {
+		usub, uemail, uverified, uname, upic, uiErr := rpUserInfo(doc.UserinfoEndpoint, tok.AccessToken)
+		if uiErr != nil {
+			h.renderError(w, r, http.StatusBadGateway, "User profile fetch failed", uiErr.Error())
+			return
+		}
+		subject = usub
+		email = strings.ToLower(strings.TrimSpace(uemail))
+		emailVerified = uverified
+		name = uname
+		avatar = upic
 	}
 
 	if subject == "" {
-		h.renderError(w, r, http.StatusBadGateway, "获取用户信息失败", "缺少主体标识")
+		h.renderError(w, r, http.StatusBadGateway, "User identity missing", "Provider response did not include a stable subject identifier.")
 		return
 	}
 
@@ -414,31 +473,29 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 	u, err := h.st.GetUserByIdentity(ctx, slug, subject)
 	if err != nil {
 		if !isErrNoRows(err) {
-			h.renderError(w, r, http.StatusInternalServerError, "身份查询失败", err.Error())
+			h.renderError(w, r, http.StatusInternalServerError, "Identity lookup failed", err.Error())
 			return
 		}
-		// 若系统中已存在同邮箱账户，则自动绑定。
 		if email != "" {
 			existing, emailErr := h.st.GetUserByEmail(ctx, email)
 			if emailErr == nil {
 				u = existing
 			} else if !isErrNoRows(emailErr) {
-				h.renderError(w, r, http.StatusInternalServerError, "用户查询失败", emailErr.Error())
+				h.renderError(w, r, http.StatusInternalServerError, "User lookup failed", emailErr.Error())
 				return
 			}
 		}
 
 		if u == nil {
 			if !provider.AutoRegister {
-				h.renderError(w, r, http.StatusForbidden, "注册已禁用",
-					"该登录提供商未开启自动注册，请联系管理员。")
+				h.renderError(w, r, http.StatusForbidden, "Registration disabled", "Auto registration is disabled for this provider.")
 				return
 			}
 			if name == "" {
 				if email != "" {
 					name = email
 				} else {
-					name = "外部登录用户"
+					name = "External Login User"
 				}
 			}
 			createEmail := email
@@ -448,13 +505,11 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 			isVerifiedEmail := emailVerified && email != "" && strings.EqualFold(createEmail, email)
 			u, err = h.st.CreateUserWithEmailVerified(ctx, createEmail, store.RandomHex(32), name, "user", isVerifiedEmail)
 			if err != nil {
-				h.renderError(w, r, http.StatusInternalServerError, "创建用户失败", err.Error())
+				h.renderError(w, r, http.StatusInternalServerError, "User creation failed", err.Error())
 				return
 			}
-			// 新建外部登录账户默认清除本地密码，要求用户后续自行设置恢复方式。
-			// 可设置密码，也可仅使用通行密钥。
 			if err := h.st.ClearPassword(ctx, u.ID); err != nil {
-				h.renderError(w, r, http.StatusInternalServerError, "初始化账户安全策略失败", err.Error())
+				h.renderError(w, r, http.StatusInternalServerError, "Account hardening failed", err.Error())
 				return
 			}
 			u.PassHash = ""
@@ -466,13 +521,13 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := h.st.LinkIdentity(ctx, u.ID, slug, subject); err != nil {
-			h.renderError(w, r, http.StatusInternalServerError, "绑定外部身份失败", err.Error())
+			h.renderError(w, r, http.StatusInternalServerError, "Identity binding failed", err.Error())
 			return
 		}
 	}
 
 	if !u.Active {
-		h.renderError(w, r, http.StatusForbidden, "账户已停用", "请联系管理员")
+		h.renderError(w, r, http.StatusForbidden, "Account disabled", "Please contact an administrator.")
 		return
 	}
 	if name != "" && strings.TrimSpace(u.DisplayName) == "" {
@@ -496,13 +551,12 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 
 	sid, err := h.st.CreateSession(ctx, u.ID)
 	if err != nil {
-		h.renderError(w, r, http.StatusInternalServerError, "创建会话失败", err.Error())
+		h.renderError(w, r, http.StatusInternalServerError, "Session creation failed", err.Error())
 		return
 	}
 	h.setSessionCookie(w, sid)
 	http.Redirect(w, r, safeNextPath(st.Redirect, "/profile"), http.StatusFound)
 }
-
 type rpTokenResp struct {
 	AccessToken string `json:"access_token"`
 	IDToken     string `json:"id_token"`
@@ -603,6 +657,17 @@ func rpUserInfo(endpoint, accessToken string) (sub, email string, emailVerified 
 	}
 
 	sub = stringClaim(claims, "sub")
+	if sub == "" {
+		sub = stringClaim(claims, "id")
+	}
+	if sub == "" {
+		sub = stringClaim(claims, "user_id")
+	}
+	if sub == "" {
+		if n, ok := claims["id"].(float64); ok {
+			sub = strconv.FormatInt(int64(n), 10)
+		}
+	}
 	email = stringClaim(claims, "email")
 	if email == "" {
 		email = stringClaim(claims, "upn")

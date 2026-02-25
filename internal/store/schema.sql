@@ -91,10 +91,14 @@ CREATE TABLE IF NOT EXISTS oidc_providers (
     id            TEXT PRIMARY KEY,
     name          TEXT NOT NULL,
     slug          TEXT UNIQUE NOT NULL, -- URL path: /auth/oidc/{slug}
+    provider_type TEXT NOT NULL DEFAULT 'oidc', -- oidc | oauth2
     icon          TEXT NOT NULL DEFAULT '',
     client_id     TEXT NOT NULL,
     client_secret TEXT NOT NULL,
     issuer_url    TEXT NOT NULL,
+    authorization_url TEXT NOT NULL DEFAULT '',
+    token_url        TEXT NOT NULL DEFAULT '',
+    userinfo_url     TEXT NOT NULL DEFAULT '',
     scopes        TEXT NOT NULL DEFAULT 'openid email profile',
     enabled       BOOLEAN NOT NULL DEFAULT true,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -177,6 +181,10 @@ ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS allowed_groups TEXT NOT NULL 
 ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS base_access TEXT NOT NULL DEFAULT 'legacy';
 ALTER TABLE oauth_clients ALTER COLUMN base_access SET DEFAULT 'legacy';
 ALTER TABLE oidc_providers ADD COLUMN IF NOT EXISTS auto_register BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE oidc_providers ADD COLUMN IF NOT EXISTS provider_type TEXT NOT NULL DEFAULT 'oidc';
+ALTER TABLE oidc_providers ADD COLUMN IF NOT EXISTS authorization_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE oidc_providers ADD COLUMN IF NOT EXISTS token_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE oidc_providers ADD COLUMN IF NOT EXISTS userinfo_url TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS user_groups (
     id         TEXT PRIMARY KEY,

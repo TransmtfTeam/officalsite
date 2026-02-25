@@ -21,7 +21,59 @@ var providerSlugRe = regexp.MustCompile(`^[a-z0-9-]+$`)
 const (
 	faviconPNG = "favicon.png"
 	faviconJPG = "favicon.jpg"
+	providerTypeOIDC   = "oidc"
+	providerTypeOAuth2 = "oauth2"
 )
+
+func normalizeProviderType(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case providerTypeOAuth2:
+		return providerTypeOAuth2
+	default:
+		return providerTypeOIDC
+	}
+}
+
+func defaultProviderScopes(providerType string) []string {
+	if providerType == providerTypeOAuth2 {
+		return []string{"profile", "email"}
+	}
+	return []string{"openid", "email", "profile"}
+}
+
+func normalizeProviderEndpoints(providerType, issuerURL, authorizationURL, tokenURL, userinfoURL string) (string, string, string, string) {
+	if providerType == providerTypeOAuth2 {
+		return "", authorizationURL, tokenURL, userinfoURL
+	}
+	return issuerURL, "", "", ""
+}
+
+func validateProviderProtocolConfig(providerType, issuerURL, authorizationURL, tokenURL, userinfoURL string, scopes []string) string {
+	switch providerType {
+	case providerTypeOIDC:
+		if issuerURL == "" {
+			return "OIDC 提供商必须填写 Issuer URL"
+		}
+		if !isAllowedAbsoluteURL(issuerURL) {
+			return "Issuer URL 必须是 HTTPS 地址，或本机调试地址"
+		}
+		if !containsScope(scopes, "openid") {
+			return "OIDC scopes 必须包含 openid"
+		}
+	case providerTypeOAuth2:
+		if authorizationURL == "" || tokenURL == "" || userinfoURL == "" {
+			return "OAuth2 提供商必须填写 Authorization URL、Token URL 和 Userinfo URL"
+		}
+		if !isAllowedAbsoluteURL(authorizationURL) ||
+			!isAllowedAbsoluteURL(tokenURL) ||
+			!isAllowedAbsoluteURL(userinfoURL) {
+			return "OAuth2 endpoints 必须是 HTTPS 地址，或本机调试地址"
+		}
+	default:
+		return "不支持的 provider type"
+	}
+	return ""
+}
 
 func (h *Handler) AdminDashboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -904,6 +956,9 @@ func (h *Handler) AdminSettingsSave(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) AdminProviders(w http.ResponseWriter, r *http.Request) {
 	providers, _ := h.st.ListOIDCProviders(r.Context())
+	for _, p := range providers {
+		p.ProviderType = normalizeProviderType(p.ProviderType)
+	}
 	d := h.pageData(r, "登录方式")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
@@ -924,14 +979,18 @@ func (h *Handler) AdminProviderCreate(w http.ResponseWriter, r *http.Request) {
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	slug := strings.TrimSpace(r.FormValue("slug"))
+	providerType := normalizeProviderType(r.FormValue("provider_type"))
 	icon := strings.TrimSpace(r.FormValue("icon"))
 	clientID := strings.TrimSpace(r.FormValue("client_id"))
 	clientSecret := r.FormValue("client_secret")
 	issuerURL := strings.TrimSpace(r.FormValue("issuer_url"))
+	authorizationURL := strings.TrimSpace(r.FormValue("authorization_url"))
+	tokenURL := strings.TrimSpace(r.FormValue("token_url"))
+	userinfoURL := strings.TrimSpace(r.FormValue("userinfo_url"))
 	scopes := normalizeScopes(strings.Fields(strings.TrimSpace(r.FormValue("scopes"))))
 	autoRegister := r.FormValue("auto_register") == "1"
 	if len(scopes) == 0 {
-		scopes = []string{"openid", "email", "profile"}
+		scopes = defaultProviderScopes(providerType)
 	}
 
 	renderErr := func(msg string) {
@@ -943,7 +1002,7 @@ func (h *Handler) AdminProviderCreate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, "admin_providers", d)
 	}
 
-	if name == "" || slug == "" || clientID == "" || clientSecret == "" || issuerURL == "" {
+	if name == "" || slug == "" || clientID == "" || clientSecret == "" {
 		renderErr("请完整填写登录方式信息")
 		return
 	}
@@ -951,17 +1010,15 @@ func (h *Handler) AdminProviderCreate(w http.ResponseWriter, r *http.Request) {
 		renderErr("路径标识只能包含小写字母、数字和连字符")
 		return
 	}
-	if !isAllowedAbsoluteURL(issuerURL) {
-		renderErr("发行方地址必须是安全协议地址，或本机调试地址")
+	if msg := validateProviderProtocolConfig(providerType, issuerURL, authorizationURL, tokenURL, userinfoURL, scopes); msg != "" {
+		renderErr(msg)
 		return
 	}
-	if !containsScope(scopes, "openid") {
-		renderErr("权限范围必须包含核心登录权限")
-		return
-	}
+	issuerURL, authorizationURL, tokenURL, userinfoURL = normalizeProviderEndpoints(
+		providerType, issuerURL, authorizationURL, tokenURL, userinfoURL)
 
 	ctx := r.Context()
-	if err := h.st.CreateOIDCProvider(ctx, name, slug, icon, clientID, clientSecret, issuerURL, strings.Join(scopes, " "), autoRegister); err != nil {
+	if err := h.st.CreateOIDCProvider(ctx, name, slug, providerType, icon, clientID, clientSecret, issuerURL, authorizationURL, tokenURL, userinfoURL, strings.Join(scopes, " "), autoRegister); err != nil {
 		renderErr("创建失败：" + err.Error())
 		return
 	}
@@ -984,7 +1041,7 @@ func (h *Handler) AdminProviderToggle(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusNotFound, "未找到", id)
 		return
 	}
-	_ = h.st.UpdateOIDCProvider(ctx, p.ID, p.Name, p.Icon, p.ClientID, p.ClientSecret, p.IssuerURL, p.Scopes, !p.Enabled, p.AutoRegister)
+	_ = h.st.UpdateOIDCProvider(ctx, p.ID, p.Name, normalizeProviderType(p.ProviderType), p.Icon, p.ClientID, p.ClientSecret, p.IssuerURL, p.AuthorizationURL, p.TokenURL, p.UserinfoURL, p.Scopes, !p.Enabled, p.AutoRegister)
 	http.Redirect(w, r, "/admin/providers", http.StatusFound)
 }
 
@@ -1315,6 +1372,7 @@ func (h *Handler) AdminProviderEditPage(w http.ResponseWriter, r *http.Request) 
 		h.renderError(w, r, http.StatusNotFound, "提供商不存在", id)
 		return
 	}
+	p.ProviderType = normalizeProviderType(p.ProviderType)
 	d := h.pageData(r, "编辑登录方式")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
@@ -1342,15 +1400,19 @@ func (h *Handler) AdminProviderEdit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	name := strings.TrimSpace(r.FormValue("name"))
+	providerType := normalizeProviderType(r.FormValue("provider_type"))
 	icon := strings.TrimSpace(r.FormValue("icon"))
 	clientID := strings.TrimSpace(r.FormValue("client_id"))
 	clientSecret := r.FormValue("client_secret")
 	issuerURL := strings.TrimSpace(r.FormValue("issuer_url"))
+	authorizationURL := strings.TrimSpace(r.FormValue("authorization_url"))
+	tokenURL := strings.TrimSpace(r.FormValue("token_url"))
+	userinfoURL := strings.TrimSpace(r.FormValue("userinfo_url"))
 	scopes := normalizeScopes(strings.Fields(strings.TrimSpace(r.FormValue("scopes"))))
 	autoRegister := r.FormValue("auto_register") == "1"
 
 	if len(scopes) == 0 {
-		scopes = []string{"openid", "email", "profile"}
+		scopes = defaultProviderScopes(providerType)
 	}
 
 	renderErr := func(msg string) {
@@ -1365,14 +1427,12 @@ func (h *Handler) AdminProviderEdit(w http.ResponseWriter, r *http.Request) {
 		renderErr("名称不能为空")
 		return
 	}
-	if !isAllowedAbsoluteURL(issuerURL) {
-		renderErr("发行方地址必须是安全协议地址，或本机调试地址")
+	if msg := validateProviderProtocolConfig(providerType, issuerURL, authorizationURL, tokenURL, userinfoURL, scopes); msg != "" {
+		renderErr(msg)
 		return
 	}
-	if !containsScope(scopes, "openid") {
-		renderErr("权限范围必须包含核心登录权限")
-		return
-	}
+	issuerURL, authorizationURL, tokenURL, userinfoURL = normalizeProviderEndpoints(
+		providerType, issuerURL, authorizationURL, tokenURL, userinfoURL)
 
 	// 若密钥留空，保持原有值。
 	if clientSecret == "" {
@@ -1382,7 +1442,7 @@ func (h *Handler) AdminProviderEdit(w http.ResponseWriter, r *http.Request) {
 		clientID = p.ClientID
 	}
 
-	if err := h.st.UpdateOIDCProvider(ctx, p.ID, name, icon, clientID, clientSecret, issuerURL, strings.Join(scopes, " "), p.Enabled, autoRegister); err != nil {
+	if err := h.st.UpdateOIDCProvider(ctx, p.ID, name, providerType, icon, clientID, clientSecret, issuerURL, authorizationURL, tokenURL, userinfoURL, strings.Join(scopes, " "), p.Enabled, autoRegister); err != nil {
 		renderErr("更新失败: " + err.Error())
 		return
 	}

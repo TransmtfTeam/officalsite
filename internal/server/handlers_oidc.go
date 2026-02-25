@@ -3,6 +3,8 @@ package server
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
+	"html/template"
 	"net/http"
 	"net/url"
 	"strings"
@@ -191,7 +193,16 @@ func (h *Handler) AuthorizeConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if action == "deny" {
-		h.authRedirectError(w, r, ar.RedirectURI, ar.State, "access_denied", "用户拒绝授权")
+		u, uerr := appendRedirectParams(ar.RedirectURI, map[string]string{
+			"error":             "access_denied",
+			"error_description": "用户拒绝授权",
+			"state":             ar.State,
+		})
+		if uerr != nil {
+			oidcError(w, 400, "invalid_request", "回调地址无效")
+			return
+		}
+		metaRedirect(w, u)
 		return
 	}
 
@@ -207,7 +218,16 @@ func (h *Handler) AuthorizeConfirm(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.st.CreateAuthCode(r.Context(), code, ar.ClientID, u.ID, ar.RedirectURI, scopes,
 		ar.CodeChallenge, ar.CodeChallengeMethod, ar.Nonce); err != nil {
-		h.authRedirectError(w, r, ar.RedirectURI, ar.State, "server_error", err.Error())
+		errURL, uerr := appendRedirectParams(ar.RedirectURI, map[string]string{
+			"error":             "server_error",
+			"error_description": err.Error(),
+			"state":             ar.State,
+		})
+		if uerr != nil {
+			oidcError(w, 400, "invalid_request", "回调地址无效")
+			return
+		}
+		metaRedirect(w, errURL)
 		return
 	}
 
@@ -219,7 +239,7 @@ func (h *Handler) AuthorizeConfirm(w http.ResponseWriter, r *http.Request) {
 		oidcError(w, 400, "invalid_request", "回调地址无效")
 		return
 	}
-	http.Redirect(w, r, redir, http.StatusFound)
+	metaRedirect(w, redir)
 }
 
 func (h *Handler) Token(w http.ResponseWriter, r *http.Request) {
@@ -565,4 +585,16 @@ func containsScope(scopes []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// metaRedirect responds with an HTML page that immediately redirects the browser
+// via <meta http-equiv="refresh">. This bypasses the CSP form-action 'self'
+// restriction that blocks 302 redirects to external URLs after a form POST.
+func metaRedirect(w http.ResponseWriter, targetURL string) {
+	esc := template.HTMLEscapeString(targetURL)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w,
+		`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=%s"></head>`+
+			`<body><p>正在跳转... <a href="%s">点击继续</a></p></body></html>`,
+		esc, esc)
 }

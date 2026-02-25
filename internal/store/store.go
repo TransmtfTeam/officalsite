@@ -117,10 +117,14 @@ type OIDCProvider struct {
 	ID           string
 	Name         string
 	Slug         string
+	ProviderType string
 	Icon         string
 	ClientID     string
 	ClientSecret string
 	IssuerURL    string
+	AuthorizationURL string
+	TokenURL         string
+	UserinfoURL      string
 	Scopes       string
 	Enabled      bool
 	AutoRegister bool
@@ -675,17 +679,17 @@ func (s *Store) UpdateUserAvatar(ctx context.Context, id, avatarURL string) erro
 	return err
 }
 
-func (s *Store) CreateOIDCProvider(ctx context.Context, name, slug, icon, clientID, clientSecret, issuerURL, scopes string, autoRegister bool) error {
+func (s *Store) CreateOIDCProvider(ctx context.Context, name, slug, providerType, icon, clientID, clientSecret, issuerURL, authorizationURL, tokenURL, userinfoURL, scopes string, autoRegister bool) error {
 	id := uuid.New().String()
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO oidc_providers(id,name,slug,icon,client_id,client_secret,issuer_url,scopes,auto_register) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-		id, name, slug, icon, clientID, clientSecret, issuerURL, scopes, autoRegister)
+		`INSERT INTO oidc_providers(id,name,slug,provider_type,icon,client_id,client_secret,issuer_url,authorization_url,token_url,userinfo_url,scopes,auto_register) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+		id, name, slug, providerType, icon, clientID, clientSecret, issuerURL, authorizationURL, tokenURL, userinfoURL, scopes, autoRegister)
 	return err
 }
 
 func (s *Store) ListOIDCProviders(ctx context.Context) ([]*OIDCProvider, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id,name,slug,icon,client_id,client_secret,issuer_url,scopes,enabled,auto_register,created_at FROM oidc_providers ORDER BY created_at`)
+		`SELECT id,name,slug,provider_type,icon,client_id,client_secret,issuer_url,authorization_url,token_url,userinfo_url,scopes,enabled,auto_register,created_at FROM oidc_providers ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -693,7 +697,7 @@ func (s *Store) ListOIDCProviders(ctx context.Context) ([]*OIDCProvider, error) 
 	var out []*OIDCProvider
 	for rows.Next() {
 		p := &OIDCProvider{}
-		if err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.Scopes, &p.Enabled, &p.AutoRegister, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.ProviderType, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.AuthorizationURL, &p.TokenURL, &p.UserinfoURL, &p.Scopes, &p.Enabled, &p.AutoRegister, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -703,7 +707,7 @@ func (s *Store) ListOIDCProviders(ctx context.Context) ([]*OIDCProvider, error) 
 
 func (s *Store) ListEnabledOIDCProviders(ctx context.Context) ([]*OIDCProvider, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id,name,slug,icon,client_id,client_secret,issuer_url,scopes,enabled,auto_register,created_at FROM oidc_providers WHERE enabled=true ORDER BY created_at`)
+		`SELECT id,name,slug,provider_type,icon,client_id,client_secret,issuer_url,authorization_url,token_url,userinfo_url,scopes,enabled,auto_register,created_at FROM oidc_providers WHERE enabled=true ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -711,7 +715,7 @@ func (s *Store) ListEnabledOIDCProviders(ctx context.Context) ([]*OIDCProvider, 
 	var out []*OIDCProvider
 	for rows.Next() {
 		p := &OIDCProvider{}
-		if err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.Scopes, &p.Enabled, &p.AutoRegister, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.ProviderType, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.AuthorizationURL, &p.TokenURL, &p.UserinfoURL, &p.Scopes, &p.Enabled, &p.AutoRegister, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -722,23 +726,23 @@ func (s *Store) ListEnabledOIDCProviders(ctx context.Context) ([]*OIDCProvider, 
 func (s *Store) GetOIDCProviderBySlug(ctx context.Context, slug string) (*OIDCProvider, error) {
 	p := &OIDCProvider{}
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id,name,slug,icon,client_id,client_secret,issuer_url,scopes,enabled,auto_register,created_at FROM oidc_providers WHERE slug=$1`,
-		slug).Scan(&p.ID, &p.Name, &p.Slug, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.Scopes, &p.Enabled, &p.AutoRegister, &p.CreatedAt)
+		`SELECT id,name,slug,provider_type,icon,client_id,client_secret,issuer_url,authorization_url,token_url,userinfo_url,scopes,enabled,auto_register,created_at FROM oidc_providers WHERE slug=$1`,
+		slug).Scan(&p.ID, &p.Name, &p.Slug, &p.ProviderType, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.AuthorizationURL, &p.TokenURL, &p.UserinfoURL, &p.Scopes, &p.Enabled, &p.AutoRegister, &p.CreatedAt)
 	return p, err
 }
 
 func (s *Store) GetOIDCProviderByID(ctx context.Context, id string) (*OIDCProvider, error) {
 	p := &OIDCProvider{}
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id,name,slug,icon,client_id,client_secret,issuer_url,scopes,enabled,auto_register,created_at FROM oidc_providers WHERE id=$1`,
-		id).Scan(&p.ID, &p.Name, &p.Slug, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.Scopes, &p.Enabled, &p.AutoRegister, &p.CreatedAt)
+		`SELECT id,name,slug,provider_type,icon,client_id,client_secret,issuer_url,authorization_url,token_url,userinfo_url,scopes,enabled,auto_register,created_at FROM oidc_providers WHERE id=$1`,
+		id).Scan(&p.ID, &p.Name, &p.Slug, &p.ProviderType, &p.Icon, &p.ClientID, &p.ClientSecret, &p.IssuerURL, &p.AuthorizationURL, &p.TokenURL, &p.UserinfoURL, &p.Scopes, &p.Enabled, &p.AutoRegister, &p.CreatedAt)
 	return p, err
 }
 
-func (s *Store) UpdateOIDCProvider(ctx context.Context, id, name, icon, clientID, clientSecret, issuerURL, scopes string, enabled, autoRegister bool) error {
+func (s *Store) UpdateOIDCProvider(ctx context.Context, id, name, providerType, icon, clientID, clientSecret, issuerURL, authorizationURL, tokenURL, userinfoURL, scopes string, enabled, autoRegister bool) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE oidc_providers SET name=$1,icon=$2,client_id=$3,client_secret=$4,issuer_url=$5,scopes=$6,enabled=$7,auto_register=$8 WHERE id=$9`,
-		name, icon, clientID, clientSecret, issuerURL, scopes, enabled, autoRegister, id)
+		`UPDATE oidc_providers SET name=$1,provider_type=$2,icon=$3,client_id=$4,client_secret=$5,issuer_url=$6,authorization_url=$7,token_url=$8,userinfo_url=$9,scopes=$10,enabled=$11,auto_register=$12 WHERE id=$13`,
+		name, providerType, icon, clientID, clientSecret, issuerURL, authorizationURL, tokenURL, userinfoURL, scopes, enabled, autoRegister, id)
 	return err
 }
 
