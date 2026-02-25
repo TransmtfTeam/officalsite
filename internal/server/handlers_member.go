@@ -79,6 +79,10 @@ func (h *Handler) MemberProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	d := h.pageData(r, "编辑项目")
 	if err := h.st.UpdateProject(ctx, p); err != nil {
+		// Re-fetch to restore ImageURL so the preview isn't lost on error.
+		if existing, ferr := h.st.GetProject(ctx, id); ferr == nil {
+			p.ImageURL = existing.ImageURL
+		}
 		d.Data = p
 		d.Flash = "保存失败：" + err.Error()
 		d.IsError = true
@@ -99,6 +103,12 @@ func (h *Handler) MemberProjectDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := r.PathValue("id")
+	// Clean up the project image file before deleting the record.
+	if proj, err := h.st.GetProject(r.Context(), id); err == nil && proj.ImageURL != "" {
+		for _, ext := range []string{".png", ".jpg"} {
+			_ = os.Remove(filepath.Join("uploads", "project-"+id+ext))
+		}
+	}
 	_ = h.st.DeleteProject(r.Context(), id)
 	http.Redirect(w, r, "/member/projects", http.StatusFound)
 }
@@ -162,7 +172,12 @@ func (h *Handler) MemberProjectUploadImage(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	_ = h.st.UpdateProjectImage(r.Context(), id, "/uploads/"+fileName)
+	if err := h.st.UpdateProjectImage(r.Context(), id, "/uploads/"+fileName); err != nil {
+		// DB write failed; remove the file to avoid orphan.
+		_ = os.Remove(filepath.Join("uploads", fileName))
+		http.Redirect(w, r, redirectEdit+"?flash=保存图片失败", http.StatusFound)
+		return
+	}
 	http.Redirect(w, r, redirectEdit+"?flash=图片已上传", http.StatusFound)
 }
 
