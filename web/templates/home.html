@@ -158,6 +158,9 @@
         {{if .URL}}
         <a class="proj-link" href="{{.URL}}" target="_blank" rel="noopener">访问项目 →</a>
         {{end}}
+        {{if .ImageURL}}
+        <img src="{{.ImageURL}}" alt="{{if .NameZH}}{{.NameZH}}{{else}}{{.NameEN}}{{end}}" style="margin-top:.8rem;width:100%;border-radius:6px;object-fit:cover;max-height:180px">
+        {{end}}
       </article>
       {{end}}
     {{else}}

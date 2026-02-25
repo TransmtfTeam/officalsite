@@ -109,6 +109,7 @@ type Project struct {
 	Tags      string // raw JSON
 	Featured  bool
 	SortOrder int
+	ImageURL  string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -648,12 +649,12 @@ func (s *Store) RevokeRefreshToken(ctx context.Context, raw string) error {
 	return err
 }
 
-const projCols = `id,slug,name_zh,name_en,desc_zh,desc_en,status,url,tags,featured,sort_order,created_at,updated_at`
+const projCols = `id,slug,name_zh,name_en,desc_zh,desc_en,status,url,tags,featured,sort_order,image_url,created_at,updated_at`
 
 func scanProject(row interface{ Scan(...any) error }) (*Project, error) {
 	p := &Project{}
 	err := row.Scan(&p.ID, &p.Slug, &p.NameZH, &p.NameEN, &p.DescZH, &p.DescEN,
-		&p.Status, &p.URL, &p.Tags, &p.Featured, &p.SortOrder, &p.CreatedAt, &p.UpdatedAt)
+		&p.Status, &p.URL, &p.Tags, &p.Featured, &p.SortOrder, &p.ImageURL, &p.CreatedAt, &p.UpdatedAt)
 	return p, err
 }
 
@@ -695,6 +696,11 @@ func (s *Store) UpdateProject(ctx context.Context, p *Project) error {
 
 func (s *Store) DeleteProject(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM projects WHERE id=$1`, id)
+	return err
+}
+
+func (s *Store) UpdateProjectImage(ctx context.Context, id, imageURL string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE projects SET image_url=$1, updated_at=now() WHERE id=$2`, imageURL, id)
 	return err
 }
 

@@ -420,6 +420,8 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 
 	// Static files (caller supplies embedded or filesystem handler)
 	mux.Handle("GET /static/", static)
+	// Uploaded project images
+	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads"))))
 
 	// Public pages
 	mux.HandleFunc("GET /", h.Home)
@@ -490,6 +492,7 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	mux.HandleFunc("GET /member/projects/{id}/edit", h.requirePermission("manage_projects")(h.MemberProjectEdit))
 	mux.HandleFunc("POST /member/projects/{id}/edit", h.requirePermission("manage_projects")(h.MemberProjectUpdate))
 	mux.HandleFunc("POST /member/projects/{id}/delete", h.requirePermission("manage_projects")(h.MemberProjectDelete))
+	mux.HandleFunc("POST /member/projects/{id}/upload-image", h.requirePermission("manage_projects")(h.MemberProjectUploadImage))
 	mux.HandleFunc("GET /member/links", h.requirePermission("manage_projects")(h.MemberLinks))
 	mux.HandleFunc("POST /member/links", h.requirePermission("manage_projects")(h.MemberLinkCreate))
 	mux.HandleFunc("GET /member/links/{id}/edit", h.requirePermission("manage_projects")(h.MemberLinkEdit))

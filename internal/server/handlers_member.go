@@ -1,7 +1,10 @@
 package server
 
 import (
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -98,6 +101,80 @@ func (h *Handler) MemberProjectDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	_ = h.st.DeleteProject(r.Context(), id)
 	http.Redirect(w, r, "/member/projects", http.StatusFound)
+}
+
+func (h *Handler) MemberProjectUploadImage(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	redirectEdit := "/member/projects/" + id + "/edit"
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024)
+	if err := r.ParseMultipartForm(1 * 1024 * 1024); err != nil {
+		http.Redirect(w, r, redirectEdit+"?flash=文件过大（最大1MB）", http.StatusFound)
+		return
+	}
+	if !h.verifyCSRFToken(r) {
+		h.csrfFailed(w, r)
+		return
+	}
+
+	if _, err := h.st.GetProject(r.Context(), id); err != nil {
+		h.renderError(w, r, http.StatusNotFound, "项目不存在", id)
+		return
+	}
+
+	file, _, err := r.FormFile("image_file")
+	if err != nil {
+		http.Redirect(w, r, redirectEdit+"?flash=未选择文件", http.StatusFound)
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		http.Redirect(w, r, redirectEdit+"?flash=读取文件失败", http.StatusFound)
+		return
+	}
+	if len(data) == 0 {
+		http.Redirect(w, r, redirectEdit+"?flash=文件为空", http.StatusFound)
+		return
+	}
+
+	mimeType := http.DetectContentType(data)
+	ext, ok := projectImageExt(mimeType)
+	if !ok {
+		http.Redirect(w, r, redirectEdit+"?flash=仅支持PNG/JPEG图片", http.StatusFound)
+		return
+	}
+
+	if err := os.MkdirAll("uploads", 0o755); err != nil {
+		http.Redirect(w, r, redirectEdit+"?flash=服务器错误", http.StatusFound)
+		return
+	}
+
+	// Remove old image files for this project (either extension).
+	for _, oldExt := range []string{".png", ".jpg"} {
+		_ = os.Remove(filepath.Join("uploads", "project-"+id+oldExt))
+	}
+
+	fileName := "project-" + id + ext
+	if err := os.WriteFile(filepath.Join("uploads", fileName), data, 0o644); err != nil {
+		http.Redirect(w, r, redirectEdit+"?flash=保存图片失败", http.StatusFound)
+		return
+	}
+
+	_ = h.st.UpdateProjectImage(r.Context(), id, "/uploads/"+fileName)
+	http.Redirect(w, r, redirectEdit+"?flash=图片已上传", http.StatusFound)
+}
+
+func projectImageExt(mimeType string) (string, bool) {
+	switch mimeType {
+	case "image/png":
+		return ".png", true
+	case "image/jpeg":
+		return ".jpg", true
+	default:
+		return "", false
+	}
 }
 
 func projectFromForm(r *http.Request) *store.Project {

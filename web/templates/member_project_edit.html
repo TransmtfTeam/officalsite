@@ -89,6 +89,25 @@
         <a class="btn btn-ghost btn-sm" href="/member/projects">返回列表</a>
       </div>
     </form>
+
+    <div class="form-panel" style="margin-top:1.5rem">
+      <p class="form-panel-title">项目图片</p>
+      {{if .ImageURL}}
+      <div style="margin-bottom:1rem">
+        <img src="{{.ImageURL}}" alt="项目图片" style="max-width:100%;max-height:240px;border-radius:8px;border:1px solid rgba(0,0,0,0.08)">
+      </div>
+      {{end}}
+      <form method="POST" action="/member/projects/{{.ID}}/upload-image" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">上传图片（PNG/JPEG，最大1MB）</label>
+            <input class="form-control" type="file" name="image_file" accept="image/png,image/jpeg" required>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">上传图片</button>
+      </form>
+    </div>
     {{end}}
   </main>
 </div>
