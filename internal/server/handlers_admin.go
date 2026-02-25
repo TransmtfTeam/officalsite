@@ -274,6 +274,7 @@ func (h *Handler) AdminUserDetail(w http.ResponseWriter, r *http.Request) {
 	accessTokens, _ := h.st.GetAccessTokensByUserID(ctx, id)
 	refreshTokens, _ := h.st.GetRefreshTokensByUserID(ctx, id)
 	passkeys, _ := h.st.GetPasskeyCredentialsByUserID(ctx, id)
+	customRoles, _ := h.st.ListCustomRoles(ctx)
 	userGroups, _ := h.st.GetUserGroups(ctx, id)
 	allGroups, _ := h.st.ListUserGroups(ctx)
 	groupSet := make(map[string]struct{}, len(userGroups))
@@ -298,6 +299,7 @@ func (h *Handler) AdminUserDetail(w http.ResponseWriter, r *http.Request) {
 		"AccessTokens":      accessTokens,
 		"RefreshTokens":     refreshTokens,
 		"Passkeys":          passkeys,
+		"CustomRoles":       customRoles,
 		"UserGroups":        userGroups,
 		"AllGroups":         allGroups,
 		"AvailableGroups":   availableGroups,

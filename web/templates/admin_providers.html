@@ -4,119 +4,125 @@
 <div class="panel-wrap">
   <aside class="sidebar">
     <div class="sidebar-section">
-      <div class="sidebar-title">Admin</div>
-      <a class="sidebar-link" href="/admin">Overview</a>
-      <a class="sidebar-link" href="/admin/users">Users</a>
-      <a class="sidebar-link" href="/admin/groups">Groups</a>
-      <a class="sidebar-link" href="/admin/clients">Clients</a>
-      <a class="sidebar-link active" href="/admin/providers">Login Providers</a>
-      <a class="sidebar-link" href="/admin/roles">Roles</a>
-      <a class="sidebar-link" href="/admin/announcements">Announcements</a>
-      <a class="sidebar-link" href="/admin/settings">Settings</a>
+      <div class="sidebar-title">管理</div>
+      <a class="sidebar-link" href="/admin">总览</a>
+      <a class="sidebar-link" href="/admin/users">用户</a>
+      <a class="sidebar-link" href="/admin/groups">分组</a>
+      <a class="sidebar-link" href="/admin/clients">应用</a>
+      <a class="sidebar-link active" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/roles">角色</a>
+      <a class="sidebar-link" href="/admin/announcements">公告</a>
+      <a class="sidebar-link" href="/admin/settings">设置</a>
     </div>
     <div class="sidebar-section">
-      <div class="sidebar-title">Quick Links</div>
-      <a class="sidebar-link" href="/">Home</a>
-      <a class="sidebar-link" href="/profile">Profile</a>
+      <div class="sidebar-title">快捷入口</div>
+      <a class="sidebar-link" href="/">首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
     </div>
   </aside>
 
   <main class="panel-content">
-    <h1 class="panel-title">External Login Providers</h1>
-    <p class="panel-sub">Configure OIDC and OAuth2 providers for website sign-in.</p>
+    <h1 class="panel-title">外部登录方式</h1>
+    <p class="panel-sub">为站点配置 OIDC / OAuth2 登录提供商。</p>
 
     {{if .Flash}}
     <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
     {{end}}
 
     <div class="form-panel">
-      <p class="form-panel-title">Add Provider</p>
+      <p class="form-panel-title">添加登录方式</p>
       <p style="font-size:.82rem;color:#888;margin-bottom:1rem">
-        Callback URL format: <code style="color:var(--blue)">{{.Issuer}}/auth/oidc/{slug}/callback</code>
+        回调地址格式：<code style="color:var(--blue)">{{.Issuer}}/auth/oidc/{slug}/callback</code>
       </p>
-      <form method="POST" action="/admin/providers">
+      <form method="POST" action="/admin/providers" data-provider-form="1">
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
 
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Display Name</label>
-            <input class="form-control" type="text" name="name" placeholder="Google" required>
+            <label class="form-label">显示名称</label>
+            <input class="form-control" type="text" name="name" placeholder="例如：Google" required>
           </div>
           <div class="form-group">
-            <label class="form-label">Slug (cannot change later)</label>
+            <label class="form-label">路径标识（创建后不可修改）</label>
             <input class="form-control" type="text" name="slug" placeholder="google" pattern="[a-z0-9\-]+" required>
           </div>
           <div class="form-group">
-            <label class="form-label">Icon (optional)</label>
-            <input class="form-control" type="text" name="icon" placeholder="G">
+            <label class="form-label">图标（可选）</label>
+            <input class="form-control" type="text" name="icon" placeholder="例：G">
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Protocol</label>
+            <label class="form-label">协议</label>
             <select class="form-control" name="provider_type">
-              <option value="oidc">OIDC (Recommended)</option>
+              <option value="oidc">OIDC（推荐）</option>
               <option value="oauth2">OAuth2</option>
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Client ID</label>
+            <label class="form-label">应用 ID</label>
             <input class="form-control" type="text" name="client_id" required>
           </div>
           <div class="form-group">
-            <label class="form-label">Client Secret</label>
+            <label class="form-label">应用密钥</label>
             <input class="form-control" type="password" name="client_secret" required>
           </div>
         </div>
 
-        <div class="form-row">
+        <div class="form-row" data-provider-group="oidc">
           <div class="form-group">
-            <label class="form-label">Issuer URL (OIDC)</label>
+            <label class="form-label">发行方地址</label>
             <input class="form-control" type="url" name="issuer_url" placeholder="https://accounts.example.com">
           </div>
+        </div>
+
+        <div class="form-row" data-provider-group="oauth2">
           <div class="form-group">
-            <label class="form-label">Scopes (space-separated)</label>
-            <input class="form-control" type="text" name="scopes" placeholder="openid email profile">
+            <label class="form-label">授权地址</label>
+            <input class="form-control" type="url" name="authorization_url" placeholder="https://provider.example.com/oauth/authorize">
+          </div>
+          <div class="form-group">
+            <label class="form-label">令牌地址</label>
+            <input class="form-control" type="url" name="token_url" placeholder="https://provider.example.com/oauth/token">
+          </div>
+          <div class="form-group">
+            <label class="form-label">用户信息地址</label>
+            <input class="form-control" type="url" name="userinfo_url" placeholder="https://provider.example.com/userinfo">
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Authorization URL (OAuth2)</label>
-            <input class="form-control" type="url" name="authorization_url" placeholder="https://provider.example.com/oauth/authorize">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Token URL (OAuth2)</label>
-            <input class="form-control" type="url" name="token_url" placeholder="https://provider.example.com/oauth/token">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Userinfo URL (OAuth2)</label>
-            <input class="form-control" type="url" name="userinfo_url" placeholder="https://provider.example.com/userinfo">
+            <label class="form-label">权限范围（空格分隔）</label>
+            <input class="form-control" type="text" name="scopes" placeholder="openid email profile">
+            <p data-scope-hint style="font-size:.8rem;color:var(--text2);margin:.4rem 0 0">
+              OIDC 建议权限范围：openid email profile（必须包含 openid）
+            </p>
           </div>
         </div>
 
         <div class="form-group" style="margin-bottom:1rem">
           <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
             <input type="checkbox" name="auto_register" value="1" checked>
-            <span>Auto register users on first successful external login</span>
+            <span>首次外部登录成功后自动创建账户</span>
           </label>
         </div>
 
-        <button class="btn btn-primary btn-sm" type="submit">Add</button>
+        <button class="btn btn-primary btn-sm" type="submit">添加</button>
       </form>
     </div>
 
     <div class="card" style="margin-bottom:1.5rem">
-      <p style="font-size:.9rem;font-weight:600;margin:0 0 .6rem">Configuration Tips</p>
+      <p style="font-size:.9rem;font-weight:600;margin:0 0 .6rem">配置说明</p>
       <p style="font-size:.82rem;color:var(--text2);margin:0 0 .4rem">
-        For OIDC, fill <code>Issuer URL</code> and include <code>openid</code> in scopes.
+        选择 OIDC 时，请填写发行方地址，并在权限范围中包含 <code>openid</code>。
       </p>
       <p style="font-size:.82rem;color:var(--text2);margin:0 0 .4rem">
-        For OAuth2, fill <code>Authorization URL</code>, <code>Token URL</code> and <code>Userinfo URL</code>.
+        选择 OAuth2 时，请填写授权地址、令牌地址、用户信息地址。
       </p>
       <p style="font-size:.82rem;color:var(--text2);margin:0">
-        The login entry path is generated as <code>/auth/oidc/{slug}</code>.
+        登录入口路径固定为 <code>/auth/oidc/{slug}</code>。
       </p>
     </div>
 
@@ -124,13 +130,13 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Entry</th>
-            <th>Type</th>
-            <th>Issuer / Auth URL</th>
-            <th>Status</th>
-            <th>Auto Register</th>
-            <th>Actions</th>
+            <th>名称</th>
+            <th>入口路径</th>
+            <th>协议</th>
+            <th>发行方 / 授权地址</th>
+            <th>状态</th>
+            <th>自动注册</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody>
@@ -144,38 +150,39 @@
             </td>
             <td>
               {{if .Enabled}}
-              <span style="color:#16a34a;font-size:.82rem">Enabled</span>
+              <span style="color:#16a34a;font-size:.82rem">已启用</span>
               {{else}}
-              <span style="color:var(--text2);font-size:.82rem">Disabled</span>
+              <span style="color:var(--text2);font-size:.82rem">已停用</span>
               {{end}}
             </td>
             <td>
               {{if .AutoRegister}}
-              <span style="color:#16a34a;font-size:.82rem">On</span>
+              <span style="color:#16a34a;font-size:.82rem">开启</span>
               {{else}}
-              <span style="color:#dc2626;font-size:.82rem">Off</span>
+              <span style="color:#dc2626;font-size:.82rem">关闭</span>
               {{end}}
             </td>
             <td style="white-space:nowrap">
-              <a class="btn btn-ghost btn-sm" href="/admin/providers/{{.ID}}/edit">Edit</a>
+              <a class="btn btn-ghost btn-sm" href="/admin/providers/{{.ID}}/edit">编辑</a>
               <form method="POST" action="/admin/providers/{{.ID}}/toggle" style="display:inline-block">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button class="btn btn-ghost btn-sm" type="submit">
-                  {{if .Enabled}}Disable{{else}}Enable{{end}}
+                  {{if .Enabled}}停用{{else}}启用{{end}}
                 </button>
               </form>
               <form method="POST" action="/admin/providers/{{.ID}}/delete" style="display:inline-block;margin-left:.4rem">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <button class="btn btn-danger btn-sm" type="submit">Delete</button>
+                <button class="btn btn-danger btn-sm" type="submit">删除</button>
               </form>
             </td>
           </tr>
           {{else}}
-          <tr><td colspan="7" style="color:var(--text2);text-align:center;padding:2rem">No providers configured yet.</td></tr>
+          <tr><td colspan="7" style="color:var(--text2);text-align:center;padding:2rem">当前还没有配置任何登录方式。</td></tr>
           {{end}}
         </tbody>
       </table>
     </div>
   </main>
 </div>
+<script src="/static/js/provider_form.js"></script>
 {{end}}

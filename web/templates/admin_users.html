@@ -33,7 +33,6 @@
     {{end}}
 
     {{$d := .Data}}
-    {{$customRoles := index $d "CustomRoles"}}
 
     <div class="form-panel">
       <p class="form-panel-title">新增用户</p>
@@ -55,9 +54,9 @@
           <div class="form-group">
             <label class="form-label">角色</label>
             <select class="form-control" name="role">
-              <option value="user">用户</option>
-              <option value="member">成员</option>
-              <option value="admin">管理员</option>
+              <option value="user">user</option>
+              <option value="member">member</option>
+              <option value="admin">admin</option>
               {{range $customRoles}}
               <option value="{{.Name}}">{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</option>
               {{end}}
@@ -88,7 +87,6 @@
         </thead>
         <tbody>
           {{range (index $d "Users")}}
-          {{$userRole := .Role}}
           <tr>
             <td>
               <a href="/admin/users/{{.ID}}" style="font-weight:500">{{.Email}}</a>
@@ -96,38 +94,13 @@
             <td>{{.DisplayName}}</td>
             <td>
               <span class="role-badge {{if eq .Role "admin"}}role-admin{{else if eq .Role "member"}}role-member{{else}}role-user{{end}}">
-                {{if eq .Role "admin"}}管理员{{else if eq .Role "member"}}成员{{else if eq .Role "user"}}用户{{else}}{{.Role}}{{end}}
+                {{if eq .Role "admin"}}admin{{else if eq .Role "member"}}member{{else if eq .Role "user"}}user{{else}}{{.Role}}{{end}}
               </span>
             </td>
             <td>{{if .Active}}<span style="color:#16a34a">启用</span>{{else}}<span style="color:#dc2626">停用</span>{{end}}</td>
             <td>{{if .EmailVerified}}<span style="color:#16a34a;font-size:.82rem">已验证</span>{{else}}<span style="color:#dc2626;font-size:.82rem">未验证</span>{{end}}</td>
             <td>
-              <form method="POST" action="/admin/users/{{.ID}}/update" style="display:inline-flex;align-items:center;gap:.4rem;flex-wrap:wrap"
-                    onsubmit="return confirm('确认修改 {{.DisplayName}} 的资料与角色？');">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <input class="form-control" type="text" name="display_name" value="{{.DisplayName}}"
-                  style="width:130px">
-                <select class="form-control" name="role" style="width:120px">
-                  <option value="user" {{if eq $userRole "user"}}selected{{end}}>用户</option>
-                  <option value="member" {{if eq $userRole "member"}}selected{{end}}>成员</option>
-                  <option value="admin" {{if eq $userRole "admin"}}selected{{end}}>管理员</option>
-                  {{range $customRoles}}
-                  <option value="{{.Name}}" {{if eq $userRole .Name}}selected{{end}}>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</option>
-                  {{end}}
-                </select>
-                <select class="form-control" name="active" style="width:80px">
-                  <option value="1" {{if .Active}}selected{{end}}>启用</option>
-                  <option value="0" {{if not .Active}}selected{{end}}>停用</option>
-                </select>
-                <button class="btn btn-ghost btn-sm" type="submit">保存</button>
-              </form>
-              <form method="POST" action="/admin/users/{{.ID}}/delete" style="display:inline-block;margin-left:.3rem">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <button class="btn btn-danger btn-sm" type="submit"
-                  data-confirm="是否确定删除用户 {{.DisplayName}}？该操作不可撤销。"
-                  data-confirm-title="删除用户" data-confirm-icon="🗑️">删除</button>
-              </form>
-              <a class="btn btn-ghost btn-sm" href="/admin/users/{{.ID}}" style="margin-left:.3rem">详情</a>
+              <a class="btn btn-ghost btn-sm" href="/admin/users/{{.ID}}">查看详情</a>
             </td>
           </tr>
           {{else}}

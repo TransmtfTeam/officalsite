@@ -78,7 +78,7 @@
             <td>{{.DisplayName}}</td>
             <td>
               <span class="role-badge {{if eq .Role "admin"}}role-admin{{else if eq .Role "member"}}role-member{{else}}role-user{{end}}">
-                {{.Role}}
+                {{if eq .Role "admin"}}admin{{else if eq .Role "member"}}member{{else if eq .Role "user"}}user{{else}}{{.Role}}{{end}}
               </span>
             </td>
             <td>

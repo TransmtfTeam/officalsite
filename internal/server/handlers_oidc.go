@@ -587,14 +587,19 @@ func containsScope(scopes []string, target string) bool {
 	return false
 }
 
-// metaRedirect responds with an HTML page that immediately redirects the browser
-// via <meta http-equiv="refresh">. This bypasses the CSP form-action 'self'
-// restriction that blocks 302 redirects to external URLs after a form POST.
+// metaRedirect responds with an HTML page that immediately redirects the browser.
+// A same-origin script (allowed by CSP script-src 'self') calls window.location.replace
+// before the page is painted, giving a seamless redirect. The meta-refresh serves as
+// a no-JS fallback. Both approaches bypass the CSP form-action 'self' restriction that
+// blocks 302 redirects to external URLs following a form POST.
 func metaRedirect(w http.ResponseWriter, targetURL string) {
 	esc := template.HTMLEscapeString(targetURL)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w,
-		`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=%s"></head>`+
-			`<body><p>正在跳转... <a href="%s">点击继续</a></p></body></html>`,
+		`<!DOCTYPE html><html><head>`+
+			`<meta name="redirect-url" content="%s">`+
+			`<meta http-equiv="refresh" content="0; url=%s">`+
+			`<script src="/static/js/redirect.js"></script>`+
+			`</head><body></body></html>`,
 		esc, esc)
 }
