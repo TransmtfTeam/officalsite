@@ -388,10 +388,16 @@ func (h *Handler) PasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 	}
 	h.clear2FAChallengeCookie(w)
 
+	redirect := safeNextPath(ch.Redirect, "/profile")
+
 	if u.RequirePasswordChange {
 		sid, _ := h.st.CreateSession(ctx, u.ID)
 		h.setSessionCookie(w, sid)
-		jsonResp(w, http.StatusOK, map[string]string{"redirect": "/profile/change-password"})
+		target := "/profile/change-password"
+		if redirect != "" && redirect != "/profile" {
+			target += "?next=" + url.QueryEscape(redirect)
+		}
+		jsonResp(w, http.StatusOK, map[string]string{"redirect": target})
 		return
 	}
 
@@ -401,8 +407,6 @@ func (h *Handler) PasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.setSessionCookie(w, sid)
-
-	redirect := safeNextPath(ch.Redirect, "/profile")
 	jsonResp(w, http.StatusOK, map[string]string{"redirect": redirect})
 }
 
@@ -566,7 +570,11 @@ func (h *Handler) PasskeyPrimaryLoginFinish(w http.ResponseWriter, r *http.Reque
 	if resolvedUser.RequirePasswordChange {
 		sid, _ := h.st.CreateSession(ctx, resolvedUser.ID)
 		h.setSessionCookie(w, sid)
-		jsonResp(w, http.StatusOK, map[string]string{"redirect": "/profile/change-password"})
+		target := "/profile/change-password"
+		if redirectNext != "" && redirectNext != "/profile" {
+			target += "?next=" + url.QueryEscape(redirectNext)
+		}
+		jsonResp(w, http.StatusOK, map[string]string{"redirect": target})
 		return
 	}
 

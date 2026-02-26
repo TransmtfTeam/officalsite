@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -27,6 +28,18 @@ func (h *Handler) startSecondFactor(w http.ResponseWriter, r *http.Request, u *s
 
 func (h *Handler) Login2FAPage(w http.ResponseWriter, r *http.Request) {
 	if h.currentUser(r) != nil {
+		// Already logged in. If there is a pending 2FA challenge whose UserID
+		// matches the current user (e.g. authenticated via external provider that
+		// also required 2FA), honour the stored redirect so the OAuth2 authorize
+		// flow is not interrupted.
+		if chID := h.twoFAChallengeFromRequest(r); chID != "" {
+			if ch, err := h.st.GetLogin2FAChallenge(r.Context(), chID); err == nil &&
+				ch.UserID == h.currentUser(r).ID {
+				h.clear2FAChallengeCookie(w)
+				http.Redirect(w, r, safeNextPath(ch.Redirect, "/profile"), http.StatusFound)
+				return
+			}
+		}
 		http.Redirect(w, r, "/profile", http.StatusFound)
 		return
 	}
@@ -112,7 +125,11 @@ func (h *Handler) Login2FAPost(w http.ResponseWriter, r *http.Request) {
 	if u.RequirePasswordChange {
 		sid, _ := h.st.CreateSession(r.Context(), u.ID)
 		h.setSessionCookie(w, sid)
-		http.Redirect(w, r, "/profile/change-password", http.StatusFound)
+		target := "/profile/change-password"
+		if next := safeNextPath(ch.Redirect, ""); next != "" && next != "/profile" {
+			target += "?next=" + url.QueryEscape(next)
+		}
+		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
 

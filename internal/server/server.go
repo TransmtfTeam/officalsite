@@ -220,7 +220,7 @@ func (h *Handler) requireLogin(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if mustChangePasswordNow(u, r.URL.Path) {
-			http.Redirect(w, r, "/profile/change-password", http.StatusFound)
+			http.Redirect(w, r, "/profile/change-password?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 			return
 		}
 		next(w, r)
@@ -235,7 +235,7 @@ func (h *Handler) requireMember(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if mustChangePasswordNow(u, r.URL.Path) {
-			http.Redirect(w, r, "/profile/change-password", http.StatusFound)
+			http.Redirect(w, r, "/profile/change-password?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 			return
 		}
 		if !u.IsMember() {
@@ -254,7 +254,7 @@ func (h *Handler) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if mustChangePasswordNow(u, r.URL.Path) {
-			http.Redirect(w, r, "/profile/change-password", http.StatusFound)
+			http.Redirect(w, r, "/profile/change-password?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 			return
 		}
 		if !u.IsAdmin() {
@@ -277,7 +277,7 @@ func (h *Handler) requirePermission(perm string) func(http.HandlerFunc) http.Han
 				return
 			}
 			if mustChangePasswordNow(u, r.URL.Path) {
-				http.Redirect(w, r, "/profile/change-password", http.StatusFound)
+				http.Redirect(w, r, "/profile/change-password?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 				return
 			}
 			if !h.userHasPermission(r.Context(), u, perm) {

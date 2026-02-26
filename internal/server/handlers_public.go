@@ -175,7 +175,11 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	if u.RequirePasswordChange {
 		sid, _ := h.st.CreateSession(ctx, u.ID)
 		h.setSessionCookie(w, sid)
-		http.Redirect(w, r, "/profile/change-password", http.StatusFound)
+		target := "/profile/change-password"
+		if next != "" && next != "/profile" {
+			target += "?next=" + url.QueryEscape(next)
+		}
+		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
 
@@ -752,11 +756,17 @@ func (h *Handler) ProfileForceChangePage(w http.ResponseWriter, r *http.Request)
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
+	next := safeNextPath(r.URL.Query().Get("next"), "")
 	if !u.RequirePasswordChange {
-		http.Redirect(w, r, "/profile", http.StatusFound)
+		target := next
+		if target == "" {
+			target = "/profile"
+		}
+		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
 	d := h.pageData(r, "修改密码")
+	d.Data = map[string]any{"Next": next}
 	h.render(w, "force_change_password", d)
 }
 
@@ -775,19 +785,25 @@ func (h *Handler) ProfileForceChangePost(w http.ResponseWriter, r *http.Request)
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
-	// Only allow this handler when the flag is actually set.
-	if !u.RequirePasswordChange {
-		http.Redirect(w, r, "/profile", http.StatusFound)
-		return
-	}
-
 	newPass := r.FormValue("new_password")
 	confirm := r.FormValue("confirm_password")
+	next := safeNextPath(r.FormValue("next"), "")
+
+	// Only allow this handler when the flag is actually set.
+	if !u.RequirePasswordChange {
+		target := next
+		if target == "" {
+			target = "/profile"
+		}
+		http.Redirect(w, r, target, http.StatusFound)
+		return
+	}
 
 	fail := func(msg string) {
 		d := h.pageData(r, "修改密码")
 		d.Flash = msg
 		d.IsError = true
+		d.Data = map[string]any{"Next": next}
 		h.render(w, "force_change_password", d)
 	}
 
@@ -803,7 +819,11 @@ func (h *Handler) ProfileForceChangePost(w http.ResponseWriter, r *http.Request)
 		fail("密码更新失败：" + err.Error())
 		return
 	}
-	http.Redirect(w, r, "/profile?flash=密码已更新", http.StatusFound)
+	target := safeNextPath(next, "/profile")
+	if target == "/profile" {
+		target = "/profile?flash=密码已更新"
+	}
+	http.Redirect(w, r, target, http.StatusFound)
 }
 
 // ProfileDeletePassword removes the user's password (passkey-only mode).

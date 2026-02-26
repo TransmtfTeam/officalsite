@@ -78,60 +78,60 @@
 
       <p style="font-size:.82rem;color:var(--text2);margin:.8rem 0 1rem">
         将本服务作为身份提供方接入第三方系统时，可按下表填写。
-        若对方支持自动发现，仅需填写 <strong>发现文档地址</strong>，其余地址会自动获取。
+        若对方支持自动发现，仅需填写 <strong>Discovery Document URL</strong>，其余地址会自动获取。
       </p>
 
       <table class="data-table" style="margin-bottom:1rem">
         <thead>
-          <tr><th style="width:36%">字段</th><th>填写值</th></tr>
+          <tr><th style="width:36%">Field</th><th>Value</th></tr>
         </thead>
         <tbody>
           <tr>
-            <td>发现文档地址<br><span style="font-size:.75rem;color:var(--text2)">自动发现入口</span></td>
+            <td>Discovery Document URL<br><span style="font-size:.75rem;color:var(--text2)">Well-Known / Auto-discovery</span></td>
             <td><code class="mono">{{$.Issuer}}/.well-known/openid-configuration</code></td>
           </tr>
           <tr>
-            <td>身份验证地址<br><span style="font-size:.75rem;color:var(--text2)">授权端点</span></td>
+            <td>Authorization Endpoint<br><span style="font-size:.75rem;color:var(--text2)">authorization_endpoint</span></td>
             <td><code class="mono">{{$.Issuer}}/oauth2/authorize</code></td>
           </tr>
           <tr>
-            <td>令牌地址<br><span style="font-size:.75rem;color:var(--text2)">令牌端点</span></td>
+            <td>Token Endpoint<br><span style="font-size:.75rem;color:var(--text2)">token_endpoint</span></td>
             <td><code class="mono">{{$.Issuer}}/oauth2/token</code></td>
           </tr>
           <tr>
-            <td>证书地址<br><span style="font-size:.75rem;color:var(--text2)">公钥清单端点</span></td>
+            <td>JWKS Endpoint<br><span style="font-size:.75rem;color:var(--text2)">jwks_uri</span></td>
             <td><code class="mono">{{$.Issuer}}/.well-known/jwks.json</code></td>
           </tr>
           <tr>
-            <td>应用标识</td>
+            <td>Client ID</td>
             <td><code class="mono">{{$client.ClientID}}</code></td>
           </tr>
           <tr>
-            <td>应用密钥</td>
+            <td>Client Secret</td>
             <td><span style="color:var(--text2);font-size:.85rem">创建时一次性显示；如已丢失请重置</span></td>
           </tr>
           <tr>
-            <td>请求校验方式<br><span style="font-size:.75rem;color:var(--text2)">挑战校验方式</span></td>
+            <td>Code Challenge Method<br><span style="font-size:.75rem;color:var(--text2)">PKCE / code_challenge_method</span></td>
             <td><span style="font-size:.82rem;color:var(--text2)">系统默认开启推荐模式</span></td>
           </tr>
           <tr>
-            <td>目录同步</td>
+            <td>Directory Sync</td>
             <td><span style="color:var(--text2);font-size:.85rem">不支持，保持关闭</span></td>
           </tr>
           <tr>
-            <td>电子邮件字段<br><span style="font-size:.75rem;color:var(--text2)">邮件字段名</span></td>
+            <td>Email Field<br><span style="font-size:.75rem;color:var(--text2)">email claim / field name</span></td>
             <td><span style="font-size:.82rem;color:var(--text2)">使用系统默认字段</span></td>
           </tr>
           <tr>
-            <td>权限范围<br><span style="font-size:.75rem;color:var(--text2)">请求权限项</span></td>
+            <td>Scope<br><span style="font-size:.75rem;color:var(--text2)">requested scopes</span></td>
             <td><span style="font-size:.82rem;color:var(--text2)">默认权限项（核心登录、邮箱、资料）</span></td>
           </tr>
           <tr>
-            <td>可用附加字段<br><span style="font-size:.75rem;color:var(--text2)">身份令牌可选字段</span></td>
+            <td>Available Claims<br><span style="font-size:.75rem;color:var(--text2)">optional ID token claims</span></td>
             <td>
-              用户角色字段（用户 / 成员 / 管理员）<br>
-              显示名称字段（需要个人资料权限）<br>
-              头像地址字段（需要个人资料权限）
+              role（用户 / 成员 / 管理员）<br>
+              name（需要 profile scope）<br>
+              picture（需要 profile scope）
             </td>
           </tr>
         </tbody>
@@ -139,13 +139,13 @@
 
       <div style="background:#f8fafc;border:1px solid var(--glass-b);border-radius:10px;padding:.9rem 1rem;font-size:.82rem;color:var(--text2)">
         <strong style="color:var(--text)">接入填写示例：</strong><br>
-        身份验证地址 → <code>{{$.Issuer}}/oauth2/authorize</code><br>
-        令牌地址 → <code>{{$.Issuer}}/oauth2/token</code><br>
-        证书地址 → <code>{{$.Issuer}}/.well-known/jwks.json</code><br>
-        请求校验方式 → <strong>开启</strong>（机密应用同样支持）&emsp;
-        目录同步 → <strong>关闭</strong>&emsp;
-        电子邮件字段 → <strong>使用系统默认字段</strong><br>
-        权限范围 → <strong>默认权限项（核心登录、邮箱、资料）</strong>
+        Authorization Endpoint → <code>{{$.Issuer}}/oauth2/authorize</code><br>
+        Token Endpoint → <code>{{$.Issuer}}/oauth2/token</code><br>
+        JWKS Endpoint → <code>{{$.Issuer}}/.well-known/jwks.json</code><br>
+        Code Challenge Method → <strong>开启</strong>（机密应用同样支持）&emsp;
+        Directory Sync → <strong>关闭</strong>&emsp;
+        Email Field → <strong>使用系统默认字段</strong><br>
+        Scope → <strong>默认权限项（openid email profile）</strong>
       </div>
     </details>
 

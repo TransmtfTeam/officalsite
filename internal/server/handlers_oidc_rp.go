@@ -724,7 +724,11 @@ func (h *Handler) finishExternalLogin(w http.ResponseWriter, r *http.Request, u 
 	if u.RequirePasswordChange {
 		sid, _ := h.st.CreateSession(ctx, u.ID)
 		h.setSessionCookie(w, sid)
-		http.Redirect(w, r, "/profile/change-password", http.StatusFound)
+		target := "/profile/change-password"
+		if safeNext := safeNextPath(next, ""); safeNext != "" && safeNext != "/profile" {
+			target += "?next=" + url.QueryEscape(safeNext)
+		}
+		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
 
