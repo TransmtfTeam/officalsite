@@ -397,7 +397,7 @@ footer {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  padding: 60px 1rem 1rem;
   background:
     radial-gradient(ellipse at 20% 50%, rgba(85,205,252,.15) 0%, transparent 60%),
     radial-gradient(ellipse at 80% 50%, rgba(247,168,184,.15) 0%, transparent 60%),
@@ -1092,7 +1092,7 @@ footer {
   .panel-sub { margin-bottom: .8rem; }
 
   /* ── Sidebar toggle button is shown (already handled, but ensure visible) ── */
-  .sidebar-toggle { display: flex !important; }
+  /* NOTE: do NOT force-show sidebar-toggle here; JS handles it only when .sidebar exists */
 }
 
 /* Extra-small screens */

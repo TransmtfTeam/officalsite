@@ -193,6 +193,10 @@ func (h *Handler) LoginPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RegisterPage(w http.ResponseWriter, r *http.Request) {
+	if h.currentUser(r) != nil {
+		http.Redirect(w, r, "/profile", http.StatusFound)
+		return
+	}
 	d := h.pageData(r, "注册")
 	data := map[string]any{
 		"Next": safeNextPath(r.URL.Query().Get("next"), ""),
@@ -546,6 +550,14 @@ func (h *Handler) VerifyEmailPage(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 
 	if token != "" {
+		if h.currentUser(r) != nil {
+			d := h.pageData(r, "验证邮箱")
+			d.Flash = "请先退出登录再验证新账号邮箱"
+			d.IsError = true
+			d.Data = map[string]any{"Email": email}
+			h.render(w, "verify_email", d)
+			return
+		}
 		u, err := h.st.ConsumeEmailVerification(ctx, token)
 		if err != nil {
 			d := h.pageData(r, "邮箱验证失败")
@@ -569,6 +581,10 @@ func (h *Handler) VerifyEmailPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	d := h.pageData(r, "验证邮箱")
+	if h.currentUser(r) != nil {
+		http.Redirect(w, r, "/profile", http.StatusFound)
+		return
+	}
 	switch status {
 	case "sent":
 		d.Flash = "注册成功！请查收验证邮件。"
