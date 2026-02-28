@@ -45,6 +45,7 @@ func (h *Handler) MemberProjectCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.logAudit(ctx, h.currentUser(r), "create", "project", p.ID, p.NameZH, "", marshalJSON(p))
 	http.Redirect(w, r, "/member/projects?flash=项目已创建", http.StatusFound)
 }
 
@@ -77,6 +78,7 @@ func (h *Handler) MemberProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	p := projectFromForm(r)
 	p.ID = id
 	ctx := r.Context()
+	p0, _ := h.st.GetProject(ctx, id) // capture before-state for audit
 	d := h.pageData(r, "编辑项目")
 	if err := h.st.UpdateProject(ctx, p); err != nil {
 		// Re-fetch to restore ImageURL so the preview isn't lost on error.
@@ -89,6 +91,7 @@ func (h *Handler) MemberProjectUpdate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, "member_project_edit", d)
 		return
 	}
+	h.logAudit(ctx, h.currentUser(r), "update", "project", id, p.NameZH, marshalJSON(p0), marshalJSON(p))
 	http.Redirect(w, r, "/member/projects/"+id+"/edit?flash=已保存", http.StatusFound)
 }
 
@@ -104,12 +107,16 @@ func (h *Handler) MemberProjectDelete(w http.ResponseWriter, r *http.Request) {
 
 	id := r.PathValue("id")
 	// Clean up the project image file before deleting the record.
-	if proj, err := h.st.GetProject(r.Context(), id); err == nil && proj.ImageURL != "" {
+	proj, _ := h.st.GetProject(r.Context(), id)
+	if proj != nil && proj.ImageURL != "" {
 		for _, ext := range []string{".png", ".jpg"} {
 			_ = os.Remove(filepath.Join("uploads", "project-"+id+ext))
 		}
 	}
 	_ = h.st.DeleteProject(r.Context(), id)
+	if proj != nil {
+		h.logAudit(r.Context(), h.currentUser(r), "delete", "project", id, proj.NameZH, marshalJSON(proj), "")
+	}
 	http.Redirect(w, r, "/member/projects", http.StatusFound)
 }
 
@@ -256,6 +263,15 @@ func (h *Handler) MemberLinkCreate(w http.ResponseWriter, r *http.Request) {
 		renderErr("创建失败：" + err.Error())
 		return
 	}
+	// Best-effort audit: fetch newly created link by name for ID.
+	if links, _ := h.st.ListFriendLinks(ctx); len(links) > 0 {
+		for _, l := range links {
+			if l.Name == name && l.URL == url {
+				h.logAudit(ctx, h.currentUser(r), "create", "link", l.ID, l.Name, "", marshalJSON(l))
+				break
+			}
+		}
+	}
 	http.Redirect(w, r, "/member/links?flash=链接已创建", http.StatusFound)
 }
 
@@ -286,6 +302,7 @@ func (h *Handler) MemberLinkUpdate(w http.ResponseWriter, r *http.Request) {
 	icon := strings.TrimSpace(r.FormValue("icon"))
 	sortOrder, _ := strconv.Atoi(r.FormValue("sort_order"))
 	ctx := r.Context()
+	link0, _ := h.st.GetFriendLink(ctx, id) // capture before-state for audit
 
 	renderErr := func(msg string) {
 		l, _ := h.st.GetFriendLink(ctx, id)
@@ -308,6 +325,9 @@ func (h *Handler) MemberLinkUpdate(w http.ResponseWriter, r *http.Request) {
 		renderErr("保存失败：" + err.Error())
 		return
 	}
+	if updated, _ := h.st.GetFriendLink(ctx, id); updated != nil {
+		h.logAudit(ctx, h.currentUser(r), "update", "link", id, updated.Name, marshalJSON(link0), marshalJSON(updated))
+	}
 	http.Redirect(w, r, "/member/links?flash=已保存", http.StatusFound)
 }
 
@@ -320,6 +340,112 @@ func (h *Handler) MemberLinkDelete(w http.ResponseWriter, r *http.Request) {
 		h.csrfFailed(w, r)
 		return
 	}
-	_ = h.st.DeleteFriendLink(r.Context(), r.PathValue("id"))
+	id := r.PathValue("id")
+	existing, _ := h.st.GetFriendLink(r.Context(), id)
+	_ = h.st.DeleteFriendLink(r.Context(), id)
+	if existing != nil {
+		h.logAudit(r.Context(), h.currentUser(r), "delete", "link", id, existing.Name, marshalJSON(existing), "")
+	}
 	http.Redirect(w, r, "/member/links", http.StatusFound)
+}
+
+// ─── Member 用户管理 ──────────────────────────────────────────────────────────
+
+func (h *Handler) MemberUsers(w http.ResponseWriter, r *http.Request) {
+	users, _ := h.st.ListUsers(r.Context())
+	d := h.pageData(r, "用户列表")
+	if flash := r.URL.Query().Get("flash"); flash != "" {
+		d.Flash = flash
+	}
+	d.Data = users
+	h.render(w, "member_users", d)
+}
+
+func (h *Handler) MemberUserDetail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	ctx := r.Context()
+	u, err := h.st.GetUserByID(ctx, id)
+	if err != nil {
+		h.renderError(w, r, http.StatusNotFound, "用户不存在", id)
+		return
+	}
+	userGroups, _ := h.st.GetUserGroups(ctx, id)
+	d := h.pageData(r, u.DisplayName)
+	if flash := r.URL.Query().Get("flash"); flash != "" {
+		d.Flash = flash
+	}
+	d.Data = map[string]any{
+		"User":       u,
+		"UserGroups": userGroups,
+	}
+	h.render(w, "member_user_detail", d)
+}
+
+func (h *Handler) MemberUserVerifyEmail(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
+		return
+	}
+	if !h.verifyCSRFToken(r) {
+		h.csrfFailed(w, r)
+		return
+	}
+	id := r.PathValue("id")
+	ctx := r.Context()
+	targetUser, err := h.st.GetUserByID(ctx, id)
+	if err != nil {
+		http.Redirect(w, r, "/member/users/"+id+"?flash=用户不存在", http.StatusFound)
+		return
+	}
+	if targetUser.IsAdmin() {
+		http.Redirect(w, r, "/member/users/"+id+"?flash=不能修改管理员账户", http.StatusFound)
+		return
+	}
+	if err := h.st.SetEmailVerified(ctx, id, true); err != nil {
+		http.Redirect(w, r, "/member/users/"+id+"?flash=操作失败", http.StatusFound)
+		return
+	}
+	h.logAudit(ctx, h.currentUser(r), "update", "user", id, targetUser.Email,
+		marshalJSON(map[string]bool{"email_verified": targetUser.EmailVerified}),
+		marshalJSON(map[string]bool{"email_verified": true}))
+	http.Redirect(w, r, "/member/users/"+id+"?flash=邮箱已验证", http.StatusFound)
+}
+
+func (h *Handler) MemberUserToggleStatus(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
+		return
+	}
+	if !h.verifyCSRFToken(r) {
+		h.csrfFailed(w, r)
+		return
+	}
+	id := r.PathValue("id")
+	ctx := r.Context()
+	targetUser, err := h.st.GetUserByID(ctx, id)
+	if err != nil {
+		http.Redirect(w, r, "/member/users/"+id+"?flash=用户不存在", http.StatusFound)
+		return
+	}
+	if h.isSystemAdminUser(targetUser) {
+		http.Redirect(w, r, "/member/users/"+id+"?flash=不能修改系统管理员账户", http.StatusFound)
+		return
+	}
+	if targetUser.IsAdmin() {
+		http.Redirect(w, r, "/member/users/"+id+"?flash=不能修改管理员账户", http.StatusFound)
+		return
+	}
+	newActive := !targetUser.Active
+	if err := h.st.SetUserActive(ctx, id, newActive); err != nil {
+		http.Redirect(w, r, "/member/users/"+id+"?flash=操作失败", http.StatusFound)
+		return
+	}
+	h.logAudit(ctx, h.currentUser(r), "update", "user", id, targetUser.Email,
+		marshalJSON(map[string]bool{"active": targetUser.Active}),
+		marshalJSON(map[string]bool{"active": newActive}))
+	if newActive {
+		http.Redirect(w, r, "/member/users/"+id+"?flash=账户已启用", http.StatusFound)
+	} else {
+		http.Redirect(w, r, "/member/users/"+id+"?flash=账户已停用", http.StatusFound)
+	}
 }

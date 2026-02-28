@@ -1,0 +1,98 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="panel-wrap">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">成员导航</div>
+      <a class="sidebar-link" href="/member/projects">项目管理</a>
+      <a class="sidebar-link" href="/member/links">友情链接</a>
+      <a class="sidebar-link active" href="/member/users">用户管理</a>
+      {{if .CurrentUser}}{{if .CurrentUser.IsAdmin}}<a class="sidebar-link" href="/admin">管理后台</a>{{end}}{{end}}
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">快速入口</div>
+      <a class="sidebar-link" href="/">返回首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
+    </div>
+  </aside>
+
+  <main class="panel-content">
+    {{with .Data}}
+    {{$user := index . "User"}}
+    {{$groups := index . "UserGroups"}}
+
+    <div style="margin-bottom:.5rem">
+      <a href="/member/users" style="color:var(--text2);font-size:.9rem">← 用户列表</a>
+    </div>
+
+    {{if $.Flash}}
+    <div class="flash {{if $.IsError}}flash-err{{else}}flash-ok{{end}}">{{$.Flash}}</div>
+    {{end}}
+
+    <h1 class="panel-title">{{$user.DisplayName}}</h1>
+
+    <div class="detail-section">
+      <div class="detail-section-title">基本信息</div>
+      <div class="detail-row">
+        <div class="detail-key">邮箱</div>
+        <div class="detail-val">{{$user.Email}}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">角色</div>
+        <div class="detail-val">{{$user.RoleLabel}}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">账户状态</div>
+        <div class="detail-val">
+          {{if $user.Active}}<span style="color:#166534;font-weight:500">正常</span>
+          {{else}}<span style="color:#991b1b;font-weight:500">已停用</span>{{end}}
+        </div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">邮箱验证</div>
+        <div class="detail-val">
+          {{if $user.EmailVerified}}<span style="color:#166534">已验证</span>
+          {{else}}<span style="color:#991b1b">未验证</span>{{end}}
+        </div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">注册时间</div>
+        <div class="detail-val">{{$user.CreatedAt.Format "2006-01-02 15:04"}}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">所属分组</div>
+        <div class="detail-val">
+          {{range $groups}}<span class="proj-tag">{{.Name}}</span> {{else}}<span style="color:var(--text2)">（无）</span>{{end}}
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">操作</div>
+      <div style="display:flex;gap:.8rem;flex-wrap:wrap">
+        {{if not $user.EmailVerified}}
+        <form method="POST" action="/member/users/{{$user.ID}}/verify-email">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <button class="btn btn-ghost btn-sm" type="submit">验证邮箱</button>
+        </form>
+        {{end}}
+        {{if not $user.IsAdmin}}
+        <form method="POST" action="/member/users/{{$user.ID}}/toggle-status">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          {{if $user.Active}}
+          <button class="btn btn-danger btn-sm" type="submit"
+            data-confirm="停用后该用户将无法登录，确认？"
+            data-confirm-title="停用账户"
+            data-confirm-icon="⚠️">停用账户</button>
+          {{else}}
+          <button class="btn btn-ghost btn-sm" type="submit">启用账户</button>
+          {{end}}
+        </form>
+        {{end}}
+      </div>
+    </div>
+    {{end}}
+  </main>
+</div>
+{{end}}

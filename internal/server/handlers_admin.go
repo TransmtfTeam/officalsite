@@ -4,13 +4,16 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"transmtf.com/oidc/internal/store"
@@ -199,6 +202,9 @@ func (h *Handler) AdminUserUpdate(w http.ResponseWriter, r *http.Request) {
 		d.IsError = true
 		h.render(w, "admin_users", d)
 	} else {
+		h.logAudit(ctx, cur, "update", "user", id, targetUser.Email,
+			marshalJSON(targetUser),
+			marshalJSON(map[string]any{"display_name": name, "role": role, "active": active}))
 		http.Redirect(w, r, "/admin/users?flash=已更新", http.StatusFound)
 	}
 }
@@ -258,6 +264,7 @@ func (h *Handler) AdminUserDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.logAudit(ctx, cur, "delete", "user", id, targetUser.Email, marshalJSON(targetUser), "")
 	http.Redirect(w, r, "/admin/users?flash=已删除", http.StatusFound)
 }
 
@@ -491,6 +498,9 @@ func (h *Handler) AdminRoleCreate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, "admin_roles", d)
 		return
 	}
+	if r2, _ := h.st.GetCustomRole(ctx, name); r2 != nil {
+		h.logAudit(ctx, h.currentUser(r), "create", "role", r2.Name, r2.Label, "", marshalJSON(r2))
+	}
 	http.Redirect(w, r, "/admin/roles?flash=角色已创建", http.StatusFound)
 }
 
@@ -504,15 +514,27 @@ func (h *Handler) AdminRoleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
+	existing, _ := h.st.GetCustomRole(r.Context(), name)
 	if err := h.st.DeleteCustomRole(r.Context(), name); err != nil {
 		http.Redirect(w, r, "/admin/roles?flash=删除失败："+err.Error(), http.StatusFound)
 		return
+	}
+	if existing != nil {
+		h.logAudit(r.Context(), h.currentUser(r), "delete", "role", existing.Name, existing.Label, marshalJSON(existing), "")
 	}
 	http.Redirect(w, r, "/admin/roles", http.StatusFound)
 }
 
 func (h *Handler) AdminClients(w http.ResponseWriter, r *http.Request) {
-	clients, _ := h.st.ListClients(r.Context())
+	ctx := r.Context()
+	allClients, _ := h.st.ListClients(ctx)
+	cur := h.currentUser(r)
+	var clients []*store.OAuthClient
+	for _, c := range allClients {
+		if h.canManageClient(ctx, cur, c) {
+			clients = append(clients, c)
+		}
+	}
 	d := h.pageData(r, "应用管理")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
@@ -593,6 +615,7 @@ func (h *Handler) AdminClientCreate(w http.ResponseWriter, r *http.Request) {
 	internalID := ""
 	if newClient != nil {
 		internalID = newClient.ID
+		h.logAudit(ctx, h.currentUser(r), "create", "client", internalID, name, "", marshalJSON(newClient))
 	}
 
 	ticket, tErr := h.issueOneTimeViewTicket(ctx, oneTimeClientCreatedView{
@@ -641,7 +664,12 @@ func (h *Handler) AdminClientDetail(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusNotFound, "应用不存在", id)
 		return
 	}
+	if !h.canManageClient(ctx, h.currentUser(r), client) {
+		h.renderError(w, r, http.StatusForbidden, "访问被拒绝", "您没有权限管理此应用")
+		return
+	}
 	ann := h.st.GetClientAnnouncement(ctx, client.ClientID)
+	allGroups, _ := h.st.ListUserGroups(ctx)
 	d := h.pageData(r, client.Name)
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
@@ -649,6 +677,7 @@ func (h *Handler) AdminClientDetail(w http.ResponseWriter, r *http.Request) {
 	d.Data = map[string]any{
 		"Client":       client,
 		"Announcement": ann,
+		"AllGroups":    allGroups,
 	}
 	h.render(w, "admin_client_detail", d)
 }
@@ -670,6 +699,18 @@ func (h *Handler) AdminClientUpdate(w http.ResponseWriter, r *http.Request) {
 	scopesRaw := r.FormValue("scopes")
 	baseAccess := strings.ToLower(strings.TrimSpace(r.FormValue("base_access")))
 	allowedGroupsRaw := r.FormValue("allowed_groups")
+
+	ctx := r.Context()
+	// Check per-app manager permission.
+	client0, err := h.st.GetClientByID(ctx, id)
+	if err != nil {
+		http.Redirect(w, r, "/admin/clients?flash=应用不存在", http.StatusFound)
+		return
+	}
+	if !h.canManageClient(ctx, h.currentUser(r), client0) {
+		h.renderError(w, r, http.StatusForbidden, "访问被拒绝", "您没有权限管理此应用")
+		return
+	}
 
 	var uris []string
 	for _, l := range strings.Split(urisRaw, "\n") {
@@ -700,7 +741,6 @@ func (h *Handler) AdminClientUpdate(w http.ResponseWriter, r *http.Request) {
 		allowedGroups = append(allowedGroups, g)
 	}
 
-	ctx := r.Context()
 	if name == "" {
 		http.Redirect(w, r, "/admin/clients/"+id+"?flash=名称不能为空", http.StatusFound)
 		return
@@ -734,6 +774,9 @@ func (h *Handler) AdminClientUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/clients/"+id+"?flash="+msg, http.StatusFound)
 		return
 	}
+	// client0 captured before update contains the before_state.
+	h.logAudit(ctx, h.currentUser(r), "update", "client", id, client0.Name,
+		marshalJSON(client0), marshalJSON(map[string]any{"name": name, "description": desc, "base_access": baseAccess, "allowed_groups": allowedGroups}))
 	http.Redirect(w, r, "/admin/clients/"+id+"?flash=已更新", http.StatusFound)
 }
 
@@ -749,6 +792,15 @@ func (h *Handler) AdminClientResetSecret(w http.ResponseWriter, r *http.Request)
 
 	id := r.PathValue("id")
 	ctx := r.Context()
+	client, err := h.st.GetClientByID(ctx, id)
+	if err != nil {
+		http.Redirect(w, r, "/admin/clients?flash=应用不存在", http.StatusFound)
+		return
+	}
+	if !h.canManageClient(ctx, h.currentUser(r), client) {
+		h.renderError(w, r, http.StatusForbidden, "访问被拒绝", "您没有权限管理此应用")
+		return
+	}
 	newSecret, err := h.st.ResetClientSecret(ctx, id)
 	if err != nil {
 		http.Redirect(w, r, "/admin/clients/"+id+"?flash=重置失败", http.StatusFound)
@@ -812,6 +864,7 @@ func (h *Handler) AdminClientDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	ctx := r.Context()
 	d := h.pageData(r, "应用管理")
+	existing, _ := h.st.GetClientByID(ctx, id)
 	if err := h.st.DeleteClient(ctx, id); err != nil {
 		d.Flash = "删除失败：" + err.Error()
 		d.IsError = true
@@ -819,6 +872,9 @@ func (h *Handler) AdminClientDelete(w http.ResponseWriter, r *http.Request) {
 		d.Data = map[string]any{"Clients": clients}
 		h.render(w, "admin_clients", d)
 		return
+	}
+	if existing != nil {
+		h.logAudit(ctx, h.currentUser(r), "delete", "client", id, existing.Name, marshalJSON(existing), "")
 	}
 	http.Redirect(w, r, "/admin/clients?flash=已删除", http.StatusFound)
 }
@@ -861,10 +917,14 @@ func (h *Handler) AdminAnnouncementSave(w http.ResponseWriter, r *http.Request) 
 		http.Redirect(w, r, "/admin/announcements?flash=应用不存在", http.StatusFound)
 		return
 	}
+	existingAnn := h.st.GetClientAnnouncement(ctx, clientID)
 	if err := h.st.SetClientAnnouncement(ctx, clientID, content); err != nil {
 		http.Redirect(w, r, "/admin/announcements?flash=保存失败", http.StatusFound)
 		return
 	}
+	h.logAudit(ctx, h.currentUser(r), "update", "announcement", clientID, clientID,
+		marshalJSON(map[string]string{"client_id": clientID, "content": existingAnn}),
+		marshalJSON(map[string]string{"client_id": clientID, "content": content}))
 	http.Redirect(w, r, "/admin/announcements?flash=公告已保存", http.StatusFound)
 }
 
@@ -935,6 +995,7 @@ func (h *Handler) AdminSettingsSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	oldSettings := h.st.GetAllSettings(ctx)
 	keys := []string{
 		"site_name", "contact_email", "site_icon_url",
 		"ann_zh", "ann_en",
@@ -944,15 +1005,20 @@ func (h *Handler) AdminSettingsSave(w http.ResponseWriter, r *http.Request) {
 		"resend_from",
 		"email_tpl_welcome", "email_tpl_password_reset",
 	}
+	newSettings := make(map[string]string, len(keys))
 	for _, k := range keys {
+		newSettings[k] = r.FormValue(k)
 		_ = h.st.SetSetting(ctx, k, r.FormValue(k))
 	}
 	// 密码/密钥字段：只有提供了新值才覆盖。
 	for _, k := range []string{"smtp_pass", "resend_api_key"} {
 		if v := r.FormValue(k); v != "" {
+			newSettings[k] = v
 			_ = h.st.SetSetting(ctx, k, v)
 		}
 	}
+	h.logAudit(ctx, h.currentUser(r), "update", "setting", "site", "站点设置",
+		marshalJSON(oldSettings), marshalJSON(newSettings))
 	http.Redirect(w, r, "/admin/settings?flash=设置已保存", http.StatusFound)
 }
 
@@ -1024,6 +1090,9 @@ func (h *Handler) AdminProviderCreate(w http.ResponseWriter, r *http.Request) {
 		renderErr("创建失败：" + err.Error())
 		return
 	}
+	if p, _ := h.st.GetOIDCProviderBySlug(ctx, slug); p != nil {
+		h.logAudit(ctx, h.currentUser(r), "create", "provider", p.ID, p.Name, "", marshalJSON(p))
+	}
 	http.Redirect(w, r, "/admin/providers?flash=登录方式已添加", http.StatusFound)
 }
 
@@ -1060,7 +1129,11 @@ func (h *Handler) AdminProviderDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	existing, _ := h.st.GetOIDCProviderByID(r.Context(), id)
 	_ = h.st.DeleteOIDCProvider(r.Context(), id)
+	if existing != nil {
+		h.logAudit(r.Context(), h.currentUser(r), "delete", "provider", id, existing.Name, marshalJSON(existing), "")
+	}
 	http.Redirect(w, r, "/admin/providers", http.StatusFound)
 }
 
@@ -1114,6 +1187,15 @@ func (h *Handler) AdminGroupCreate(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	// Fetch newly created group for audit.
+	if grps, _ := h.st.ListUserGroups(ctx); len(grps) > 0 {
+		for _, g := range grps {
+			if g.Name == name {
+				h.logAudit(ctx, h.currentUser(r), "create", "group", g.ID, g.Name, "", marshalJSON(g))
+				break
+			}
+		}
+	}
 	http.Redirect(w, r, "/admin/groups?flash=分组已创建", http.StatusFound)
 }
 
@@ -1149,9 +1231,13 @@ func (h *Handler) AdminGroupDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	existing, _ := h.st.GetUserGroupByID(r.Context(), id)
 	if err := h.st.DeleteUserGroup(r.Context(), id); err != nil {
 		http.Redirect(w, r, "/admin/groups?flash=删除失败："+err.Error(), http.StatusFound)
 		return
+	}
+	if existing != nil {
+		h.logAudit(r.Context(), h.currentUser(r), "delete", "group", id, existing.Name, marshalJSON(existing), "")
 	}
 	http.Redirect(w, r, "/admin/groups?flash=分组已删除", http.StatusFound)
 }
@@ -1336,6 +1422,9 @@ func (h *Handler) AdminVerifyEmail(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/users/"+id+"?flash=邮箱验证失败", http.StatusFound)
 		return
 	}
+	h.logAudit(ctx, h.currentUser(r), "update", "user", id, targetUser.Email,
+		marshalJSON(map[string]bool{"email_verified": targetUser.EmailVerified}),
+		marshalJSON(map[string]bool{"email_verified": true}))
 	http.Redirect(w, r, "/admin/users/"+id+"?flash=邮箱已验证", http.StatusFound)
 }
 
@@ -1365,6 +1454,9 @@ func (h *Handler) AdminUnverifyEmail(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/users/"+id+"?flash=取消邮箱验证失败", http.StatusFound)
 		return
 	}
+	h.logAudit(ctx, h.currentUser(r), "update", "user", id, targetUser.Email,
+		marshalJSON(map[string]bool{"email_verified": targetUser.EmailVerified}),
+		marshalJSON(map[string]bool{"email_verified": false}))
 	http.Redirect(w, r, "/admin/users/"+id+"?flash=已设为未验证", http.StatusFound)
 }
 
@@ -1451,6 +1543,8 @@ func (h *Handler) AdminProviderEdit(w http.ResponseWriter, r *http.Request) {
 		renderErr("更新失败: " + err.Error())
 		return
 	}
+	h.logAudit(ctx, h.currentUser(r), "update", "provider", p.ID, p.Name, marshalJSON(p),
+		marshalJSON(map[string]any{"name": name, "provider_type": providerType, "enabled": p.Enabled}))
 	http.Redirect(w, r, "/admin/providers/"+id+"/edit?flash=已更新", http.StatusFound)
 }
 
@@ -1485,4 +1579,369 @@ func (h *Handler) consumeOneTimeViewTicket(ctx context.Context, ticket string, o
 	}
 	defer h.st.DeleteWebAuthnSession(ctx, ticket)
 	return json.Unmarshal([]byte(raw), out)
+}
+
+// ─── Audit Log ───────────────────────────────────────────────────────────────
+
+// logAudit records an auditable operation. Errors are only logged; they never
+// interrupt the calling request.
+func (h *Handler) logAudit(ctx context.Context, u *store.User, action, entityType, entityID, entityName, before, after string) {
+	if u == nil {
+		return
+	}
+	al := &store.AuditLog{
+		OperatorID:   u.ID,
+		OperatorName: u.DisplayName,
+		OperatorRole: u.Role,
+		Action:       action,
+		EntityType:   entityType,
+		EntityID:     entityID,
+		EntityName:   entityName,
+		BeforeState:  before,
+		AfterState:   after,
+	}
+	if err := h.st.CreateAuditLog(ctx, al); err != nil {
+		log.Printf("audit log write failed: %v", err)
+	}
+}
+
+// marshalJSON is a convenience wrapper that returns "" on error.
+func marshalJSON(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func (h *Handler) AdminAuditLogs(w http.ResponseWriter, r *http.Request) {
+	logs, _ := h.st.ListAuditLogs(r.Context(), 500)
+	d := h.pageData(r, "审计日志")
+	if flash := r.URL.Query().Get("flash"); flash != "" {
+		d.Flash = flash
+	}
+	d.Data = logs
+	h.render(w, "admin_audit_logs", d)
+}
+
+func (h *Handler) AdminAuditRollback(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
+		return
+	}
+	if !h.verifyCSRFToken(r) {
+		h.csrfFailed(w, r)
+		return
+	}
+	id := r.PathValue("id")
+	ctx := r.Context()
+	al, err := h.st.GetAuditLog(ctx, id)
+	if err != nil {
+		http.Redirect(w, r, "/admin/audit-logs?flash=审计记录不存在", http.StatusFound)
+		return
+	}
+	// Enforce 3-day rollback window.
+	if time.Since(al.CreatedAt) > 3*24*time.Hour {
+		http.Redirect(w, r, "/admin/audit-logs?flash=只能回滚 3 天内的操作", http.StatusFound)
+		return
+	}
+
+	if err := h.rollback(ctx, al); err != nil {
+		http.Redirect(w, r, "/admin/audit-logs?flash=回滚失败："+err.Error(), http.StatusFound)
+		return
+	}
+
+	// Record the rollback itself as an audit entry.
+	cur := h.currentUser(r)
+	h.logAudit(ctx, cur, "update", al.EntityType, al.EntityID, al.EntityName,
+		"", marshalJSON(map[string]string{"rollback_of": al.ID}))
+
+	http.Redirect(w, r, "/admin/audit-logs?flash=回滚成功", http.StatusFound)
+}
+
+// rollback dispatches a rollback for a single audit log entry.
+func (h *Handler) rollback(ctx context.Context, al *store.AuditLog) error {
+	switch al.EntityType {
+	case "user":
+		return h.rollbackUser(ctx, al)
+	case "project":
+		return h.rollbackProject(ctx, al)
+	case "link":
+		return h.rollbackLink(ctx, al)
+	case "client":
+		return h.rollbackClient(ctx, al)
+	case "announcement":
+		return h.rollbackAnnouncement(ctx, al)
+	case "setting":
+		return h.rollbackSetting(ctx, al)
+	case "group":
+		return h.rollbackGroup(ctx, al)
+	case "role":
+		return h.rollbackRole(ctx, al)
+	case "provider":
+		return h.rollbackProvider(ctx, al)
+	}
+	return nil
+}
+
+func (h *Handler) rollbackUser(ctx context.Context, al *store.AuditLog) error {
+	switch al.Action {
+	case "update":
+		var u store.User
+		if err := json.Unmarshal([]byte(al.BeforeState), &u); err != nil {
+			return err
+		}
+		return h.st.UpdateUser(ctx, u.ID, u.DisplayName, u.Role, u.Active)
+	case "delete":
+		// Cannot fully recreate (password hash etc.) — restore basic profile only.
+		var u store.User
+		if err := json.Unmarshal([]byte(al.BeforeState), &u); err != nil {
+			return err
+		}
+		return h.st.UpdateUser(ctx, u.ID, u.DisplayName, u.Role, u.Active)
+	}
+	return nil
+}
+
+func (h *Handler) rollbackProject(ctx context.Context, al *store.AuditLog) error {
+	switch al.Action {
+	case "create":
+		var p store.Project
+		if err := json.Unmarshal([]byte(al.AfterState), &p); err != nil {
+			return err
+		}
+		return h.st.DeleteProject(ctx, p.ID)
+	case "update":
+		var p store.Project
+		if err := json.Unmarshal([]byte(al.BeforeState), &p); err != nil {
+			return err
+		}
+		return h.st.UpdateProject(ctx, &p)
+	case "delete":
+		var p store.Project
+		if err := json.Unmarshal([]byte(al.BeforeState), &p); err != nil {
+			return err
+		}
+		// Restore DB record; image file may be gone — user must re-upload.
+		p.ImageURL = ""
+		return h.st.CreateProject(ctx, &p)
+	}
+	return nil
+}
+
+func (h *Handler) rollbackLink(ctx context.Context, al *store.AuditLog) error {
+	switch al.Action {
+	case "create":
+		var l store.FriendLink
+		if err := json.Unmarshal([]byte(al.AfterState), &l); err != nil {
+			return err
+		}
+		return h.st.DeleteFriendLink(ctx, l.ID)
+	case "update":
+		var l store.FriendLink
+		if err := json.Unmarshal([]byte(al.BeforeState), &l); err != nil {
+			return err
+		}
+		return h.st.UpdateFriendLink(ctx, l.ID, l.Name, l.URL, l.Icon, l.SortOrder)
+	case "delete":
+		var l store.FriendLink
+		if err := json.Unmarshal([]byte(al.BeforeState), &l); err != nil {
+			return err
+		}
+		return h.st.CreateFriendLink(ctx, l.Name, l.URL, l.Icon, l.SortOrder)
+	}
+	return nil
+}
+
+func (h *Handler) rollbackClient(ctx context.Context, al *store.AuditLog) error {
+	switch al.Action {
+	case "create":
+		var c store.OAuthClient
+		if err := json.Unmarshal([]byte(al.AfterState), &c); err != nil {
+			return err
+		}
+		return h.st.DeleteClient(ctx, c.ID)
+	case "update":
+		var c store.OAuthClient
+		if err := json.Unmarshal([]byte(al.BeforeState), &c); err != nil {
+			return err
+		}
+		return h.st.UpdateClient(ctx, c.ID, c.Name, c.Description, c.RedirectURIs, c.Scopes, c.BaseAccess, c.AllowedGroups)
+	}
+	// delete: cannot restore secret hash — not supported
+	return fmt.Errorf("应用删除后无法回滚（密钥不可逆）")
+}
+
+func (h *Handler) rollbackAnnouncement(ctx context.Context, al *store.AuditLog) error {
+	var state struct {
+		ClientID string `json:"client_id"`
+		Content  string `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(al.BeforeState), &state); err != nil {
+		return err
+	}
+	return h.st.SetClientAnnouncement(ctx, state.ClientID, state.Content)
+}
+
+func (h *Handler) rollbackSetting(ctx context.Context, al *store.AuditLog) error {
+	var m map[string]string
+	if err := json.Unmarshal([]byte(al.BeforeState), &m); err != nil {
+		return err
+	}
+	for k, v := range m {
+		if err := h.st.SetSetting(ctx, k, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (h *Handler) rollbackGroup(ctx context.Context, al *store.AuditLog) error {
+	switch al.Action {
+	case "create":
+		var g store.UserGroup
+		if err := json.Unmarshal([]byte(al.AfterState), &g); err != nil {
+			return err
+		}
+		return h.st.DeleteUserGroup(ctx, g.ID)
+	case "delete":
+		var g store.UserGroup
+		if err := json.Unmarshal([]byte(al.BeforeState), &g); err != nil {
+			return err
+		}
+		return h.st.CreateUserGroup(ctx, g.Name, g.Label)
+	}
+	return nil
+}
+
+func (h *Handler) rollbackRole(ctx context.Context, al *store.AuditLog) error {
+	switch al.Action {
+	case "create":
+		var r store.CustomRole
+		if err := json.Unmarshal([]byte(al.AfterState), &r); err != nil {
+			return err
+		}
+		return h.st.DeleteCustomRole(ctx, r.Name)
+	case "delete":
+		var r store.CustomRole
+		if err := json.Unmarshal([]byte(al.BeforeState), &r); err != nil {
+			return err
+		}
+		return h.st.CreateCustomRole(ctx, r.Name, r.Label, r.Permissions)
+	}
+	return nil
+}
+
+func (h *Handler) rollbackProvider(ctx context.Context, al *store.AuditLog) error {
+	switch al.Action {
+	case "create":
+		var p store.OIDCProvider
+		if err := json.Unmarshal([]byte(al.AfterState), &p); err != nil {
+			return err
+		}
+		return h.st.DeleteOIDCProvider(ctx, p.ID)
+	case "update":
+		var p store.OIDCProvider
+		if err := json.Unmarshal([]byte(al.BeforeState), &p); err != nil {
+			return err
+		}
+		return h.st.UpdateOIDCProvider(ctx, p.ID, p.Name, p.ProviderType, p.Icon,
+			p.ClientID, p.ClientSecret, p.IssuerURL, p.AuthorizationURL,
+			p.TokenURL, p.UserinfoURL, p.Scopes, p.Enabled, p.AutoRegister)
+	case "delete":
+		var p store.OIDCProvider
+		if err := json.Unmarshal([]byte(al.BeforeState), &p); err != nil {
+			return err
+		}
+		return h.st.CreateOIDCProvider(ctx, p.Name, p.Slug, p.ProviderType, p.Icon,
+			p.ClientID, p.ClientSecret, p.IssuerURL, p.AuthorizationURL,
+			p.TokenURL, p.UserinfoURL, p.Scopes, p.AutoRegister)
+	}
+	return nil
+}
+
+// ─── Per-App Manager Groups ───────────────────────────────────────────────────
+
+// canManageClient checks whether the given user may manage a specific client.
+// Admin always can. If client.ManagerGroups is empty, any user with
+// manage_clients permission can. Otherwise the user must be in one of the groups.
+func (h *Handler) canManageClient(ctx context.Context, u *store.User, client *store.OAuthClient) bool {
+	if u == nil {
+		return false
+	}
+	if u.IsAdmin() {
+		return true
+	}
+	if len(client.ManagerGroups) == 0 {
+		return h.userHasPermission(ctx, u, "manage_clients")
+	}
+	// User must belong to at least one of the manager groups.
+	userGroups, err := h.st.GetUserGroups(ctx, u.ID)
+	if err != nil {
+		return false
+	}
+	groupSet := make(map[string]bool, len(userGroups))
+	for _, g := range userGroups {
+		groupSet[strings.ToLower(g.Name)] = true
+	}
+	for _, mg := range client.ManagerGroups {
+		if groupSet[strings.ToLower(mg)] {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Handler) AdminClientSetManagers(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "请求参数错误", http.StatusBadRequest)
+		return
+	}
+	if !h.verifyCSRFToken(r) {
+		h.csrfFailed(w, r)
+		return
+	}
+	id := r.PathValue("id")
+	ctx := r.Context()
+	client, err := h.st.GetClientByID(ctx, id)
+	if err != nil {
+		h.renderError(w, r, http.StatusNotFound, "应用不存在", id)
+		return
+	}
+
+	rawGroups := r.Form["manager_groups"]
+	var groups []string
+	seen := map[string]bool{}
+	for _, g := range rawGroups {
+		g = strings.ToLower(strings.TrimSpace(g))
+		if g != "" && !seen[g] {
+			groups = append(groups, g)
+			seen[g] = true
+		}
+	}
+
+	// Validate that named groups exist.
+	allGroups, _ := h.st.ListUserGroups(ctx)
+	groupSet := map[string]bool{}
+	for _, g := range allGroups {
+		groupSet[strings.ToLower(g.Name)] = true
+	}
+	for _, g := range groups {
+		if !groupSet[g] {
+			http.Redirect(w, r, "/admin/clients/"+id+"?flash=未知分组："+g, http.StatusFound)
+			return
+		}
+	}
+
+	if err := h.st.UpdateClientManagerGroups(ctx, id, groups); err != nil {
+		http.Redirect(w, r, "/admin/clients/"+id+"?flash=保存失败："+err.Error(), http.StatusFound)
+		return
+	}
+
+	cur := h.currentUser(r)
+	h.logAudit(ctx, cur, "update", "client", id, client.Name,
+		marshalJSON(map[string]any{"manager_groups": client.ManagerGroups}),
+		marshalJSON(map[string]any{"manager_groups": groups}))
+
+	http.Redirect(w, r, "/admin/clients/"+id+"?flash=管理权限组已保存", http.StatusFound)
 }

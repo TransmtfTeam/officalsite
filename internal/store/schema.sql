@@ -263,3 +263,25 @@ CREATE INDEX IF NOT EXISTS idx_email_verif_user         ON email_verifications(u
 CREATE INDEX IF NOT EXISTS idx_email_verif_expires      ON email_verifications(expires_at);
 CREATE INDEX IF NOT EXISTS idx_pwd_resets_user          ON password_resets(user_id);
 CREATE INDEX IF NOT EXISTS idx_pwd_resets_expires       ON password_resets(expires_at);
+
+-- Audit log: records all significant mutations for review and rollback.
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id            TEXT PRIMARY KEY,
+    operator_id   TEXT NOT NULL,
+    operator_name TEXT NOT NULL DEFAULT '',
+    operator_role TEXT NOT NULL DEFAULT '',
+    action        TEXT NOT NULL,              -- create | update | delete
+    entity_type   TEXT NOT NULL,              -- user | project | link | client | announcement | setting | group | role | provider
+    entity_id     TEXT NOT NULL DEFAULT '',
+    entity_name   TEXT NOT NULL DEFAULT '',
+    before_state  TEXT NOT NULL DEFAULT '',   -- JSON snapshot before change (UPDATE/DELETE)
+    after_state   TEXT NOT NULL DEFAULT '',   -- JSON snapshot after change (CREATE/UPDATE)
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created  ON audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_operator ON audit_logs(operator_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity   ON audit_logs(entity_type, entity_id);
+
+-- Per-app manager groups: space-separated group names that can manage this client.
+-- Empty = all users with manage_clients permission can manage it.
+ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS manager_groups TEXT NOT NULL DEFAULT '';

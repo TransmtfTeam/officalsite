@@ -65,6 +65,7 @@ type OAuthClient struct {
 	Scopes        []string
 	BaseAccess    string
 	AllowedGroups []string
+	ManagerGroups []string
 	CreatedAt     time.Time
 }
 
@@ -495,8 +496,8 @@ func (s *Store) CreateClient(ctx context.Context, name, description string, redi
 
 func scanClient(row interface{ Scan(...any) error }) (*OAuthClient, error) {
 	c := &OAuthClient{}
-	var uris, scopes, baseAccess, allowedGroups string
-	err := row.Scan(&c.ID, &c.ClientID, &c.SecretHash, &c.Name, &c.Description, &uris, &scopes, &baseAccess, &allowedGroups, &c.CreatedAt)
+	var uris, scopes, baseAccess, allowedGroups, managerGroups string
+	err := row.Scan(&c.ID, &c.ClientID, &c.SecretHash, &c.Name, &c.Description, &uris, &scopes, &baseAccess, &allowedGroups, &managerGroups, &c.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -507,10 +508,11 @@ func scanClient(row interface{ Scan(...any) error }) (*OAuthClient, error) {
 		c.BaseAccess = "legacy"
 	}
 	c.AllowedGroups = splitFields(allowedGroups)
+	c.ManagerGroups = splitFields(managerGroups)
 	return c, nil
 }
 
-const clientCols = `id,client_id,client_secret_hash,name,description,redirect_uris,scopes,base_access,allowed_groups,created_at`
+const clientCols = `id,client_id,client_secret_hash,name,description,redirect_uris,scopes,base_access,allowed_groups,manager_groups,created_at`
 
 func (s *Store) GetClientByClientID(ctx context.Context, clientID string) (*OAuthClient, error) {
 	return scanClient(s.db.QueryRowContext(ctx, `SELECT `+clientCols+` FROM oauth_clients WHERE client_id=$1`, clientID))
@@ -1400,6 +1402,80 @@ func (s *Store) UpdateFriendLink(ctx context.Context, id, name, url, icon string
 func (s *Store) DeleteFriendLink(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM friend_links WHERE id=$1`, id)
 	return err
+}
+
+// SetUserActive toggles the active flag for a user.
+func (s *Store) SetUserActive(ctx context.Context, id string, active bool) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET active=$1,updated_at=now() WHERE id=$2`, active, id)
+	return err
+}
+
+// UpdateClientManagerGroups sets the manager_groups for a client.
+func (s *Store) UpdateClientManagerGroups(ctx context.Context, clientID string, groups []string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE oauth_clients SET manager_groups=$1 WHERE id=$2`,
+		strings.Join(groups, " "), clientID)
+	return err
+}
+
+// AuditLog records a single auditable operation.
+type AuditLog struct {
+	ID           string
+	OperatorID   string
+	OperatorName string
+	OperatorRole string
+	Action       string // create | update | delete
+	EntityType   string
+	EntityID     string
+	EntityName   string
+	BeforeState  string // JSON
+	AfterState   string // JSON
+	CreatedAt    time.Time
+}
+
+func (s *Store) CreateAuditLog(ctx context.Context, al *AuditLog) error {
+	al.ID = uuid.New().String()
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO audit_logs(id,operator_id,operator_name,operator_role,action,entity_type,entity_id,entity_name,before_state,after_state)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		al.ID, al.OperatorID, al.OperatorName, al.OperatorRole,
+		al.Action, al.EntityType, al.EntityID, al.EntityName,
+		al.BeforeState, al.AfterState)
+	return err
+}
+
+func (s *Store) ListAuditLogs(ctx context.Context, limit int) ([]*AuditLog, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id,operator_id,operator_name,operator_role,action,entity_type,entity_id,entity_name,before_state,after_state,created_at
+		 FROM audit_logs WHERE created_at > now() - interval '3 days'
+		 ORDER BY created_at DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*AuditLog
+	for rows.Next() {
+		al := &AuditLog{}
+		if err := rows.Scan(&al.ID, &al.OperatorID, &al.OperatorName, &al.OperatorRole,
+			&al.Action, &al.EntityType, &al.EntityID, &al.EntityName,
+			&al.BeforeState, &al.AfterState, &al.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, al)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetAuditLog(ctx context.Context, id string) (*AuditLog, error) {
+	al := &AuditLog{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id,operator_id,operator_name,operator_role,action,entity_type,entity_id,entity_name,before_state,after_state,created_at
+		 FROM audit_logs WHERE id=$1`, id).
+		Scan(&al.ID, &al.OperatorID, &al.OperatorName, &al.OperatorRole,
+			&al.Action, &al.EntityType, &al.EntityID, &al.EntityName,
+			&al.BeforeState, &al.AfterState, &al.CreatedAt)
+	return al, err
 }
 
 func RandomHex(n int) string {

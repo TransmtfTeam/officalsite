@@ -1,0 +1,96 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="panel-wrap">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">管理导航</div>
+      {{if .CurrentUser.IsAdmin}}
+      <a class="sidebar-link" href="/admin">概览</a>
+      <a class="sidebar-link" href="/admin/users">用户</a>
+      {{end}}
+      <a class="sidebar-link" href="/admin/groups">分组</a>
+      <a class="sidebar-link" href="/admin/clients">应用</a>
+      {{if .CurrentUser.IsAdmin}}
+      <a class="sidebar-link" href="/admin/providers">登录方式</a>
+      <a class="sidebar-link" href="/admin/roles">角色</a>
+      <a class="sidebar-link" href="/admin/announcements">公告</a>
+      <a class="sidebar-link" href="/admin/settings">设置</a>
+      <a class="sidebar-link active" href="/admin/audit-logs">审计日志</a>
+      {{end}}
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">快速入口</div>
+      <a class="sidebar-link" href="/">返回首页</a>
+      <a class="sidebar-link" href="/profile">个人资料</a>
+    </div>
+  </aside>
+
+  <main class="panel-content">
+    <h1 class="panel-title">审计日志</h1>
+    <p class="panel-sub">显示最近 3 天内的操作记录，支持回滚。</p>
+
+    {{if .Flash}}
+    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
+    {{end}}
+
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width:140px">时间</th>
+            <th>操作人</th>
+            <th>操作</th>
+            <th>对象类型</th>
+            <th>对象名称</th>
+            <th style="width:80px">回滚</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Data}}
+          <tr>
+            <td style="font-size:.82rem;white-space:nowrap">{{.CreatedAt.Format "01-02 15:04:05"}}</td>
+            <td style="font-size:.85rem">
+              <span style="font-weight:500">{{.OperatorName}}</span>
+              <span style="color:var(--text2);font-size:.78rem">({{.OperatorRole}})</span>
+            </td>
+            <td>
+              {{if eq .Action "create"}}<span class="proj-tag" style="background:#dcfce7;color:#166534">创建</span>
+              {{else if eq .Action "update"}}<span class="proj-tag" style="background:#dbeafe;color:#1e40af">更新</span>
+              {{else if eq .Action "delete"}}<span class="proj-tag" style="background:#fee2e2;color:#991b1b">删除</span>
+              {{else}}<span class="proj-tag">{{.Action}}</span>{{end}}
+            </td>
+            <td style="font-size:.85rem">{{.EntityType}}</td>
+            <td style="font-size:.85rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{.EntityName}}">{{.EntityName}}</td>
+            <td>
+              {{if ne .Action "update"}}
+              {{if or (eq .EntityType "user") (eq .EntityType "setting") (eq .EntityType "announcement") (and (eq .EntityType "client") (eq .Action "delete"))}}
+              {{else}}
+              <form method="POST" action="/admin/audit-logs/{{.ID}}/rollback" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button class="btn btn-ghost btn-sm" type="submit"
+                  data-confirm="将把「{{.EntityName}}」回滚到此操作前的状态，确认？"
+                  data-confirm-title="确认回滚"
+                  data-confirm-icon="⚠️">回滚</button>
+              </form>
+              {{end}}
+              {{else}}
+              <form method="POST" action="/admin/audit-logs/{{.ID}}/rollback" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button class="btn btn-ghost btn-sm" type="submit"
+                  data-confirm="将把「{{.EntityName}}」回滚到此操作前的状态，确认？"
+                  data-confirm-title="确认回滚"
+                  data-confirm-icon="⚠️">回滚</button>
+              </form>
+              {{end}}
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="6" style="color:var(--text2);text-align:center;padding:2rem">最近 3 天内暂无操作记录</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+{{end}}

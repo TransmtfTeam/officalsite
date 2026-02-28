@@ -313,6 +313,7 @@ func (h *Handler) userHasPermission(ctx context.Context, u *store.User, perm str
 		"manage_clients":       true,
 		"manage_announcements": true,
 		"manage_groups":        true,
+		"view_users":           true,
 	}
 	if u.IsMember() && memberImplied[perm] {
 		return true
@@ -498,6 +499,11 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	mux.HandleFunc("GET /member/links/{id}/edit", h.requirePermission("manage_projects")(h.MemberLinkEdit))
 	mux.HandleFunc("POST /member/links/{id}/edit", h.requirePermission("manage_projects")(h.MemberLinkUpdate))
 	mux.HandleFunc("POST /member/links/{id}/delete", h.requirePermission("manage_projects")(h.MemberLinkDelete))
+	// Member user management (read + limited write, no sensitive data)
+	mux.HandleFunc("GET /member/users", h.requirePermission("view_users")(h.MemberUsers))
+	mux.HandleFunc("GET /member/users/{id}", h.requirePermission("view_users")(h.MemberUserDetail))
+	mux.HandleFunc("POST /member/users/{id}/verify-email", h.requirePermission("view_users")(h.MemberUserVerifyEmail))
+	mux.HandleFunc("POST /member/users/{id}/toggle-status", h.requirePermission("view_users")(h.MemberUserToggleStatus))
 
 	// Admin panel - user management (admin-only or manage_users permission)
 	mux.HandleFunc("GET /admin", h.requireAdmin(h.AdminDashboard))
@@ -523,7 +529,8 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	mux.HandleFunc("GET /admin/clients/{id}/secret", h.requirePermission("manage_clients")(h.AdminClientSecretResult))
 	mux.HandleFunc("POST /admin/clients/{id}/update", h.requirePermission("manage_clients")(h.AdminClientUpdate))
 	mux.HandleFunc("POST /admin/clients/{id}/reset-secret", h.requirePermission("manage_clients")(h.AdminClientResetSecret))
-	mux.HandleFunc("POST /admin/clients/{id}/delete", h.requirePermission("manage_clients")(h.AdminClientDelete))
+	mux.HandleFunc("POST /admin/clients/{id}/delete", h.requireAdmin(h.AdminClientDelete))
+	mux.HandleFunc("POST /admin/clients/{id}/set-managers", h.requireAdmin(h.AdminClientSetManagers))
 
 	// Admin panel - providers / roles / announcements / settings
 	mux.HandleFunc("GET /admin/providers", h.requirePermission("manage_providers")(h.AdminProviders))
@@ -550,6 +557,10 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	mux.HandleFunc("POST /admin/groups/{id}/members/{uid}/remove", h.requirePermission("manage_groups")(h.AdminGroupRemoveMember))
 	mux.HandleFunc("POST /admin/users/{id}/groups/add", h.requirePermission("manage_groups")(h.AdminUserGroupAdd))
 	mux.HandleFunc("POST /admin/users/{id}/groups/{gid}/remove", h.requirePermission("manage_groups")(h.AdminUserGroupRemove))
+
+	// Admin panel - audit logs (admin-only)
+	mux.HandleFunc("GET /admin/audit-logs", h.requireAdmin(h.AdminAuditLogs))
+	mux.HandleFunc("POST /admin/audit-logs/{id}/rollback", h.requireAdmin(h.AdminAuditRollback))
 
 	// Public API
 	mux.HandleFunc("GET /api/announcement/{clientid}", h.AnnouncementAPI)

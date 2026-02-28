@@ -16,6 +16,7 @@
       <a class="sidebar-link" href="/admin/roles">角色</a>
       <a class="sidebar-link" href="/admin/announcements">公告</a>
       <a class="sidebar-link" href="/admin/settings">设置</a>
+      <a class="sidebar-link" href="/admin/audit-logs">审计日志</a>
       {{end}}
     </div>
     <div class="sidebar-section">
@@ -30,6 +31,7 @@
     {{with .Data}}
     {{$client := index . "Client"}}
     {{$ann    := index . "Announcement"}}
+    {{$allGroups := index . "AllGroups"}}
 
     <div style="display:flex;align-items:center;gap:.8rem;margin-bottom:.5rem">
       <a href="/admin/clients" style="color:var(--text2);font-size:.9rem">← 应用列表</a>
@@ -211,6 +213,30 @@
         <button class="btn btn-ghost btn-sm" type="submit">保存公告</button>
       </form>
     </div>
+
+    {{/* ── 管理权限组 (admin only) ── */}}
+    {{if $.CurrentUser.IsAdmin}}
+    <div class="detail-section">
+      <div class="detail-section-title">管理权限组</div>
+      <p style="font-size:.82rem;color:var(--text2);margin-bottom:.8rem">
+        设置哪些分组的成员可以管理此应用。留空则所有拥有「管理应用」权限的用户均可管理。
+      </p>
+      <form method="POST" action="/admin/clients/{{$client.ID}}/set-managers">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <div class="form-group">
+          <select class="form-control" name="manager_groups" multiple size="5" style="height:auto">
+            {{range $allGroups}}
+            {{$gname := .Name}}{{$glabel := .Label}}
+            <option value="{{$gname}}"
+              {{range $client.ManagerGroups}}{{if eq . $gname}}selected{{end}}{{end}}>{{$glabel}} ({{$gname}})</option>
+            {{end}}
+          </select>
+          <span style="font-size:.78rem;color:var(--text2)">按住 Ctrl / Cmd 可多选；不选即清除限制</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" type="submit">保存管理权限组</button>
+      </form>
+    </div>
+    {{end}}
 
     {{/* ── 危险操作 ── */}}
     <div class="detail-section" style="border-color:#fecaca">
