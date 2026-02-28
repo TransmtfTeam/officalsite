@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: transmtf
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ./pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U transmtf -d transmtf_oidc"]
       interval: 5s
@@ -28,6 +28,3 @@ services:
     depends_on:
       db:
         condition: service_healthy
-
-volumes:
-  pgdata:
