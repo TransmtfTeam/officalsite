@@ -118,9 +118,10 @@ func parseTemplates() (map[string]*template.Template, error) {
 		"admin_dashboard", "admin_users", "admin_user_detail",
 		"admin_clients", "admin_client_create", "admin_client_created", "admin_client_detail", "admin_client_secret",
 		"admin_providers", "admin_provider_detail", "admin_roles", "admin_announcements", "admin_settings",
-		"admin_groups", "admin_group_detail",
+		"admin_groups", "admin_group_detail", "admin_audit_logs",
 		"member_projects", "member_project_edit",
 		"member_links", "member_link_edit",
+		"member_users", "member_user_detail",
 	}
 
 	out := make(map[string]*template.Template, len(names))
