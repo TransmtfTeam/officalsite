@@ -364,10 +364,16 @@ func (s *Store) ListUsers(ctx context.Context) ([]*User, error) {
 }
 
 func (s *Store) UpdateUser(ctx context.Context, id, displayName, role string, active bool) error {
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE users SET display_name=$1,role=$2,active=$3,updated_at=now() WHERE id=$4`,
 		displayName, role, active, id)
-	return err
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (s *Store) UpdatePassword(ctx context.Context, id, newPass string) error {
@@ -477,6 +483,18 @@ func (s *Store) GetSessionUser(ctx context.Context, sessionID string) (*User, er
 func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE id=$1`, id)
 	return err
+}
+
+// DeleteSessionByIDAndUserID deletes a session only if it belongs to the given user.
+func (s *Store) DeleteSessionByIDAndUserID(ctx context.Context, id, userID string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE id=$1 AND user_id=$2`, id, userID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (s *Store) CreateClient(ctx context.Context, name, description string, redirectURIs, scopes []string) (clientID, secret string, err error) {
@@ -1135,17 +1153,47 @@ func (s *Store) RevokeAccessTokenByID(ctx context.Context, id string) error {
 	return err
 }
 
+// RevokeAccessTokenByIDAndUserID revokes an access token only if it belongs to the given user.
+func (s *Store) RevokeAccessTokenByIDAndUserID(ctx context.Context, id, userID string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM access_tokens WHERE id=$1 AND user_id=$2`, id, userID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (s *Store) RevokeRefreshTokenByID(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM refresh_tokens WHERE id=$1`, id)
 	return err
 }
 
+// RevokeRefreshTokenByIDAndUserID revokes a refresh token only if it belongs to the given user.
+func (s *Store) RevokeRefreshTokenByIDAndUserID(ctx context.Context, id, userID string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM refresh_tokens WHERE id=$1 AND user_id=$2`, id, userID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (s *Store) UpdateClient(ctx context.Context, id, name, description string, redirectURIs, scopes []string, baseAccess string, allowedGroups []string) error {
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE oauth_clients SET name=$1,description=$2,redirect_uris=$3,scopes=$4,base_access=$5,allowed_groups=$6 WHERE id=$7`,
 		name, description, strings.Join(redirectURIs, "\n"), strings.Join(scopes, " "),
 		baseAccess, strings.Join(allowedGroups, " "), id)
-	return err
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (s *Store) ResetClientSecret(ctx context.Context, id string) (string, error) {
@@ -1281,6 +1329,33 @@ func (s *Store) DeleteWebAuthnSession(ctx context.Context, id string) error {
 	return err
 }
 
+// GetAndDeleteWebAuthnSession atomically reads and deletes a session in a single
+// transaction, preventing double-consumption under concurrent requests.
+func (s *Store) GetAndDeleteWebAuthnSession(ctx context.Context, id string) (string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	var data string
+	var exp time.Time
+	err = tx.QueryRowContext(ctx,
+		`SELECT data,expires_at FROM webauthn_sessions WHERE id=$1 FOR UPDATE`, id).Scan(&data, &exp)
+	if err != nil {
+		return "", err
+	}
+	if time.Now().After(exp) {
+		_, _ = tx.ExecContext(ctx, `DELETE FROM webauthn_sessions WHERE id=$1`, id)
+		_ = tx.Commit()
+		return "", errors.New("会话已过期")
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM webauthn_sessions WHERE id=$1`, id); err != nil {
+		return "", err
+	}
+	return data, tx.Commit()
+}
+
 type CustomRole struct {
 	Name        string
 	Label       string
@@ -1413,10 +1488,16 @@ func (s *Store) SetUserActive(ctx context.Context, id string, active bool) error
 
 // UpdateClientManagerGroups sets the manager_groups for a client.
 func (s *Store) UpdateClientManagerGroups(ctx context.Context, clientID string, groups []string) error {
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE oauth_clients SET manager_groups=$1 WHERE id=$2`,
 		strings.Join(groups, " "), clientID)
-	return err
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 // AuditLog records a single auditable operation.

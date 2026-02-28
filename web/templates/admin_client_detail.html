@@ -32,6 +32,7 @@
     {{$client := index . "Client"}}
     {{$ann    := index . "Announcement"}}
     {{$allGroups := index . "AllGroups"}}
+    {{$canManage := index . "CanManage"}}
 
     <div style="display:flex;align-items:center;gap:.8rem;margin-bottom:.5rem">
       <a href="/admin/clients" style="color:var(--text2);font-size:.9rem">← 应用列表</a>
@@ -205,6 +206,7 @@
       <p style="font-size:.82rem;color:var(--text2);margin-bottom:.8rem">
         公告可通过 <code class="mono">/api/announcement/{{$client.ClientID}}</code> 公开访问。
       </p>
+      {{if $canManage}}
       <form method="POST" action="/admin/announcements/{{$client.ClientID}}/save">
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
         <div class="form-group">
@@ -212,6 +214,9 @@
         </div>
         <button class="btn btn-ghost btn-sm" type="submit">保存公告</button>
       </form>
+      {{else}}
+      <p style="color:var(--text2);font-size:.85rem">{{if $ann}}{{$ann}}{{else}}（无公告）{{end}}</p>
+      {{end}}
     </div>
 
     {{/* ── 管理权限组 (admin only) ── */}}
@@ -239,6 +244,7 @@
     {{end}}
 
     {{/* ── 危险操作 ── */}}
+    {{if $canManage}}
     <div class="detail-section" style="border-color:#fecaca">
       <div class="detail-section-title">危险操作</div>
       <div style="display:flex;gap:.8rem;flex-wrap:wrap">
@@ -254,6 +260,7 @@
         </form>
       </div>
     </div>
+    {{end}}
 
     {{end}}
   </main>

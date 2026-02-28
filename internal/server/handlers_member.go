@@ -91,7 +91,12 @@ func (h *Handler) MemberProjectUpdate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, "member_project_edit", d)
 		return
 	}
-	h.logAudit(ctx, h.currentUser(r), "update", "project", id, p.NameZH, marshalJSON(p0), marshalJSON(p))
+	// Re-fetch for accurate after_state (includes ImageURL and DB-assigned fields).
+	if saved, err := h.st.GetProject(ctx, id); err == nil {
+		h.logAudit(ctx, h.currentUser(r), "update", "project", id, saved.NameZH, marshalJSON(p0), marshalJSON(saved))
+	} else {
+		h.logAudit(ctx, h.currentUser(r), "update", "project", id, p.NameZH, marshalJSON(p0), marshalJSON(p))
+	}
 	http.Redirect(w, r, "/member/projects/"+id+"/edit?flash=已保存", http.StatusFound)
 }
 
@@ -106,16 +111,20 @@ func (h *Handler) MemberProjectDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := r.PathValue("id")
-	// Clean up the project image file before deleting the record.
-	proj, _ := h.st.GetProject(r.Context(), id)
-	if proj != nil && proj.ImageURL != "" {
-		for _, ext := range []string{".png", ".jpg"} {
-			_ = os.Remove(filepath.Join("uploads", "project-"+id+ext))
-		}
+	ctx := r.Context()
+	proj, _ := h.st.GetProject(ctx, id)
+	// Delete DB record first; only clean up file on success.
+	if err := h.st.DeleteProject(ctx, id); err != nil {
+		http.Redirect(w, r, "/member/projects?flash=删除失败："+err.Error(), http.StatusFound)
+		return
 	}
-	_ = h.st.DeleteProject(r.Context(), id)
 	if proj != nil {
-		h.logAudit(r.Context(), h.currentUser(r), "delete", "project", id, proj.NameZH, marshalJSON(proj), "")
+		if proj.ImageURL != "" {
+			for _, ext := range []string{".png", ".jpg"} {
+				_ = os.Remove(filepath.Join("uploads", "project-"+id+ext))
+			}
+		}
+		h.logAudit(ctx, h.currentUser(r), "delete", "project", id, proj.NameZH, marshalJSON(proj), "")
 	}
 	http.Redirect(w, r, "/member/projects", http.StatusFound)
 }
@@ -342,7 +351,10 @@ func (h *Handler) MemberLinkDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	existing, _ := h.st.GetFriendLink(r.Context(), id)
-	_ = h.st.DeleteFriendLink(r.Context(), id)
+	if err := h.st.DeleteFriendLink(r.Context(), id); err != nil {
+		http.Redirect(w, r, "/member/links?flash=删除失败："+err.Error(), http.StatusFound)
+		return
+	}
 	if existing != nil {
 		h.logAudit(r.Context(), h.currentUser(r), "delete", "link", id, existing.Name, marshalJSON(existing), "")
 	}

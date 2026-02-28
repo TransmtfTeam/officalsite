@@ -276,6 +276,12 @@ func (h *Handler) AdminUserDetail(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusNotFound, "用户不存在", id)
 		return
 	}
+	// 非系统管理员不能查看管理员账户的详情（含 session/token/passkey）。
+	cur := h.currentUser(r)
+	if u.IsAdmin() && !h.isSystemAdminUser(cur) {
+		h.renderError(w, r, http.StatusForbidden, "访问被拒绝", "只有系统管理员可以查看管理员账户详情")
+		return
+	}
 	identities, _ := h.st.GetUserIdentitiesByUserID(ctx, id)
 	sessions, _ := h.st.GetSessionsByUserID(ctx, id)
 	accessTokens, _ := h.st.GetAccessTokensByUserID(ctx, id)
@@ -355,6 +361,8 @@ func (h *Handler) AdminUserResetPassword(w http.ResponseWriter, r *http.Request)
 		_ = h.st.SetRequirePasswordChange(ctx, id, true)
 	}
 	go h.sendPasswordResetEmail(context.Background(), targetUser.Email, targetUser.DisplayName, newPass)
+	h.logAudit(ctx, h.currentUser(r), "update", "user", id, targetUser.Email,
+		marshalJSON(map[string]string{"action": "reset_password"}), "")
 	http.Redirect(w, r, "/admin/users/"+id+"?flash=密码已重置", http.StatusFound)
 }
 
@@ -385,6 +393,8 @@ func (h *Handler) AdminUserDisable2FA(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/users/"+id+"?flash=关闭双重验证失败", http.StatusFound)
 		return
 	}
+	h.logAudit(ctx, h.currentUser(r), "update", "user", id, targetUser.Email,
+		marshalJSON(map[string]string{"action": "disable_2fa"}), "")
 	http.Redirect(w, r, "/admin/users/"+id+"?flash=双重验证已关闭", http.StatusFound)
 }
 
@@ -408,7 +418,12 @@ func (h *Handler) AdminUserRevokeSession(w http.ResponseWriter, r *http.Request)
 		http.Redirect(w, r, "/admin/users/"+userID+"?flash=不能修改管理员账户", http.StatusFound)
 		return
 	}
-	_ = h.st.DeleteSession(r.Context(), sessID)
+	if err := h.st.DeleteSessionByIDAndUserID(r.Context(), sessID, userID); err != nil {
+		http.Redirect(w, r, "/admin/users/"+userID+"?flash=会话不存在或已失效", http.StatusFound)
+		return
+	}
+	h.logAudit(r.Context(), h.currentUser(r), "update", "user", userID, targetUser.Email,
+		marshalJSON(map[string]string{"action": "revoke_session", "session_id": sessID}), "")
 	http.Redirect(w, r, "/admin/users/"+userID+"?flash=会话已撤销", http.StatusFound)
 }
 
@@ -435,10 +450,18 @@ func (h *Handler) AdminUserRevokeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if tokenType == "refresh" {
-		_ = h.st.RevokeRefreshTokenByID(ctx, tokenID)
+		if err := h.st.RevokeRefreshTokenByIDAndUserID(ctx, tokenID, userID); err != nil {
+			http.Redirect(w, r, "/admin/users/"+userID+"?flash=令牌不存在或已失效", http.StatusFound)
+			return
+		}
 	} else {
-		_ = h.st.RevokeAccessTokenByID(ctx, tokenID)
+		if err := h.st.RevokeAccessTokenByIDAndUserID(ctx, tokenID, userID); err != nil {
+			http.Redirect(w, r, "/admin/users/"+userID+"?flash=令牌不存在或已失效", http.StatusFound)
+			return
+		}
 	}
+	h.logAudit(ctx, h.currentUser(r), "update", "user", userID, targetUser.Email,
+		marshalJSON(map[string]string{"action": "revoke_token", "token_id": tokenID, "type": tokenType}), "")
 	http.Redirect(w, r, "/admin/users/"+userID+"?flash=令牌已撤销", http.StatusFound)
 }
 
@@ -678,6 +701,7 @@ func (h *Handler) AdminClientDetail(w http.ResponseWriter, r *http.Request) {
 		"Client":       client,
 		"Announcement": ann,
 		"AllGroups":    allGroups,
+		"CanManage":    h.canManageClient(ctx, h.currentUser(r), client),
 	}
 	h.render(w, "admin_client_detail", d)
 }
@@ -826,19 +850,26 @@ func (h *Handler) AdminClientSecretResult(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	ctx := r.Context()
+	// Perform permission check BEFORE consuming (burning) the ticket,
+	// so an unauthorized request does not invalidate it for the legitimate user.
+	client, err := h.st.GetClientByID(ctx, id)
+	if err != nil {
+		http.Redirect(w, r, "/admin/clients?flash=应用不存在", http.StatusFound)
+		return
+	}
+	if !h.canManageClient(ctx, h.currentUser(r), client) {
+		h.renderError(w, r, http.StatusForbidden, "访问被拒绝", "您没有权限查看此应用的密钥")
+		return
+	}
+
 	var payload oneTimeClientSecretView
-	if err := h.consumeOneTimeViewTicket(r.Context(), ticket, &payload); err != nil {
+	if err := h.consumeOneTimeViewTicket(ctx, ticket, &payload); err != nil {
 		http.Redirect(w, r, "/admin/clients/"+id+"?flash=结果已过期", http.StatusFound)
 		return
 	}
 	if payload.ClientInternalID != id {
 		http.Redirect(w, r, "/admin/clients/"+id+"?flash=结果票据无效", http.StatusFound)
-		return
-	}
-
-	client, err := h.st.GetClientByID(r.Context(), id)
-	if err != nil {
-		http.Redirect(w, r, "/admin/clients?flash=应用不存在", http.StatusFound)
 		return
 	}
 
@@ -1573,11 +1604,10 @@ func (h *Handler) issueOneTimeViewTicket(ctx context.Context, v any) (string, er
 }
 
 func (h *Handler) consumeOneTimeViewTicket(ctx context.Context, ticket string, out any) error {
-	raw, err := h.st.GetWebAuthnSession(ctx, ticket)
+	raw, err := h.st.GetAndDeleteWebAuthnSession(ctx, ticket)
 	if err != nil {
 		return err
 	}
-	defer h.st.DeleteWebAuthnSession(ctx, ticket)
 	return json.Unmarshal([]byte(raw), out)
 }
 
@@ -1693,12 +1723,8 @@ func (h *Handler) rollbackUser(ctx context.Context, al *store.AuditLog) error {
 		}
 		return h.st.UpdateUser(ctx, u.ID, u.DisplayName, u.Role, u.Active)
 	case "delete":
-		// Cannot fully recreate (password hash etc.) — restore basic profile only.
-		var u store.User
-		if err := json.Unmarshal([]byte(al.BeforeState), &u); err != nil {
-			return err
-		}
-		return h.st.UpdateUser(ctx, u.ID, u.DisplayName, u.Role, u.Active)
+		// Cannot recreate user without password hash — deletion is irreversible.
+		return fmt.Errorf("用户删除后无法回滚（密码哈希等数据不可恢复）")
 	}
 	return nil
 }

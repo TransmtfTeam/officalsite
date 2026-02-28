@@ -314,6 +314,7 @@ func (h *Handler) userHasPermission(ctx context.Context, u *store.User, perm str
 		"manage_announcements": true,
 		"manage_groups":        true,
 		"view_users":           true,
+		"moderate_users":       true, // verify-email and toggle-status for member users
 	}
 	if u.IsMember() && memberImplied[perm] {
 		return true
@@ -502,8 +503,8 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	// Member user management (read + limited write, no sensitive data)
 	mux.HandleFunc("GET /member/users", h.requirePermission("view_users")(h.MemberUsers))
 	mux.HandleFunc("GET /member/users/{id}", h.requirePermission("view_users")(h.MemberUserDetail))
-	mux.HandleFunc("POST /member/users/{id}/verify-email", h.requirePermission("view_users")(h.MemberUserVerifyEmail))
-	mux.HandleFunc("POST /member/users/{id}/toggle-status", h.requirePermission("view_users")(h.MemberUserToggleStatus))
+	mux.HandleFunc("POST /member/users/{id}/verify-email", h.requirePermission("moderate_users")(h.MemberUserVerifyEmail))
+	mux.HandleFunc("POST /member/users/{id}/toggle-status", h.requirePermission("moderate_users")(h.MemberUserToggleStatus))
 
 	// Admin panel - user management (admin-only or manage_users permission)
 	mux.HandleFunc("GET /admin", h.requireAdmin(h.AdminDashboard))
