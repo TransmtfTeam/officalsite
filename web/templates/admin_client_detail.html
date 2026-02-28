@@ -19,11 +19,18 @@
       <a class="sidebar-link" href="/admin/audit-logs">审计日志</a>
       {{end}}
     </div>
+    {{if not .CurrentUser.IsAdmin}}
+    <div class="sidebar-section">
+      <div class="sidebar-title">成员面板</div>
+      <a class="sidebar-link" href="/member/projects">项目管理</a>
+      <a class="sidebar-link" href="/member/links">友情链接</a>
+      <a class="sidebar-link" href="/member/users">用户管理</a>
+    </div>
+    {{end}}
     <div class="sidebar-section">
       <div class="sidebar-title">快速入口</div>
       <a class="sidebar-link" href="/">返回首页</a>
       <a class="sidebar-link" href="/profile">个人资料</a>
-      <a class="sidebar-link" href="/member/projects">社区项目</a>
     </div>
   </aside>
 
@@ -66,6 +73,23 @@
       <div class="detail-row">
         <div class="detail-key">回调地址列表</div>
         <div class="detail-val">{{range $client.RedirectURIs}}<div class="mono" style="font-size:.82rem">{{.}}</div>{{end}}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">基础访问权限</div>
+        <div class="detail-val">
+          {{if eq $client.BaseAccess "user"}}所有已登录用户
+          {{else if eq $client.BaseAccess "member"}}成员及以上
+          {{else if eq $client.BaseAccess "admin"}}仅管理员
+          {{else if eq $client.BaseAccess "none"}}仅按分组（无基础权限）
+          {{else}}兼容模式{{end}}
+        </div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">可访问分组</div>
+        <div class="detail-val">
+          {{if $client.AllowedGroups}}{{range $client.AllowedGroups}}<span class="proj-tag">{{.}}</span> {{end}}
+          {{else}}<span style="color:var(--text2)">（无限制）</span>{{end}}
+        </div>
       </div>
       <div class="detail-row">
         <div class="detail-key">创建时间</div>
@@ -152,9 +176,9 @@
       </div>
     </details>
 
-    {{/* ── 编辑信息 ── */}}
+    {{/* ── 基本配置 ── */}}
     <div class="detail-section">
-      <div class="detail-section-title">编辑信息</div>
+      <div class="detail-section-title">基本配置</div>
       <form method="POST" action="/admin/clients/{{$client.ID}}/update">
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
         <div class="form-group">
@@ -174,6 +198,11 @@
           <label class="form-label">权限范围（空格分隔）</label>
           <input class="form-control" type="text" name="scopes" value="{{range $client.Scopes}}{{.}} {{end}}">
         </div>
+
+        <hr style="margin:1.2rem 0;border:none;border-top:1px solid var(--glass-b)">
+        <div style="font-weight:600;font-size:.92rem;margin-bottom:.2rem">访问权限配置</div>
+        <p style="font-size:.78rem;color:var(--text2);margin-bottom:.9rem">控制哪些用户可通过此应用进行单点登录（SSO）。</p>
+
         <div class="form-group">
           <label class="form-label">基础访问权限</label>
           <select class="form-control" name="base_access">
@@ -188,12 +217,12 @@
           </span>
         </div>
         <div class="form-group">
-          <label class="form-label">可访问分组（空格分隔）</label>
+          <label class="form-label">可访问分组（空格分隔分组代号）</label>
           <input class="form-control" type="text" name="allowed_groups"
             value="{{range $client.AllowedGroups}}{{.}} {{end}}"
-            placeholder="请输入分组代号">
+            placeholder="留空则仅凭基础访问权限判断">
           <span style="font-size:.78rem;color:var(--text2)">
-            系统分组由系统自动维护；自定义分组请在「分组管理」页面查看分组代号。多个分组命中任意一个即可。
+            命中任意一个分组即可访问；自定义分组代号请在「分组管理」页面查看。
           </span>
         </div>
         <button class="btn btn-primary btn-sm" type="submit">保存修改</button>
@@ -206,7 +235,6 @@
       <p style="font-size:.82rem;color:var(--text2);margin-bottom:.8rem">
         公告可通过 <code class="mono">/api/announcement/{{$client.ClientID}}</code> 公开访问。
       </p>
-      {{if $canManage}}
       <form method="POST" action="/admin/announcements/{{$client.ClientID}}/save">
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
         <div class="form-group">
@@ -214,17 +242,14 @@
         </div>
         <button class="btn btn-ghost btn-sm" type="submit">保存公告</button>
       </form>
-      {{else}}
-      <p style="color:var(--text2);font-size:.85rem">{{if $ann}}{{$ann}}{{else}}（无公告）{{end}}</p>
-      {{end}}
     </div>
 
     {{/* ── 管理权限组 (admin only) ── */}}
     {{if $.CurrentUser.IsAdmin}}
     <div class="detail-section">
-      <div class="detail-section-title">管理权限组</div>
+      <div class="detail-section-title">应用管理员组</div>
       <p style="font-size:.82rem;color:var(--text2);margin-bottom:.8rem">
-        设置哪些分组的成员可以管理此应用。留空则所有拥有「管理应用」权限的用户均可管理。
+        设置哪些分组的成员可以管理此应用（编辑配置、重置密钥、修改公告）。留空则所有拥有「管理应用」权限的用户均可管理。
       </p>
       <form method="POST" action="/admin/clients/{{$client.ID}}/set-managers">
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
@@ -238,13 +263,12 @@
           </select>
           <span style="font-size:.78rem;color:var(--text2)">按住 Ctrl / Cmd 可多选；不选即清除限制</span>
         </div>
-        <button class="btn btn-ghost btn-sm" type="submit">保存管理权限组</button>
+        <button class="btn btn-ghost btn-sm" type="submit">保存管理员组</button>
       </form>
     </div>
     {{end}}
 
     {{/* ── 危险操作 ── */}}
-    {{if $canManage}}
     <div class="detail-section" style="border-color:#fecaca">
       <div class="detail-section-title">危险操作</div>
       <div style="display:flex;gap:.8rem;flex-wrap:wrap">
@@ -253,14 +277,15 @@
           <button class="btn btn-ghost btn-sm" type="submit"
             data-confirm="重置后旧密钥立即失效，所有使用旧密钥的应用都需要更新。" data-confirm-title="重置应用密钥" data-confirm-icon="🔑">重置应用密钥</button>
         </form>
+        {{if $.CurrentUser.IsAdmin}}
         <form method="POST" action="/admin/clients/{{$client.ID}}/delete">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           <button class="btn btn-danger btn-sm" type="submit"
             data-confirm="删除后所有令牌将失效，此操作不可撤销。" data-confirm-title="删除应用" data-confirm-icon="⚠️">删除此应用</button>
         </form>
+        {{end}}
       </div>
     </div>
-    {{end}}
 
     {{end}}
   </main>

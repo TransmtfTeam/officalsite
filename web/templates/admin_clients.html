@@ -19,6 +19,14 @@
       <a class="sidebar-link" href="/admin/audit-logs">审计日志</a>
       {{end}}
     </div>
+    {{if not .CurrentUser.IsAdmin}}
+    <div class="sidebar-section">
+      <div class="sidebar-title">成员面板</div>
+      <a class="sidebar-link" href="/member/projects">项目管理</a>
+      <a class="sidebar-link" href="/member/links">友情链接</a>
+      <a class="sidebar-link" href="/member/users">用户管理</a>
+    </div>
+    {{end}}
     <div class="sidebar-section">
       <div class="sidebar-title">快速入口</div>
       <a class="sidebar-link" href="/">返回首页</a>

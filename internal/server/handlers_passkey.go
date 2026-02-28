@@ -123,12 +123,11 @@ func (h *Handler) PasskeyRegisterFinish(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	sessionData, err := h.st.GetWebAuthnSession(ctx, sessID)
+	sessionData, err := h.st.GetAndDeleteWebAuthnSession(ctx, sessID)
 	if err != nil {
 		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "会话无效或已过期"})
 		return
 	}
-	defer h.st.DeleteWebAuthnSession(ctx, sessID)
 
 	var session webauthn.SessionData
 	if err := json.Unmarshal([]byte(sessionData), &session); err != nil {
@@ -329,12 +328,11 @@ func (h *Handler) PasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionData, err := h.st.GetWebAuthnSession(ctx, sessID)
+	sessionData, err := h.st.GetAndDeleteWebAuthnSession(ctx, sessID)
 	if err != nil {
 		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "通行密钥会话无效或已过期"})
 		return
 	}
-	defer h.st.DeleteWebAuthnSession(ctx, sessID)
 
 	var session webauthn.SessionData
 	if err := json.Unmarshal([]byte(sessionData), &session); err != nil {
@@ -445,6 +443,9 @@ func (h *Handler) AdminDeletePasskey(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, "/admin/users/"+userID+"?flash=删除失败", http.StatusFound)
 				return
 			}
+			h.logAudit(ctx, h.currentUser(r), "update", "user", userID, targetUser.Email,
+				marshalJSON(map[string]string{"passkey_id": pkID}),
+				marshalJSON(map[string]string{"action": "delete_passkey", "passkey_id": pkID}))
 			break
 		}
 	}
@@ -493,12 +494,11 @@ func (h *Handler) PasskeyPrimaryLoginFinish(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	sessionData, err := h.st.GetWebAuthnSession(ctx, sessID)
+	sessionData, err := h.st.GetAndDeleteWebAuthnSession(ctx, sessID)
 	if err != nil {
 		jsonResp(w, http.StatusBadRequest, map[string]string{"error": "会话无效或已过期"})
 		return
 	}
-	defer h.st.DeleteWebAuthnSession(ctx, sessID)
 
 	var session webauthn.SessionData
 	if err := json.Unmarshal([]byte(sessionData), &session); err != nil {

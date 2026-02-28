@@ -364,7 +364,14 @@ func (h *Handler) MemberLinkDelete(w http.ResponseWriter, r *http.Request) {
 // ─── Member 用户管理 ──────────────────────────────────────────────────────────
 
 func (h *Handler) MemberUsers(w http.ResponseWriter, r *http.Request) {
-	users, _ := h.st.ListUsers(r.Context())
+	allUsers, _ := h.st.ListUsers(r.Context())
+	// Members must not see admin accounts.
+	var users []*store.User
+	for _, u := range allUsers {
+		if !u.IsAdmin() {
+			users = append(users, u)
+		}
+	}
 	d := h.pageData(r, "用户列表")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
@@ -379,6 +386,11 @@ func (h *Handler) MemberUserDetail(w http.ResponseWriter, r *http.Request) {
 	u, err := h.st.GetUserByID(ctx, id)
 	if err != nil {
 		h.renderError(w, r, http.StatusNotFound, "用户不存在", id)
+		return
+	}
+	// Members cannot view admin account details.
+	if u.IsAdmin() {
+		h.renderError(w, r, http.StatusForbidden, "访问被拒绝", "不能查看管理员账户详情")
 		return
 	}
 	userGroups, _ := h.st.GetUserGroups(ctx, id)

@@ -147,6 +147,7 @@ func (h *Handler) AdminUserCreate(w http.ResponseWriter, r *http.Request) {
 			_ = err
 		}
 	}
+	h.logAudit(ctx, h.currentUser(r), "create", "user", u.ID, u.Email, "", marshalJSON(u))
 	http.Redirect(w, r, "/admin/users?flash="+url.QueryEscape("已创建用户："+email), http.StatusFound)
 }
 
@@ -653,7 +654,7 @@ func (h *Handler) AdminClientCreate(w http.ResponseWriter, r *http.Request) {
 		h.render(w, "admin_client_create", d)
 		return
 	}
-	http.Redirect(w, r, "/admin/clients/created-result?ticket="+url.QueryEscape(ticket), http.StatusFound)
+	http.Redirect(w, r, "/admin/clients/created-result?ticket="+url.QueryEscape(ticket)+"&id="+url.QueryEscape(internalID), http.StatusFound)
 }
 
 func (h *Handler) AdminClientCreatedResult(w http.ResponseWriter, r *http.Request) {
@@ -662,9 +663,19 @@ func (h *Handler) AdminClientCreatedResult(w http.ResponseWriter, r *http.Reques
 		http.Redirect(w, r, "/admin/clients/new?flash=结果已过期", http.StatusFound)
 		return
 	}
-
+	clientInternalID := r.URL.Query().Get("id")
+	ctx := r.Context()
+	// Permission check BEFORE consuming ticket.
+	if clientInternalID != "" {
+		if client, err := h.st.GetClientByID(ctx, clientInternalID); err == nil {
+			if !h.canManageClient(ctx, h.currentUser(r), client) {
+				h.renderError(w, r, http.StatusForbidden, "访问被拒绝", "您没有权限查看此应用密钥")
+				return
+			}
+		}
+	}
 	var payload oneTimeClientCreatedView
-	if err := h.consumeOneTimeViewTicket(r.Context(), ticket, &payload); err != nil {
+	if err := h.consumeOneTimeViewTicket(ctx, ticket, &payload); err != nil {
 		http.Redirect(w, r, "/admin/clients/new?flash=结果已过期", http.StatusFound)
 		return
 	}
@@ -839,6 +850,9 @@ func (h *Handler) AdminClientResetSecret(w http.ResponseWriter, r *http.Request)
 		http.Redirect(w, r, "/admin/clients/"+id+"?flash=重置成功但结果页面准备失败", http.StatusFound)
 		return
 	}
+	h.logAudit(ctx, h.currentUser(r), "update", "client", id, client.Name,
+		marshalJSON(map[string]string{"client_secret": "previous"}),
+		marshalJSON(map[string]string{"client_secret": "reset"}))
 	http.Redirect(w, r, "/admin/clients/"+id+"/secret?ticket="+url.QueryEscape(ticket), http.StatusFound)
 }
 
@@ -912,12 +926,16 @@ func (h *Handler) AdminClientDelete(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) AdminAnnouncements(w http.ResponseWriter, r *http.Request) {
 	clients, _ := h.st.ListClients(r.Context())
+	cur := h.currentUser(r)
 	type clientWithAnn struct {
 		*store.OAuthClient
 		Announcement string
 	}
 	var items []clientWithAnn
 	for _, c := range clients {
+		if !h.canManageClient(r.Context(), cur, c) {
+			continue
+		}
 		items = append(items, clientWithAnn{
 			OAuthClient:  c,
 			Announcement: h.st.GetClientAnnouncement(r.Context(), c.ClientID),
@@ -943,9 +961,14 @@ func (h *Handler) AdminAnnouncementSave(w http.ResponseWriter, r *http.Request) 
 	clientID := r.PathValue("clientid")
 	content := r.FormValue("content")
 	ctx := r.Context()
-	_, err := h.st.GetClientByClientID(ctx, clientID)
+	client, err := h.st.GetClientByClientID(ctx, clientID)
 	if err != nil {
 		http.Redirect(w, r, "/admin/announcements?flash=应用不存在", http.StatusFound)
+		return
+	}
+	// Verify the current user is authorized to manage this specific client.
+	if !h.canManageClient(ctx, h.currentUser(r), client) {
+		h.renderError(w, r, http.StatusForbidden, "访问被拒绝", "您没有权限管理此应用的公告")
 		return
 	}
 	existingAnn := h.st.GetClientAnnouncement(ctx, clientID)
@@ -1147,6 +1170,9 @@ func (h *Handler) AdminProviderToggle(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/providers?flash="+url.QueryEscape("操作失败："+err.Error()), http.StatusFound)
 		return
 	}
+	h.logAudit(ctx, h.currentUser(r), "update", "provider", p.ID, p.Name,
+		marshalJSON(map[string]any{"enabled": p.Enabled}),
+		marshalJSON(map[string]any{"enabled": !p.Enabled}))
 	http.Redirect(w, r, "/admin/providers", http.StatusFound)
 }
 
@@ -1160,10 +1186,14 @@ func (h *Handler) AdminProviderDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	existing, _ := h.st.GetOIDCProviderByID(r.Context(), id)
-	_ = h.st.DeleteOIDCProvider(r.Context(), id)
+	ctx := r.Context()
+	existing, _ := h.st.GetOIDCProviderByID(ctx, id)
+	if err := h.st.DeleteOIDCProvider(ctx, id); err != nil {
+		http.Redirect(w, r, "/admin/providers?flash="+url.QueryEscape("删除失败："+err.Error()), http.StatusFound)
+		return
+	}
 	if existing != nil {
-		h.logAudit(r.Context(), h.currentUser(r), "delete", "provider", id, existing.Name, marshalJSON(existing), "")
+		h.logAudit(ctx, h.currentUser(r), "delete", "provider", id, existing.Name, marshalJSON(existing), "")
 	}
 	http.Redirect(w, r, "/admin/providers", http.StatusFound)
 }
@@ -1288,6 +1318,8 @@ func (h *Handler) AdminGroupAddMember(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=添加失败："+err.Error(), http.StatusFound)
 		return
 	}
+	h.logAudit(r.Context(), h.currentUser(r), "update", "group", groupID, groupID,
+		"", marshalJSON(map[string]string{"user_id": userID, "action": "add_member"}))
 	http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=成员已添加", http.StatusFound)
 }
 
@@ -1306,6 +1338,8 @@ func (h *Handler) AdminGroupRemoveMember(w http.ResponseWriter, r *http.Request)
 		http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=移除失败："+err.Error(), http.StatusFound)
 		return
 	}
+	h.logAudit(r.Context(), h.currentUser(r), "update", "group", groupID, groupID,
+		marshalJSON(map[string]string{"user_id": userID}), marshalJSON(map[string]string{"action": "remove_member"}))
 	http.Redirect(w, r, "/admin/groups/"+groupID+"?flash=成员已移除", http.StatusFound)
 }
 
@@ -1333,6 +1367,8 @@ func (h *Handler) AdminUserGroupAdd(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/users/"+userID+"?flash=添加分组失败："+err.Error(), http.StatusFound)
 		return
 	}
+	h.logAudit(r.Context(), h.currentUser(r), "update", "user", userID, userID,
+		"", marshalJSON(map[string]string{"group_id": groupID, "action": "add_to_group"}))
 	http.Redirect(w, r, "/admin/users/"+userID+"?flash=已加入分组", http.StatusFound)
 }
 
@@ -1352,6 +1388,8 @@ func (h *Handler) AdminUserGroupRemove(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/users/"+userID+"?flash=移除分组失败："+err.Error(), http.StatusFound)
 		return
 	}
+	h.logAudit(r.Context(), h.currentUser(r), "update", "user", userID, userID,
+		marshalJSON(map[string]string{"group_id": groupID}), marshalJSON(map[string]string{"action": "remove_from_group"}))
 	http.Redirect(w, r, "/admin/users/"+userID+"?flash=已移出分组", http.StatusFound)
 }
 
@@ -1711,7 +1749,7 @@ func (h *Handler) rollback(ctx context.Context, al *store.AuditLog) error {
 	case "provider":
 		return h.rollbackProvider(ctx, al)
 	}
-	return nil
+	return fmt.Errorf("不支持回滚：%s/%s", al.EntityType, al.Action)
 }
 
 func (h *Handler) rollbackUser(ctx context.Context, al *store.AuditLog) error {
