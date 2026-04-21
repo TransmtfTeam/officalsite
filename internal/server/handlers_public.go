@@ -366,7 +366,17 @@ func (h *Handler) Profile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ProfilePost(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
+	// Always parse multipart so we accept both regular form fields and the
+	// avatar_file upload. Cap body to PublicAvatarOpts.MaxBytes + a small
+	// buffer for other form fields.
+	r.Body = http.MaxBytesReader(w, r.Body, PublicAvatarOpts.MaxBytes+64*1024)
+	contentType := r.Header.Get("Content-Type")
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		if err := r.ParseMultipartForm(PublicAvatarOpts.MaxBytes + 64*1024); err != nil {
+			h.renderError(w, r, http.StatusBadRequest, "请求参数错误", "上传过大或格式错误")
+			return
+		}
+	} else if err := r.ParseForm(); err != nil {
 		http.Error(w, "请求参数错误", http.StatusBadRequest)
 		return
 	}
@@ -378,7 +388,7 @@ func (h *Handler) ProfilePost(w http.ResponseWriter, r *http.Request) {
 	u := h.currentUser(r)
 	ctx := r.Context()
 	name := strings.TrimSpace(r.FormValue("display_name"))
-	avatar := strings.TrimSpace(r.FormValue("avatar_url"))
+	clearAvatar := r.FormValue("clear_avatar") == "1"
 	newPass := r.FormValue("new_password")
 	confirm := r.FormValue("confirm_password")
 	currentPass := r.FormValue("current_password")
@@ -411,12 +421,34 @@ func (h *Handler) ProfilePost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Optional avatar upload (only when actually present).
+	var avatarLocalURL string
+	if r.MultipartForm != nil {
+		if files := r.MultipartForm.File["avatar_file"]; len(files) > 0 && files[0].Size > 0 {
+			file, err := files[0].Open()
+			if err != nil {
+				fail("读取头像失败")
+				return
+			}
+			localURL, uerr := saveUploadedImage(file, "avatars", u.ID, PublicAvatarOpts)
+			file.Close()
+			if uerr != nil {
+				fail(uerr.Error())
+				return
+			}
+			avatarLocalURL = localURL
+		}
+	}
+
 	if err := h.st.UpdateUser(ctx, u.ID, name, u.Role, u.Active); err != nil {
 		fail("保存失败：" + err.Error())
 		return
 	}
-	if avatar != "" {
-		_ = h.st.UpdateUserAvatar(ctx, u.ID, avatar)
+	if avatarLocalURL != "" {
+		_ = h.st.UpdateUserAvatar(ctx, u.ID, avatarLocalURL)
+	} else if clearAvatar {
+		removeUploadByBaseName("avatars", u.ID)
+		_ = h.st.UpdateUserAvatar(ctx, u.ID, "")
 	}
 	if newPass != "" {
 		if err := h.st.UpdatePassword(ctx, u.ID, newPass); err != nil {

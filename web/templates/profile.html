@@ -87,7 +87,7 @@
     {{end}}
   </div>
 
-  <form method="POST" action="/profile">
+  <form method="POST" action="/profile" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
     <div class="card" style="margin-bottom:1.5rem">
       <p class="form-panel-title">基础信息</p>
@@ -96,8 +96,26 @@
         <input class="form-control" type="text" name="display_name" value="{{.DisplayName}}" required>
       </div>
       <div class="form-group">
-        <label class="form-label">头像地址（可选）</label>
-        <input class="form-control" type="url" name="avatar_url" value="{{.AvatarURL}}" placeholder="请输入头像地址">
+        <label class="form-label">头像</label>
+        <div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap">
+          <div style="width:80px;height:80px;border-radius:50%;overflow:hidden;background:#e5e7eb;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            {{if .AvatarURL}}
+            <img src="{{.AvatarURL}}" alt="头像" style="width:100%;height:100%;object-fit:cover">
+            {{else}}
+            <span style="font-size:1.6rem;color:#9ca3af">👤</span>
+            {{end}}
+          </div>
+          <div style="flex:1;min-width:240px">
+            <input class="form-control" type="file" name="avatar_file" accept="image/png,image/jpeg,image/webp,image/gif">
+            <p style="font-size:.78rem;color:var(--text2);margin:.4rem 0 0">支持 PNG / JPEG / WebP / GIF，单文件不超过 1MB。</p>
+            {{if .AvatarURL}}
+            <label style="display:inline-flex;align-items:center;gap:.4rem;margin-top:.6rem;cursor:pointer;font-size:.85rem">
+              <input type="checkbox" name="clear_avatar" value="1">
+              清空当前头像
+            </label>
+            {{end}}
+          </div>
+        </div>
       </div>
       <hr style="border:none;border-top:1px solid rgba(0,0,0,0.07);margin:1rem 0">
       <p style="font-size:.85rem;color:var(--text2);margin-bottom:.8rem">修改密码（留空表示不修改）</p>

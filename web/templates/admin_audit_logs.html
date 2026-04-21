@@ -27,29 +27,95 @@
   </aside>
 
   <main class="panel-content">
+    {{$d := .Data}}
+    {{$logs := index $d "Logs"}}
+    {{$total := index $d "Total"}}
+    {{$page := index $d "Page"}}
+    {{$pages := index $d "Pages"}}
+    {{$pageSize := index $d "PageSize"}}
+    {{$opts := index $d "PageSizeOpts"}}
+    {{$fq := index $d "FilterQ"}}
+    {{$fe := index $d "FilterEntity"}}
+    {{$fa := index $d "FilterAction"}}
+    {{$fo := index $d "FilterOp"}}
+    {{$ff := index $d "FilterFrom"}}
+    {{$ft := index $d "FilterTo"}}
+    {{$rollDays := index $d "RollbackDays"}}
+
     <h1 class="panel-title">审计日志</h1>
-    <p class="panel-sub">显示最近 3 天内的操作记录，支持回滚。</p>
+    <p class="panel-sub">共 {{$total}} 条记录，保留 90 天，{{$rollDays}} 天内的操作可回滚。</p>
 
     {{if .Flash}}
     <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
     {{end}}
 
     <div class="card">
+      <form method="GET" action="/admin/audit-logs" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end">
+        <div class="form-group" style="margin:0;flex:1;min-width:200px">
+          <label class="form-label">搜索</label>
+          <input class="form-control" type="text" name="q" value="{{$fq}}" placeholder="对象名称 / 操作人">
+        </div>
+        <div class="form-group" style="margin:0;min-width:140px">
+          <label class="form-label">对象类型</label>
+          <select class="form-control" name="entity_type">
+            <option value="">全部</option>
+            {{range (list "user" "project" "link" "client" "announcement" "setting" "group" "role" "provider")}}
+            <option value="{{.}}" {{if eq $fe .}}selected{{end}}>{{.}}</option>
+            {{end}}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;min-width:120px">
+          <label class="form-label">动作</label>
+          <select class="form-control" name="action">
+            <option value="">全部</option>
+            {{range (list "create" "update" "delete" "reset_password" "disable_2fa" "verify_email" "revoke_session" "revoke_token")}}
+            <option value="{{.}}" {{if eq $fa .}}selected{{end}}>{{.}}</option>
+            {{end}}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;min-width:140px">
+          <label class="form-label">操作人ID</label>
+          <input class="form-control" type="text" name="operator_id" value="{{$fo}}" placeholder="user ID">
+        </div>
+        <div class="form-group" style="margin:0;min-width:140px">
+          <label class="form-label">起始日期</label>
+          <input class="form-control" type="date" name="from" value="{{$ff}}">
+        </div>
+        <div class="form-group" style="margin:0;min-width:140px">
+          <label class="form-label">截止日期</label>
+          <input class="form-control" type="date" name="to" value="{{$ft}}">
+        </div>
+        <div class="form-group" style="margin:0;min-width:110px">
+          <label class="form-label">每页</label>
+          <select class="form-control" name="page_size">
+            {{range $opts}}
+            <option value="{{.}}" {{if eq . $pageSize}}selected{{end}}>{{.}}</option>
+            {{end}}
+          </select>
+        </div>
+        <div style="display:flex;gap:.4rem">
+          <button class="btn btn-primary btn-sm" type="submit">筛选</button>
+          <a class="btn btn-ghost btn-sm" href="/admin/audit-logs">重置</a>
+        </div>
+      </form>
+    </div>
+
+    <div class="card" style="margin-top:1rem">
       <table class="data-table">
         <thead>
           <tr>
-            <th style="width:140px">时间</th>
+            <th style="width:150px">时间</th>
             <th>操作人</th>
-            <th>操作</th>
+            <th>动作</th>
             <th>对象类型</th>
             <th>对象名称</th>
-            <th style="width:80px">回滚</th>
+            <th style="width:100px">操作</th>
           </tr>
         </thead>
         <tbody>
-          {{range .Data}}
+          {{range $logs}}
           <tr>
-            <td style="font-size:.82rem;white-space:nowrap">{{.CreatedAt.Format "01-02 15:04:05"}}</td>
+            <td style="font-size:.82rem;white-space:nowrap">{{.CreatedAt.Format "2006-01-02 15:04:05"}}</td>
             <td style="font-size:.85rem">
               <span style="font-weight:500">{{.OperatorName}}</span>
               <span style="color:var(--text2);font-size:.78rem">({{.OperatorRole}})</span>
@@ -61,11 +127,9 @@
               {{else}}<span class="proj-tag">{{.Action}}</span>{{end}}
             </td>
             <td style="font-size:.85rem">{{.EntityType}}</td>
-            <td style="font-size:.85rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{.EntityName}}">{{.EntityName}}</td>
+            <td style="font-size:.85rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{.EntityName}}">{{.EntityName}}</td>
             <td>
-              {{if ne .Action "update"}}
-              {{if or (eq .EntityType "user") (eq .EntityType "setting") (eq .EntityType "announcement") (and (eq .EntityType "client") (eq .Action "delete"))}}
-              {{else}}
+              {{if withinDays .CreatedAt $rollDays}}
               <form method="POST" action="/admin/audit-logs/{{.ID}}/rollback" style="display:inline">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button class="btn btn-ghost btn-sm" type="submit"
@@ -73,23 +137,27 @@
                   data-confirm-title="确认回滚"
                   data-confirm-icon="⚠️">回滚</button>
               </form>
-              {{end}}
               {{else}}
-              <form method="POST" action="/admin/audit-logs/{{.ID}}/rollback" style="display:inline">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <button class="btn btn-ghost btn-sm" type="submit"
-                  data-confirm="将把「{{.EntityName}}」回滚到此操作前的状态，确认？"
-                  data-confirm-title="确认回滚"
-                  data-confirm-icon="⚠️">回滚</button>
-              </form>
+              <span style="color:var(--text2);font-size:.78rem">超过 {{$rollDays}} 天</span>
               {{end}}
             </td>
           </tr>
           {{else}}
-          <tr><td colspan="6" style="color:var(--text2);text-align:center;padding:2rem">最近 3 天内暂无操作记录</td></tr>
+          <tr><td colspan="6" style="color:var(--text2);text-align:center;padding:2rem">没有匹配的审计记录</td></tr>
           {{end}}
         </tbody>
       </table>
+
+      {{if gt $pages 1}}
+      <div class="pager" style="display:flex;gap:.4rem;align-items:center;justify-content:flex-end;padding:1rem;flex-wrap:wrap">
+        {{$qs := printf "q=%s&entity_type=%s&action=%s&operator_id=%s&from=%s&to=%s&page_size=%d" (urlEncode $fq) (urlEncode $fe) (urlEncode $fa) (urlEncode $fo) (urlEncode $ff) (urlEncode $ft) $pageSize}}
+        <a class="btn btn-ghost btn-sm" href="?{{$qs}}&page=1" {{if eq $page 1}}aria-disabled="true" style="pointer-events:none;opacity:.5"{{end}}>首页</a>
+        <a class="btn btn-ghost btn-sm" href="?{{$qs}}&page={{if gt $page 1}}{{dec $page}}{{else}}1{{end}}" {{if eq $page 1}}aria-disabled="true" style="pointer-events:none;opacity:.5"{{end}}>上一页</a>
+        <span style="font-size:.88rem;color:var(--text2);margin:0 .4rem">第 {{$page}} / {{$pages}} 页</span>
+        <a class="btn btn-ghost btn-sm" href="?{{$qs}}&page={{if lt $page $pages}}{{inc $page}}{{else}}{{$pages}}{{end}}" {{if ge $page $pages}}aria-disabled="true" style="pointer-events:none;opacity:.5"{{end}}>下一页</a>
+        <a class="btn btn-ghost btn-sm" href="?{{$qs}}&page={{$pages}}" {{if ge $page $pages}}aria-disabled="true" style="pointer-events:none;opacity:.5"{{end}}>末页</a>
+      </div>
+      {{end}}
     </div>
   </main>
 </div>

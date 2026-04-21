@@ -537,6 +537,10 @@ func (h *Handler) OIDCProviderCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if av := strings.TrimSpace(avatar); av != "" {
+			localURL, derr := downloadAndSaveAvatar(ctx, autoUser.ID, av)
+			if derr == nil && localURL != "" {
+				av = localURL
+			}
 			_ = h.st.UpdateUserAvatar(ctx, autoUser.ID, av)
 			autoUser.AvatarURL = av
 		}
@@ -692,8 +696,12 @@ func (h *Handler) consumeOIDCLoginChallengeAndLink(ctx context.Context, u *store
 	}
 	// 首次绑定时，若本地头像/显示名为空，则用外部资料补齐。
 	if strings.TrimSpace(u.AvatarURL) == "" && strings.TrimSpace(ch.ProfileAvatar) != "" {
-		_ = h.st.UpdateUserAvatar(ctx, u.ID, strings.TrimSpace(ch.ProfileAvatar))
-		u.AvatarURL = strings.TrimSpace(ch.ProfileAvatar)
+		av := strings.TrimSpace(ch.ProfileAvatar)
+		if localURL, derr := downloadAndSaveAvatar(ctx, u.ID, av); derr == nil && localURL != "" {
+			av = localURL
+		}
+		_ = h.st.UpdateUserAvatar(ctx, u.ID, av)
+		u.AvatarURL = av
 	}
 	if strings.TrimSpace(u.DisplayName) == "" && strings.TrimSpace(ch.ProfileName) != "" {
 		_ = h.st.UpdateUser(ctx, u.ID, strings.TrimSpace(ch.ProfileName), u.Role, u.Active)

@@ -418,6 +418,9 @@ func bearerToken(r *http.Request) string {
 func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[string]*template.Template, static http.Handler) http.Handler {
 	h := &Handler{cfg: cfg, st: st, keys: keys, tmpls: tmpls}
 
+	// Background audit-log cleanup (90 day retention).
+	h.startAuditCleanup()
+
 	mux := http.NewServeMux()
 
 	// Static files (caller supplies embedded or filesystem handler)
@@ -500,6 +503,7 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	mux.HandleFunc("GET /member/links/{id}/edit", h.requirePermission("manage_projects")(h.MemberLinkEdit))
 	mux.HandleFunc("POST /member/links/{id}/edit", h.requirePermission("manage_projects")(h.MemberLinkUpdate))
 	mux.HandleFunc("POST /member/links/{id}/delete", h.requirePermission("manage_projects")(h.MemberLinkDelete))
+	mux.HandleFunc("POST /member/links/{id}/upload-icon", h.requirePermission("manage_projects")(h.MemberLinkUploadIcon))
 	// Member user management (read + limited write, no sensitive data)
 	mux.HandleFunc("GET /member/users", h.requirePermission("view_users")(h.MemberUsers))
 	mux.HandleFunc("GET /member/users/{id}", h.requirePermission("view_users")(h.MemberUserDetail))

@@ -1,0 +1,76 @@
+{{define "admin_user_detail_modal"}}
+{{$user := index .Data "User"}}
+{{$canModify := index .Data "CanModify"}}
+{{$isSysAdmin := index .Data "IsSystemAdmin"}}
+
+<h3 style="margin:0 0 .8rem;font-size:1.1rem">{{$user.DisplayName}}</h3>
+{{if $isSysAdmin}}<span class="role-badge role-admin" style="margin-bottom:.6rem;display:inline-block">系统管理员</span>{{end}}
+
+<div style="display:flex;gap:1rem;align-items:center;margin-bottom:1rem">
+  <div style="width:64px;height:64px;border-radius:50%;overflow:hidden;background:#e5e7eb;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+    {{if $user.AvatarURL}}
+    <img src="{{$user.AvatarURL}}" alt="头像" style="width:100%;height:100%;object-fit:cover">
+    {{else}}
+    <span style="font-size:1.4rem;color:#9ca3af">👤</span>
+    {{end}}
+  </div>
+  <div style="font-size:.88rem;color:var(--text2)">
+    <div><strong style="color:var(--text)">{{$user.Email}}</strong></div>
+    <div>注册于 {{$user.CreatedAt.Format "2006-01-02 15:04"}}</div>
+  </div>
+</div>
+
+<div class="detail-row"><div class="detail-key">用户ID</div><div class="detail-val mono" style="font-size:.78rem">{{$user.ID}}</div></div>
+<div class="detail-row"><div class="detail-key">角色</div><div class="detail-val">
+  <span class="role-badge {{if eq $user.Role "admin"}}role-admin{{else if eq $user.Role "member"}}role-member{{else}}role-user{{end}}">
+    {{$user.Role}}
+  </span>
+</div></div>
+<div class="detail-row"><div class="detail-key">状态</div><div class="detail-val">{{if $user.Active}}<span style="color:#16a34a">启用</span>{{else}}<span style="color:#dc2626">停用</span>{{end}}</div></div>
+<div class="detail-row"><div class="detail-key">邮箱验证</div><div class="detail-val">{{if $user.EmailVerified}}<span style="color:#16a34a">已验证</span>{{else}}<span style="color:#dc2626">未验证</span>{{end}}</div></div>
+<div class="detail-row"><div class="detail-key">两步验证</div><div class="detail-val">{{if $user.TOTPEnabled}}已启用{{else}}未启用{{end}}</div></div>
+
+{{if $canModify}}
+<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:1rem;padding-top:.8rem;border-top:1px solid rgba(0,0,0,0.07)">
+  {{if $user.Active}}
+  <form method="POST" action="/admin/users/{{$user.ID}}/update" style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="display_name" value="{{$user.DisplayName}}">
+    <input type="hidden" name="role" value="{{$user.Role}}">
+    <input type="hidden" name="active" value="0">
+    <button class="btn btn-ghost btn-sm" type="submit">停用账户</button>
+  </form>
+  {{else}}
+  <form method="POST" action="/admin/users/{{$user.ID}}/update" style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="display_name" value="{{$user.DisplayName}}">
+    <input type="hidden" name="role" value="{{$user.Role}}">
+    <input type="hidden" name="active" value="1">
+    <button class="btn btn-ghost btn-sm" type="submit">启用账户</button>
+  </form>
+  {{end}}
+
+  {{if not $user.EmailVerified}}
+  <form method="POST" action="/admin/users/{{$user.ID}}/verify-email" style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <button class="btn btn-ghost btn-sm" type="submit">手动验证邮箱</button>
+  </form>
+  {{end}}
+
+  <a class="btn btn-ghost btn-sm" href="/admin/users/{{$user.ID}}">完整管理页 →</a>
+</div>
+
+<div style="margin-top:1rem;padding:.8rem;border:1px solid #fca5a5;border-radius:8px;background:#fef2f2">
+  <p style="margin:0 0 .6rem;font-size:.88rem;color:#b91c1c;font-weight:600">危险操作：删除账户</p>
+  <p style="margin:0 0 .6rem;font-size:.82rem;color:var(--text2)">删除后无法恢复，请输入用户邮箱以确认：<strong>{{$user.Email}}</strong></p>
+  <form method="POST" action="/admin/users/{{$user.ID}}/delete" data-user-delete-form>
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input class="form-control" type="text" name="confirm_email" placeholder="输入邮箱确认" autocomplete="off" style="margin-bottom:.6rem">
+    <p data-confirm-hint style="font-size:.78rem;margin:0 0 .6rem;color:#dc2626">必须完全匹配邮箱才能删除</p>
+    <button class="btn btn-danger btn-sm" type="submit" disabled>删除账户</button>
+  </form>
+</div>
+{{else}}
+<p style="margin-top:1rem;font-size:.88rem;color:var(--text2)">仅系统管理员可在此处修改或删除该账户。</p>
+{{end}}
+{{end}}

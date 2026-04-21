@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"transmtf.com/oidc/internal/config"
 	"transmtf.com/oidc/internal/crypto"
@@ -88,6 +89,15 @@ var tmplFuncs = template.FuncMap{
 	},
 	// urlEncode percent-encodes a string for safe use as a URL query value.
 	"urlEncode": url.QueryEscape,
+	"inc":       func(i int) int { return i + 1 },
+	"dec":       func(i int) int { return i - 1 },
+	"list":      func(items ...string) []string { return items },
+	"withinDays": func(t time.Time, days int) bool {
+		if days <= 0 {
+			return false
+		}
+		return time.Since(t) <= time.Duration(days)*24*time.Hour
+	},
 	// providerIconSVG returns a built-in SVG icon for known providers.
 	"providerIconSVG": func(slug, icon string) template.HTML {
 		key := strings.ToLower(strings.TrimSpace(slug))
@@ -129,6 +139,18 @@ func parseTemplates() (map[string]*template.Template, error) {
 		t, err := template.New(name).Funcs(tmplFuncs).ParseFS(sub, "base.html", name+".html")
 		if err != nil {
 			return nil, err
+		}
+		// Bundle ad-hoc fragment templates into pages that need them.
+		if name == "admin_user_detail" {
+			if _, ferr := t.ParseFS(sub, "admin_user_detail_modal.html"); ferr != nil {
+				return nil, ferr
+			}
+		}
+		if name == "admin_users" {
+			// Modal fragment is rendered server-side via ajax; reuse the same template set.
+			if _, ferr := t.ParseFS(sub, "admin_user_detail_modal.html"); ferr != nil {
+				return nil, ferr
+			}
 		}
 		out[name] = t
 	}

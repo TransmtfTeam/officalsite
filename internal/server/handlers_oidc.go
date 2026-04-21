@@ -437,7 +437,7 @@ func (h *Handler) UserInfo(w http.ResponseWriter, r *http.Request) {
 			claims["email_verified"] = u.EmailVerified
 		case "profile":
 			claims["name"] = u.DisplayName
-			claims["picture"] = u.AvatarURL
+			claims["picture"] = absolutizeLocalURL(h.cfg.Issuer, u.AvatarURL)
 			claims["role"] = u.Role
 		}
 	}

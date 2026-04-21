@@ -44,19 +44,35 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">图标地址（可选）</label>
-            <input class="form-control" type="url" name="icon" value="{{.Icon}}" placeholder="请输入图标地址">
-          </div>
-          <div class="form-group">
             <label class="form-label">排序值（小值靠前）</label>
             <input class="form-control" type="number" name="sort_order" value="{{.SortOrder}}">
           </div>
         </div>
+        <input type="hidden" name="icon" value="{{.Icon}}">
         <div style="display:flex;gap:.8rem">
           <button class="btn btn-primary" type="submit">保存</button>
           <a class="btn btn-ghost" href="/member/links">取消</a>
         </div>
       </form>
+    </div>
+
+    <div class="form-panel" style="margin-top:1rem">
+      <p class="form-panel-title">图标</p>
+      <div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;margin-bottom:.8rem">
+        <div style="width:64px;height:64px;border-radius:8px;overflow:hidden;background:#f3f4f6;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          {{if .Icon}}
+          <img src="{{.Icon}}" alt="图标" style="width:100%;height:100%;object-fit:cover">
+          {{else}}
+          <span style="color:#9ca3af;font-size:1.2rem">🔗</span>
+          {{end}}
+        </div>
+        <form method="POST" action="/member/links/{{.ID}}/upload-icon" enctype="multipart/form-data" style="flex:1;min-width:240px">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <input class="form-control" type="file" name="icon_file" accept="image/*" required>
+          <p style="font-size:.78rem;color:var(--text2);margin:.4rem 0">支持任意图片格式，单文件不超过 5MB。</p>
+          <button class="btn btn-ghost btn-sm" type="submit">上传图标</button>
+        </form>
+      </div>
     </div>
     {{end}}
   </main>

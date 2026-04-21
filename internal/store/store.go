@@ -363,6 +363,101 @@ func (s *Store) ListUsers(ctx context.Context) ([]*User, error) {
 	return out, rows.Err()
 }
 
+// ListUsersFilter describes paging + filtering for the admin user list.
+type ListUsersFilter struct {
+	Search        string // substring of email or display_name (case-insensitive)
+	Role          string // exact role match; empty = any
+	Active        *bool  // nil = any
+	EmailVerified *bool  // nil = any
+	Limit         int
+	Offset        int
+}
+
+// ListUsersPaged returns users matching the filter plus the total row count
+// (ignoring limit/offset).
+func (s *Store) ListUsersPaged(ctx context.Context, f ListUsersFilter) ([]*User, int, error) {
+	conds := []string{"1=1"}
+	args := []any{}
+	idx := 1
+	if q := strings.TrimSpace(f.Search); q != "" {
+		conds = append(conds, "(LOWER(email) LIKE $"+itoa(idx)+" OR LOWER(display_name) LIKE $"+itoa(idx)+")")
+		args = append(args, "%"+strings.ToLower(q)+"%")
+		idx++
+	}
+	if r := strings.TrimSpace(f.Role); r != "" {
+		conds = append(conds, "role=$"+itoa(idx))
+		args = append(args, r)
+		idx++
+	}
+	if f.Active != nil {
+		conds = append(conds, "active=$"+itoa(idx))
+		args = append(args, *f.Active)
+		idx++
+	}
+	if f.EmailVerified != nil {
+		conds = append(conds, "email_verified=$"+itoa(idx))
+		args = append(args, *f.EmailVerified)
+		idx++
+	}
+	where := strings.Join(conds, " AND ")
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	offset := f.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	var total int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM users WHERE `+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	listArgs := append([]any{}, args...)
+	listArgs = append(listArgs, limit, offset)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+userCols+` FROM users WHERE `+where+
+			` ORDER BY created_at DESC LIMIT $`+itoa(idx)+` OFFSET $`+itoa(idx+1), listArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var out []*User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		out = append(out, u)
+	}
+	return out, total, rows.Err()
+}
+
+// itoa is a tiny strconv-free integer formatter for SQL placeholder indices.
+func itoa(i int) string {
+	if i == 0 {
+		return "0"
+	}
+	neg := i < 0
+	if neg {
+		i = -i
+	}
+	var buf [20]byte
+	n := len(buf)
+	for i > 0 {
+		n--
+		buf[n] = byte('0' + i%10)
+		i /= 10
+	}
+	if neg {
+		n--
+		buf[n] = '-'
+	}
+	return string(buf[n:])
+}
+
 func (s *Store) UpdateUser(ctx context.Context, id, displayName, role string, active bool) error {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE users SET display_name=$1,role=$2,active=$3,updated_at=now() WHERE id=$4`,
@@ -1474,6 +1569,13 @@ func (s *Store) UpdateFriendLink(ctx context.Context, id, name, url, icon string
 	return err
 }
 
+// UpdateFriendLinkIcon updates only the icon column for a link.
+func (s *Store) UpdateFriendLinkIcon(ctx context.Context, id, icon string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE friend_links SET icon=$1 WHERE id=$2`, icon, id)
+	return err
+}
+
 func (s *Store) DeleteFriendLink(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM friend_links WHERE id=$1`, id)
 	return err
@@ -1546,6 +1648,103 @@ func (s *Store) ListAuditLogs(ctx context.Context, limit int) ([]*AuditLog, erro
 		out = append(out, al)
 	}
 	return out, rows.Err()
+}
+
+// AuditLogFilter describes the audit log paged query.
+type AuditLogFilter struct {
+	OperatorID string
+	EntityType string
+	Action     string
+	Search     string // matches entity_name or operator_name (case-insensitive)
+	From       *time.Time
+	To         *time.Time
+	Limit      int
+	Offset     int
+}
+
+// ListAuditLogsPaged returns the matching log slice plus the unbounded total.
+func (s *Store) ListAuditLogsPaged(ctx context.Context, f AuditLogFilter) ([]*AuditLog, int, error) {
+	conds := []string{"1=1"}
+	args := []any{}
+	idx := 1
+	if v := strings.TrimSpace(f.OperatorID); v != "" {
+		conds = append(conds, "operator_id=$"+itoa(idx))
+		args = append(args, v)
+		idx++
+	}
+	if v := strings.TrimSpace(f.EntityType); v != "" {
+		conds = append(conds, "entity_type=$"+itoa(idx))
+		args = append(args, v)
+		idx++
+	}
+	if v := strings.TrimSpace(f.Action); v != "" {
+		conds = append(conds, "action=$"+itoa(idx))
+		args = append(args, v)
+		idx++
+	}
+	if v := strings.TrimSpace(f.Search); v != "" {
+		conds = append(conds, "(LOWER(entity_name) LIKE $"+itoa(idx)+" OR LOWER(operator_name) LIKE $"+itoa(idx)+")")
+		args = append(args, "%"+strings.ToLower(v)+"%")
+		idx++
+	}
+	if f.From != nil {
+		conds = append(conds, "created_at >= $"+itoa(idx))
+		args = append(args, *f.From)
+		idx++
+	}
+	if f.To != nil {
+		conds = append(conds, "created_at < $"+itoa(idx))
+		args = append(args, *f.To)
+		idx++
+	}
+	where := strings.Join(conds, " AND ")
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	offset := f.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	var total int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM audit_logs WHERE `+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	listArgs := append([]any{}, args...)
+	listArgs = append(listArgs, limit, offset)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id,operator_id,operator_name,operator_role,action,entity_type,entity_id,entity_name,before_state,after_state,created_at
+		 FROM audit_logs WHERE `+where+
+			` ORDER BY created_at DESC LIMIT $`+itoa(idx)+` OFFSET $`+itoa(idx+1), listArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var out []*AuditLog
+	for rows.Next() {
+		al := &AuditLog{}
+		if err := rows.Scan(&al.ID, &al.OperatorID, &al.OperatorName, &al.OperatorRole,
+			&al.Action, &al.EntityType, &al.EntityID, &al.EntityName,
+			&al.BeforeState, &al.AfterState, &al.CreatedAt); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, al)
+	}
+	return out, total, rows.Err()
+}
+
+// DeleteAuditLogsBefore removes log rows older than t. Returns rows affected.
+func (s *Store) DeleteAuditLogsBefore(ctx context.Context, t time.Time) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM audit_logs WHERE created_at < $1`, t)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
 
 func (s *Store) GetAuditLog(ctx context.Context, id string) (*AuditLog, error) {

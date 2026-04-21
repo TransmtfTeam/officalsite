@@ -1,10 +1,8 @@
 package server
 
 import (
-	"io"
 	"net/http"
-	"os"
-	"path/filepath"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -120,9 +118,7 @@ func (h *Handler) MemberProjectDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	if proj != nil {
 		if proj.ImageURL != "" {
-			for _, ext := range []string{".png", ".jpg"} {
-				_ = os.Remove(filepath.Join("uploads", "project-"+id+ext))
-			}
+			removeUploadByBaseName("projects", "project-"+id)
 		}
 		h.logAudit(ctx, h.currentUser(r), "delete", "project", id, proj.NameZH, marshalJSON(proj), "")
 	}
@@ -133,9 +129,9 @@ func (h *Handler) MemberProjectUploadImage(w http.ResponseWriter, r *http.Reques
 	id := r.PathValue("id")
 	redirectEdit := "/member/projects/" + id + "/edit"
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024)
-	if err := r.ParseMultipartForm(1 * 1024 * 1024); err != nil {
-		http.Redirect(w, r, redirectEdit+"?flash=文件过大（最大1MB）", http.StatusFound)
+	r.Body = http.MaxBytesReader(w, r.Body, MemberAdminImageOpts.MaxBytes)
+	if err := r.ParseMultipartForm(MemberAdminImageOpts.MaxBytes); err != nil {
+		http.Redirect(w, r, redirectEdit+"?flash=文件过大（最大5MB）", http.StatusFound)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -155,57 +151,61 @@ func (h *Handler) MemberProjectUploadImage(w http.ResponseWriter, r *http.Reques
 	}
 	defer file.Close()
 
-	data, err := io.ReadAll(file)
+	localURL, err := saveUploadedImage(file, "projects", "project-"+id, MemberAdminImageOpts)
 	if err != nil {
-		http.Redirect(w, r, redirectEdit+"?flash=读取文件失败", http.StatusFound)
-		return
-	}
-	if len(data) == 0 {
-		http.Redirect(w, r, redirectEdit+"?flash=文件为空", http.StatusFound)
+		http.Redirect(w, r, redirectEdit+"?flash="+url.QueryEscape(err.Error()), http.StatusFound)
 		return
 	}
 
-	mimeType := http.DetectContentType(data)
-	ext, ok := projectImageExt(mimeType)
-	if !ok {
-		http.Redirect(w, r, redirectEdit+"?flash=仅支持PNG/JPEG图片", http.StatusFound)
-		return
-	}
-
-	if err := os.MkdirAll("uploads", 0o755); err != nil {
-		http.Redirect(w, r, redirectEdit+"?flash=服务器错误", http.StatusFound)
-		return
-	}
-
-	// Remove old image files for this project (either extension).
-	for _, oldExt := range []string{".png", ".jpg"} {
-		_ = os.Remove(filepath.Join("uploads", "project-"+id+oldExt))
-	}
-
-	fileName := "project-" + id + ext
-	if err := os.WriteFile(filepath.Join("uploads", fileName), data, 0o644); err != nil {
-		http.Redirect(w, r, redirectEdit+"?flash=保存图片失败", http.StatusFound)
-		return
-	}
-
-	if err := h.st.UpdateProjectImage(r.Context(), id, "/uploads/"+fileName); err != nil {
+	if err := h.st.UpdateProjectImage(r.Context(), id, localURL); err != nil {
 		// DB write failed; remove the file to avoid orphan.
-		_ = os.Remove(filepath.Join("uploads", fileName))
+		removeUploadByBaseName("projects", "project-"+id)
 		http.Redirect(w, r, redirectEdit+"?flash=保存图片失败", http.StatusFound)
 		return
 	}
 	http.Redirect(w, r, redirectEdit+"?flash=图片已上传", http.StatusFound)
 }
 
-func projectImageExt(mimeType string) (string, bool) {
-	switch mimeType {
-	case "image/png":
-		return ".png", true
-	case "image/jpeg":
-		return ".jpg", true
-	default:
-		return "", false
+// MemberLinkUploadIcon stores a friend-link icon upload under
+// uploads/links/<id><ext> and updates the link record.
+func (h *Handler) MemberLinkUploadIcon(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	redirectEdit := "/member/links/" + id + "/edit"
+
+	r.Body = http.MaxBytesReader(w, r.Body, MemberAdminImageOpts.MaxBytes)
+	if err := r.ParseMultipartForm(MemberAdminImageOpts.MaxBytes); err != nil {
+		http.Redirect(w, r, redirectEdit+"?flash=文件过大（最大5MB）", http.StatusFound)
+		return
 	}
+	if !h.verifyCSRFToken(r) {
+		h.csrfFailed(w, r)
+		return
+	}
+
+	link, err := h.st.GetFriendLink(r.Context(), id)
+	if err != nil || link == nil {
+		h.renderError(w, r, http.StatusNotFound, "友情链接不存在", id)
+		return
+	}
+
+	file, _, err := r.FormFile("icon_file")
+	if err != nil {
+		http.Redirect(w, r, redirectEdit+"?flash=未选择文件", http.StatusFound)
+		return
+	}
+	defer file.Close()
+
+	localURL, err := saveUploadedImage(file, "links", id, MemberAdminImageOpts)
+	if err != nil {
+		http.Redirect(w, r, redirectEdit+"?flash="+url.QueryEscape(err.Error()), http.StatusFound)
+		return
+	}
+	if err := h.st.UpdateFriendLinkIcon(r.Context(), id, localURL); err != nil {
+		removeUploadByBaseName("links", id)
+		http.Redirect(w, r, redirectEdit+"?flash=保存图标失败", http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, redirectEdit+"?flash=图标已上传", http.StatusFound)
 }
 
 func projectFromForm(r *http.Request) *store.Project {

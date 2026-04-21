@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -91,17 +90,100 @@ func (h *Handler) AdminDashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) AdminUsers(w http.ResponseWriter, r *http.Request) {
-	users, _ := h.st.ListUsers(r.Context())
+	q := r.URL.Query()
+	f := store.ListUsersFilter{
+		Search: strings.TrimSpace(q.Get("q")),
+		Role:   strings.TrimSpace(q.Get("role")),
+	}
+	if v := q.Get("active"); v == "1" {
+		b := true
+		f.Active = &b
+	} else if v == "0" {
+		b := false
+		f.Active = &b
+	}
+	if v := q.Get("verified"); v == "1" {
+		b := true
+		f.EmailVerified = &b
+	} else if v == "0" {
+		b := false
+		f.EmailVerified = &b
+	}
+
+	pageSize := parsePageSize(q.Get("page_size"), 50, []int{10, 20, 50, 100, 200})
+	page := parsePage(q.Get("page"))
+	f.Limit = pageSize
+	f.Offset = (page - 1) * pageSize
+
+	users, total, _ := h.st.ListUsersPaged(r.Context(), f)
 	customRoles, _ := h.st.ListCustomRoles(r.Context())
 	d := h.pageData(r, "用户管理")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
+	pages := (total + pageSize - 1) / pageSize
+	if pages < 1 {
+		pages = 1
+	}
 	d.Data = map[string]any{
-		"Users":       users,
-		"CustomRoles": customRoles,
+		"Users":         users,
+		"CustomRoles":   customRoles,
+		"Total":         total,
+		"Page":          page,
+		"Pages":         pages,
+		"PageSize":      pageSize,
+		"PageSizeOpts":  []int{10, 20, 50, 100, 200},
+		"FilterQ":       f.Search,
+		"FilterRole":    f.Role,
+		"FilterActive":  q.Get("active"),
+		"FilterVerify":  q.Get("verified"),
+		"IsSysAdmin":    h.isSystemAdminUser(h.currentUser(r)),
 	}
 	h.render(w, "admin_users", d)
+}
+
+// parsePageSize validates page_size against an allowlist, falling back to def.
+func parsePageSize(raw string, def int, allowed []int) int {
+	if raw == "" {
+		return def
+	}
+	n := 0
+	for _, c := range raw {
+		if c < '0' || c > '9' {
+			return def
+		}
+		n = n*10 + int(c-'0')
+		if n > 10000 {
+			return def
+		}
+	}
+	for _, a := range allowed {
+		if a == n {
+			return n
+		}
+	}
+	return def
+}
+
+// parsePage parses a 1-based page number, defaulting to 1 on invalid input.
+func parsePage(raw string) int {
+	if raw == "" {
+		return 1
+	}
+	n := 0
+	for _, c := range raw {
+		if c < '0' || c > '9' {
+			return 1
+		}
+		n = n*10 + int(c-'0')
+		if n > 1000000 {
+			return 1
+		}
+	}
+	if n < 1 {
+		return 1
+	}
+	return n
 }
 
 func (h *Handler) AdminUserCreate(w http.ResponseWriter, r *http.Request) {
@@ -223,47 +305,35 @@ func (h *Handler) AdminUserDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	cur := h.currentUser(r)
 	ctx := r.Context()
-	d := h.pageData(r, "用户管理")
 
 	targetUser, err := h.st.GetUserByID(ctx, id)
 	if err != nil {
-		users, _ := h.st.ListUsers(ctx)
-		customRoles, _ := h.st.ListCustomRoles(ctx)
-		d.Data = map[string]any{"Users": users, "CustomRoles": customRoles}
-		d.Flash = "用户不存在"
-		d.IsError = true
-		h.render(w, "admin_users", d)
+		http.Redirect(w, r, "/admin/users?flash="+url.QueryEscape("用户不存在"), http.StatusFound)
 		return
 	}
 	if targetUser.IsAdmin() && !h.isSystemAdminUser(cur) {
-		users, _ := h.st.ListUsers(ctx)
-		customRoles, _ := h.st.ListCustomRoles(ctx)
-		d.Data = map[string]any{"Users": users, "CustomRoles": customRoles}
-		d.Flash = "不能修改管理员账户"
-		d.IsError = true
-		h.render(w, "admin_users", d)
+		http.Redirect(w, r, "/admin/users?flash="+url.QueryEscape("不能修改管理员账户"), http.StatusFound)
 		return
 	}
-
 	if cur != nil && cur.ID == id {
-		users, _ := h.st.ListUsers(ctx)
-		customRoles, _ := h.st.ListCustomRoles(ctx)
-		d.Data = map[string]any{"Users": users, "CustomRoles": customRoles}
-		d.Flash = "不能删除当前登录账户"
-		d.IsError = true
-		h.render(w, "admin_users", d)
+		http.Redirect(w, r, "/admin/users?flash="+url.QueryEscape("不能删除当前登录账户"), http.StatusFound)
 		return
+	}
+	// Optional secondary confirmation via modal: require matching email.
+	if confirmEmail := strings.TrimSpace(r.FormValue("confirm_email")); confirmEmail != "" {
+		if !strings.EqualFold(confirmEmail, targetUser.Email) {
+			http.Redirect(w, r, "/admin/users?flash="+url.QueryEscape("邮箱确认不匹配，删除已取消"), http.StatusFound)
+			return
+		}
 	}
 
 	if err := h.st.DeleteUser(ctx, id); err != nil {
-		users, _ := h.st.ListUsers(ctx)
-		customRoles, _ := h.st.ListCustomRoles(ctx)
-		d.Data = map[string]any{"Users": users, "CustomRoles": customRoles}
-		d.Flash = "删除失败：" + err.Error()
-		d.IsError = true
-		h.render(w, "admin_users", d)
+		http.Redirect(w, r, "/admin/users?flash="+url.QueryEscape("删除失败："+err.Error()), http.StatusFound)
 		return
 	}
+
+	// Best-effort remove local avatar file.
+	removeUploadByBaseName("avatars", id)
 
 	h.logAudit(ctx, cur, "delete", "user", id, targetUser.Email, marshalJSON(targetUser), "")
 	http.Redirect(w, r, "/admin/users?flash=已删除", http.StatusFound)
@@ -283,6 +353,25 @@ func (h *Handler) AdminUserDetail(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusForbidden, "访问被拒绝", "只有系统管理员可以查看管理员账户详情")
 		return
 	}
+
+	// Modal fragment mode (used by admin_users.html ajax).
+	if r.URL.Query().Get("modal") == "1" {
+		canModify := !u.IsAdmin() || h.isSystemAdminUser(cur)
+		d := h.pageData(r, "用户详情")
+		d.Data = map[string]any{
+			"User":          u,
+			"CanModify":     canModify,
+			"IsSystemAdmin": h.isSystemAdminUser(u),
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if tmpl, ok := h.tmpls["admin_user_detail"]; ok {
+			if err := tmpl.ExecuteTemplate(w, "admin_user_detail_modal", d); err != nil {
+				log.Printf("render user_detail_modal: %v", err)
+			}
+			return
+		}
+	}
+
 	identities, _ := h.st.GetUserIdentitiesByUserID(ctx, id)
 	sessions, _ := h.st.GetSessionsByUserID(ctx, id)
 	accessTokens, _ := h.st.GetAccessTokensByUserID(ctx, id)
@@ -983,10 +1072,10 @@ func (h *Handler) AdminAnnouncementSave(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) AdminSettingsUploadIcon(w http.ResponseWriter, r *http.Request) {
-	// Limit upload size to 512 KB.
-	r.Body = http.MaxBytesReader(w, r.Body, 512*1024)
-	if err := r.ParseMultipartForm(512 * 1024); err != nil {
-		http.Redirect(w, r, "/admin/settings?flash=文件过大（最大512KB）", http.StatusFound)
+	// Limit upload size to 5 MB.
+	r.Body = http.MaxBytesReader(w, r.Body, MemberAdminImageOpts.MaxBytes)
+	if err := r.ParseMultipartForm(MemberAdminImageOpts.MaxBytes); err != nil {
+		http.Redirect(w, r, "/admin/settings?flash=文件过大（最大5MB）", http.StatusFound)
 		return
 	}
 	if !h.verifyCSRFToken(r) {
@@ -1000,32 +1089,22 @@ func (h *Handler) AdminSettingsUploadIcon(w http.ResponseWriter, r *http.Request
 	}
 	defer file.Close()
 
-	data, err := io.ReadAll(file)
+	localURL, err := saveUploadedImage(file, "site", "icon", MemberAdminImageOpts)
 	if err != nil {
-		http.Redirect(w, r, "/admin/settings?flash=读取文件失败", http.StatusFound)
+		http.Redirect(w, r, "/admin/settings?flash="+url.QueryEscape(err.Error()), http.StatusFound)
 		return
 	}
-	if len(data) == 0 {
-		http.Redirect(w, r, "/admin/settings?flash=文件为空", http.StatusFound)
-		return
-	}
-	mimeType := http.DetectContentType(data)
-	fileName, ok := uploadedFaviconFileName(mimeType)
-	if !ok {
-		http.Redirect(w, r, "/admin/settings?flash=仅支持图片上传", http.StatusFound)
-		return
-	}
-	fullPath := filepath.Join(".", fileName)
-	if err := os.WriteFile(fullPath, data, 0o644); err != nil {
-		http.Redirect(w, r, "/admin/settings?flash=保存图标失败", http.StatusFound)
-		return
-	}
-	removeLegacyFavicons(fileName)
+	// Clean up legacy favicons in CWD (pre-migration artifacts).
+	removeLegacyFavicons("")
 
 	ctx := r.Context()
-	_ = h.st.SetSetting(ctx, "site_icon_url", "/"+fileName)
+	oldURL := h.st.GetSetting(ctx, "site_icon_url")
+	_ = h.st.SetSetting(ctx, "site_icon_url", localURL)
+	h.logAudit(ctx, h.currentUser(r), "update", "setting", "site_icon_url", "site_icon_url",
+		marshalJSON(map[string]string{"site_icon_url": oldURL}),
+		marshalJSON(map[string]string{"site_icon_url": localURL}))
 
-	http.Redirect(w, r, "/admin/settings?flash=图标已上传："+fileName, http.StatusFound)
+	http.Redirect(w, r, "/admin/settings?flash="+url.QueryEscape("图标已上传"), http.StatusFound)
 }
 
 func (h *Handler) AdminSettings(w http.ResponseWriter, r *http.Request) {
@@ -1404,21 +1483,34 @@ func uploadedFaviconFileName(mimeType string) (string, bool) {
 	}
 }
 
-func removeLegacyFavicons(keep string) {
+// removeLegacyFavicons deletes any pre-migration favicon files left in the
+// working directory. The keep argument is ignored (no longer used for new
+// uploads since icons now live under uploads/site/).
+func removeLegacyFavicons(_ string) {
 	for _, name := range []string{faviconPNG, faviconJPG} {
-		if name == keep {
-			continue
-		}
 		_ = os.Remove(filepath.Join(".", name))
 	}
 }
 
+// SiteFaviconFile serves the site icon at well-known favicon paths. It now
+// reads from the configured site_icon_url under uploads/, falling back to
+// the legacy CWD location for backward compatibility.
 func (h *Handler) SiteFaviconFile(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(r.URL.Path, "/")
 	if name != faviconPNG && name != faviconJPG {
 		http.NotFound(w, r)
 		return
 	}
+	iconURL := h.st.GetSetting(r.Context(), "site_icon_url")
+	if strings.HasPrefix(iconURL, "/uploads/") {
+		path := filepath.Join(".", strings.TrimPrefix(iconURL, "/"))
+		if _, err := os.Stat(path); err == nil {
+			w.Header().Set("Cache-Control", "no-cache")
+			http.ServeFile(w, r, path)
+			return
+		}
+	}
+	// Legacy fallback: file in working directory.
 	path := filepath.Join(".", name)
 	if _, err := os.Stat(path); err != nil {
 		http.NotFound(w, r)
@@ -1432,6 +1524,17 @@ func (h *Handler) SiteFaviconFile(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) AdminSiteIcon(w http.ResponseWriter, r *http.Request) {
 	iconURL := h.st.GetSetting(r.Context(), "site_icon_url")
 	if iconURL == "" {
+		http.NotFound(w, r)
+		return
+	}
+	// Locally-uploaded icon: serve directly from uploads/.
+	if strings.HasPrefix(iconURL, "/uploads/") {
+		path := filepath.Join(".", strings.TrimPrefix(iconURL, "/"))
+		if _, err := os.Stat(path); err == nil {
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+			http.ServeFile(w, r, path)
+			return
+		}
 		http.NotFound(w, r)
 		return
 	}
@@ -1683,13 +1786,80 @@ func marshalJSON(v any) string {
 }
 
 func (h *Handler) AdminAuditLogs(w http.ResponseWriter, r *http.Request) {
-	logs, _ := h.st.ListAuditLogs(r.Context(), 500)
+	q := r.URL.Query()
+	f := store.AuditLogFilter{
+		OperatorID: strings.TrimSpace(q.Get("operator_id")),
+		EntityType: strings.TrimSpace(q.Get("entity_type")),
+		Action:     strings.TrimSpace(q.Get("action")),
+		Search:     strings.TrimSpace(q.Get("q")),
+	}
+	if v := strings.TrimSpace(q.Get("from")); v != "" {
+		if t, err := time.Parse("2006-01-02", v); err == nil {
+			f.From = &t
+		}
+	}
+	if v := strings.TrimSpace(q.Get("to")); v != "" {
+		if t, err := time.Parse("2006-01-02", v); err == nil {
+			tEnd := t.Add(24 * time.Hour)
+			f.To = &tEnd
+		}
+	}
+	pageSize := parsePageSize(q.Get("page_size"), 50, []int{20, 50, 100, 200})
+	page := parsePage(q.Get("page"))
+	f.Limit = pageSize
+	f.Offset = (page - 1) * pageSize
+
+	logs, total, _ := h.st.ListAuditLogsPaged(r.Context(), f)
+	pages := (total + pageSize - 1) / pageSize
+	if pages < 1 {
+		pages = 1
+	}
 	d := h.pageData(r, "审计日志")
 	if flash := r.URL.Query().Get("flash"); flash != "" {
 		d.Flash = flash
 	}
-	d.Data = logs
+	d.Data = map[string]any{
+		"Logs":         logs,
+		"Total":        total,
+		"Page":         page,
+		"Pages":        pages,
+		"PageSize":     pageSize,
+		"PageSizeOpts": []int{20, 50, 100, 200},
+		"FilterQ":      f.Search,
+		"FilterEntity": f.EntityType,
+		"FilterAction": f.Action,
+		"FilterOp":     f.OperatorID,
+		"FilterFrom":   q.Get("from"),
+		"FilterTo":     q.Get("to"),
+		"RollbackDays": 3,
+	}
 	h.render(w, "admin_audit_logs", d)
+}
+
+// startAuditCleanup runs a daily ticker that deletes audit_logs older than 90
+// days. The first sweep happens immediately at startup.
+func (h *Handler) startAuditCleanup() {
+	go func() {
+		sweep := func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			cutoff := time.Now().AddDate(0, 0, -90)
+			n, err := h.st.DeleteAuditLogsBefore(ctx, cutoff)
+			if err != nil {
+				log.Printf("audit cleanup: %v", err)
+				return
+			}
+			if n > 0 {
+				log.Printf("audit cleanup: removed %d log(s) older than %s", n, cutoff.Format(time.RFC3339))
+			}
+		}
+		sweep()
+		t := time.NewTicker(24 * time.Hour)
+		defer t.Stop()
+		for range t.C {
+			sweep()
+		}
+	}()
 }
 
 func (h *Handler) AdminAuditRollback(w http.ResponseWriter, r *http.Request) {
