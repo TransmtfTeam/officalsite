@@ -56,10 +56,32 @@
   </div>
 </div>
 
-{{if .AnnZH}}
-<div class="ann-bar">{{.AnnZH}}</div>
-{{else if .AnnEN}}
-<div class="ann-bar">{{.AnnEN}}</div>
+{{/* ── 全站公告（圆角白色弹窗，支持富文本） ── */}}
+{{if or .AnnZH .AnnEN}}
+<div class="ann-modal-overlay" id="ann-modal-overlay" data-ann-key="{{.AnnHash}}" role="dialog" aria-modal="true" aria-labelledby="ann-modal-title">
+  <div class="ann-modal" role="document">
+    <button class="ann-modal-close" type="button" aria-label="关闭公告" data-ann-close>&times;</button>
+    <div class="ann-modal-header">
+      <span class="ann-modal-badge">📢 站点公告</span>
+      <h2 class="ann-modal-title" id="ann-modal-title">来自 {{.SiteName}}</h2>
+    </div>
+    <div class="ann-modal-body">
+      {{if .AnnZH}}<div class="ann-modal-rich">{{safeHTML .AnnZH}}</div>{{end}}
+      {{if .AnnEN}}<div class="ann-modal-rich" style="margin-top:.8rem;color:var(--text2);font-size:.9rem">{{safeHTML .AnnEN}}</div>{{end}}
+    </div>
+    <div class="ann-modal-actions">
+      <button class="btn btn-primary" type="button" data-ann-close>我知道了</button>
+    </div>
+  </div>
+</div>
+{{end}}
+
+{{/* ── 全站 Toast 容器（动态成功/失败提示） ── */}}
+<div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
+
+{{/* ── 在页面顶部把任何服务端 ?flash= 转成 Toast，并保留 .Flash 隐藏 div 给老逻辑 ── */}}
+{{if .Flash}}
+<div id="server-flash" data-is-error="{{if .IsError}}1{{else}}0{{end}}" data-msg="{{.Flash}}" hidden></div>
 {{end}}
 
 {{block "content" .}}{{end}}
@@ -72,6 +94,7 @@
     <a href="/privacy" style="color:#666">隐私政策</a>
   </p>
 </footer>
+<script src="/static/js/ui.js"></script>
 <script src="/static/js/passkey.js"></script>
 <script src="/static/js/profile.js"></script>
 </body>

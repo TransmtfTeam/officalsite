@@ -71,9 +71,9 @@
         </div>
         <div class="form-group">
           <label class="form-label">站点图标地址（也可通过上方直接上传）</label>
-          <input class="form-control" type="url" name="site_icon_url"
+          <input class="form-control" type="text" name="site_icon_url"
             value="{{with .Data}}{{index . "site_icon_url"}}{{end}}"
-            placeholder="请输入图标地址或上传后自动填入">
+            placeholder="请输入图标地址或上传后自动填入（支持 /uploads/... 相对路径）">
         </div>
         <div class="form-row">
           <div class="form-group">

@@ -264,6 +264,10 @@ func (h *Handler) RegisterPost(w http.ResponseWriter, r *http.Request) {
 		fail("两次输入的密码不一致", oidcChallenge != "")
 		return
 	}
+	if r.FormValue("agree_tos") != "1" {
+		fail("请阅读并同意《服务条款》与《隐私政策》后再注册", oidcChallenge != "")
+		return
+	}
 
 	u, err := h.st.CreateUserWithEmailVerified(ctx, email, pass, name, "user", false)
 	if err != nil {

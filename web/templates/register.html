@@ -42,6 +42,17 @@
         <label class="form-label">确认密码</label>
         <input class="form-control" type="password" name="confirm" placeholder="再次输入密码" required>
       </div>
+
+      <div class="consent-row">
+        <input type="checkbox" id="agree-tos" name="agree_tos" value="1" required>
+        <label for="agree-tos">
+          我已阅读并同意
+          <a href="/tos" data-doc-modal data-doc-title="服务条款">《服务条款》</a>
+          与
+          <a href="/privacy" data-doc-modal data-doc-title="隐私政策">《隐私政策》</a>
+        </label>
+      </div>
+
       <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.5rem" type="submit">注册</button>
     </form>
 

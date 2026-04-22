@@ -346,6 +346,7 @@ type PageData struct {
 	ContactEmail string
 	AnnZH        string
 	AnnEN        string
+	AnnHash      string
 	// page-specific
 	Data any
 }
@@ -373,6 +374,7 @@ func (h *Handler) pageData(r *http.Request, title string) PageData {
 		ContactEmail: orDefault(cfg["contact_email"], "contact@transmtf.com"),
 		AnnZH:        cfg["ann_zh"],
 		AnnEN:        cfg["ann_en"],
+		AnnHash:      shortHash(cfg["ann_zh"] + "|" + cfg["ann_en"]),
 	}
 }
 
@@ -587,6 +589,16 @@ func orDefault(s, def string) string {
 		return def
 	}
 	return s
+}
+
+// shortHash returns a short hex digest of s, used as a dismissal key for
+// the announcement modal so users only need to dismiss it once per revision.
+func shortHash(s string) string {
+	if s == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:6])
 }
 
 func (h *Handler) securityHeadersMiddleware(next http.Handler) http.Handler {
