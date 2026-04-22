@@ -7,6 +7,53 @@
   <link rel="stylesheet" href="/static/css/app.css">
   <link rel="manifest" href="/manifest.json">
   {{if .SiteIconURL}}<link rel="icon" href="{{.SiteIconURL}}">{{end}}
+
+  {{/* ── 内联关键 UI 样式（toast / 文档弹窗 / 公告弹窗），避免外部 CSS 缓存导致样式不生效 ── */}}
+  <style>
+    /* Toast */
+    #toast-stack{position:fixed;top:78px;right:18px;z-index:99999;display:flex;flex-direction:column;gap:10px;pointer-events:none;max-width:calc(100vw - 36px)}
+    .ti-toast{pointer-events:auto;display:flex;align-items:flex-start;gap:.65rem;min-width:260px;max-width:380px;padding:.8rem 1rem;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:14px;box-shadow:0 8px 28px rgba(15,23,42,.10),0 2px 6px rgba(15,23,42,.06);font-size:.9rem;color:#1e293b;opacity:0;transform:translateY(-12px) scale(.98);transition:opacity .25s ease,transform .25s cubic-bezier(.2,.7,.3,1.2)}
+    .ti-toast.in{opacity:1;transform:translateY(0) scale(1)}
+    .ti-toast.out{opacity:0;transform:translateY(-8px) scale(.98)}
+    .ti-toast-icon{flex:0 0 22px;height:22px;border-radius:50%;font-size:.85rem;font-weight:700;line-height:22px;text-align:center;color:#fff}
+    .ti-toast.success .ti-toast-icon{background:#16a34a}
+    .ti-toast.error   .ti-toast-icon{background:#dc2626}
+    .ti-toast.info    .ti-toast-icon{background:#0284c7}
+    .ti-toast-msg{flex:1;line-height:1.45;word-break:break-word}
+    .ti-toast-close{background:none;border:0;color:#94a3b8;font-size:1.2rem;line-height:1;cursor:pointer;padding:0 .15rem;margin-left:.2rem}
+    .ti-toast-close:hover{color:#1e293b}
+    @media (max-width:600px){#toast-stack{top:72px;right:10px;left:10px;align-items:stretch}.ti-toast{min-width:0;max-width:none}}
+
+    /* Document modal (ToS / Privacy / generic) */
+    .ti-modal-ov{position:fixed!important;inset:0!important;background:rgba(15,23,42,.4)!important;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);z-index:99998!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:24px!important;opacity:0;transition:opacity .22s ease;margin:0!important}
+    .ti-modal-ov.in{opacity:1}
+    .ti-modal-ov.out{opacity:0}
+    .ti-modal{background:#fff;border-radius:18px;width:100%;max-width:760px;max-height:86vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 70px rgba(15,23,42,.22),0 6px 16px rgba(15,23,42,.08);transform:translateY(20px) scale(.96);transition:transform .32s cubic-bezier(.18,.89,.32,1.18)}
+    .ti-modal-ov.in .ti-modal{transform:translateY(0) scale(1)}
+    .ti-modal-h{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.4rem;border-bottom:1px solid rgba(0,0,0,.06)}
+    .ti-modal-t{font-size:1.05rem;font-weight:700;margin:0;color:#1e293b}
+    .ti-modal-x{background:none;border:0;font-size:1.5rem;line-height:1;color:#94a3b8;cursor:pointer;padding:2px 10px;border-radius:8px}
+    .ti-modal-x:hover{color:#1e293b;background:rgba(0,0,0,.04)}
+    .ti-modal-b{padding:1rem 1.4rem;overflow-y:auto;flex:1;color:#1e293b;font-size:.92rem;line-height:1.7}
+    .ti-modal-b :where(h1){font-size:1.4rem}
+    .ti-modal-b :where(h2){font-size:1.15rem;margin-top:1.1rem}
+    .ti-modal-b :where(h3){font-size:1rem;margin-top:.8rem}
+    .ti-modal-b :where(p,ul,ol){margin:.45rem 0}
+    .ti-modal-b :where(a){color:#0284c7}
+    .ti-modal-b :where(table){width:100%;border-collapse:collapse;margin:.6rem 0}
+    .ti-modal-b :where(th,td){border:1px solid #e2e8f0;padding:.4rem .6rem;text-align:left}
+    .ti-modal-b :where(th){background:#f8fafc}
+    .ti-modal-f{display:flex;justify-content:flex-end;padding:.8rem 1.4rem 1.1rem;border-top:1px solid rgba(0,0,0,.05);background:#fafafa;gap:.6rem}
+
+    /* Announcement modal (re-uses ti-modal) */
+    .ti-ann-badge{display:inline-block;font-size:.72rem;font-weight:600;color:#0284c7;background:#eff6ff;border:1px solid #dbeafe;padding:.2rem .55rem;border-radius:999px;margin-bottom:.5rem}
+
+    /* Register-page consent row */
+    .ti-consent{display:flex;align-items:flex-start;gap:.55rem;margin:1rem 0 .4rem;padding:.65rem .8rem;background:#fafafa;border:1px solid rgba(0,0,0,.06);border-radius:10px;font-size:.85rem;line-height:1.55;color:#64748b}
+    .ti-consent input[type=checkbox]{margin-top:.25rem;flex:0 0 auto;width:16px;height:16px;accent-color:#0284c7;cursor:pointer}
+    .ti-consent label{cursor:pointer;user-select:none}
+    .ti-consent a{color:#0284c7;text-decoration:underline;cursor:pointer}
+  </style>
 </head>
 <body>
 <nav class="nav">
@@ -56,32 +103,19 @@
   </div>
 </div>
 
-{{/* ── 全站公告（圆角白色弹窗，支持富文本） ── */}}
-{{if or .AnnZH .AnnEN}}
-<div class="ann-modal-overlay" id="ann-modal-overlay" data-ann-key="{{.AnnHash}}" role="dialog" aria-modal="true" aria-labelledby="ann-modal-title">
-  <div class="ann-modal" role="document">
-    <button class="ann-modal-close" type="button" aria-label="关闭公告" data-ann-close>&times;</button>
-    <div class="ann-modal-header">
-      <span class="ann-modal-badge">📢 站点公告</span>
-      <h2 class="ann-modal-title" id="ann-modal-title">来自 {{.SiteName}}</h2>
-    </div>
-    <div class="ann-modal-body">
-      {{if .AnnZH}}<div class="ann-modal-rich">{{safeHTML .AnnZH}}</div>{{end}}
-      {{if .AnnEN}}<div class="ann-modal-rich" style="margin-top:.8rem;color:var(--text2);font-size:.9rem">{{safeHTML .AnnEN}}</div>{{end}}
-    </div>
-    <div class="ann-modal-actions">
-      <button class="btn btn-primary" type="button" data-ann-close>我知道了</button>
-    </div>
-  </div>
-</div>
+<div id="toast-stack" aria-live="polite" aria-atomic="true"></div>
+
+{{/* 隐藏的服务端 flash 桥接节点（由内联脚本读取，转换为 toast，并清理 URL 参数） */}}
+{{if .Flash}}
+<div id="server-flash" data-is-error="{{if .IsError}}1{{else}}0{{end}}" data-msg="{{.Flash}}" style="display:none"></div>
 {{end}}
 
-{{/* ── 全站 Toast 容器（动态成功/失败提示） ── */}}
-<div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
-
-{{/* ── 在页面顶部把任何服务端 ?flash= 转成 Toast，并保留 .Flash 隐藏 div 给老逻辑 ── */}}
-{{if .Flash}}
-<div id="server-flash" data-is-error="{{if .IsError}}1{{else}}0{{end}}" data-msg="{{.Flash}}" hidden></div>
+{{/* 全站公告富文本，作为隐藏 template 注入到 modal */}}
+{{if or .AnnZH .AnnEN}}
+<template id="ann-content" data-key="{{.AnnHash}}" data-title="来自 {{.SiteName}}">
+  {{if .AnnZH}}<div>{{safeHTML .AnnZH}}</div>{{end}}
+  {{if .AnnEN}}<div style="margin-top:.8rem;color:#64748b;font-size:.9rem">{{safeHTML .AnnEN}}</div>{{end}}
+</template>
 {{end}}
 
 {{block "content" .}}{{end}}
@@ -94,7 +128,106 @@
     <a href="/privacy" style="color:#666">隐私政策</a>
   </p>
 </footer>
-<script src="/static/js/ui.js"></script>
+
+{{/* ── 关键 UI 内联脚本（toast / 文档弹窗 / 公告弹窗 / flash 桥接） ── */}}
+<script>
+(function(){
+  function ensureStack(){
+    var s=document.getElementById('toast-stack');
+    if(!s){s=document.createElement('div');s.id='toast-stack';document.body.appendChild(s);}
+    return s;
+  }
+  function toast(msg,type,opts){
+    if(!msg) return;
+    type=type||'success'; opts=opts||{};
+    var stack=ensureStack();
+    var t=document.createElement('div');
+    t.className='ti-toast '+type;
+    var ic=type==='success'?'✓':type==='error'?'!':'i';
+    t.innerHTML='<span class="ti-toast-icon"></span><span class="ti-toast-msg"></span><button type="button" class="ti-toast-close" aria-label="关闭">&times;</button>';
+    t.querySelector('.ti-toast-icon').textContent=ic;
+    t.querySelector('.ti-toast-msg').textContent=msg;
+    var close=function(){t.classList.remove('in');t.classList.add('out');setTimeout(function(){if(t.parentNode) t.parentNode.removeChild(t);},280);};
+    t.querySelector('.ti-toast-close').addEventListener('click',close);
+    stack.appendChild(t);
+    requestAnimationFrame(function(){t.classList.add('in');});
+    var ttl=typeof opts.duration==='number'?opts.duration:(type==='error'?4500:2800);
+    if(ttl>0) setTimeout(close,ttl);
+  }
+  window.toast=toast;
+
+  function openDocModal(title,html,opts){
+    opts=opts||{};
+    var ov=document.createElement('div');
+    ov.className='ti-modal-ov';
+    ov.setAttribute('role','dialog'); ov.setAttribute('aria-modal','true');
+    ov.innerHTML=
+      '<div class="ti-modal" role="document">'+
+        '<div class="ti-modal-h"><h3 class="ti-modal-t"></h3>'+
+          '<button type="button" class="ti-modal-x" aria-label="关闭">&times;</button></div>'+
+        '<div class="ti-modal-b"></div>'+
+        '<div class="ti-modal-f"><button type="button" class="btn btn-primary ti-modal-ok"></button></div>'+
+      '</div>';
+    ov.querySelector('.ti-modal-t').textContent=title||'内容';
+    var body=ov.querySelector('.ti-modal-b');
+    if(html instanceof Node){ body.appendChild(html); }
+    else { body.innerHTML=html||'<p style="color:#888">暂无内容</p>'; }
+    ov.querySelector('.ti-modal-ok').textContent=opts.okText||'我已阅读';
+    var close=function(){
+      ov.classList.remove('in'); ov.classList.add('out');
+      setTimeout(function(){if(ov.parentNode) ov.parentNode.removeChild(ov);},220);
+      if(typeof opts.onClose==='function') opts.onClose();
+    };
+    ov.addEventListener('click',function(e){if(e.target===ov) close();});
+    ov.querySelector('.ti-modal-x').addEventListener('click',close);
+    ov.querySelector('.ti-modal-ok').addEventListener('click',close);
+    var esc=function(e){if(e.key==='Escape'){close();document.removeEventListener('keydown',esc);}};
+    document.addEventListener('keydown',esc);
+    document.body.appendChild(ov);
+    requestAnimationFrame(function(){ov.classList.add('in');});
+    return ov;
+  }
+  window.openDocModal=openDocModal;
+
+  // ── Bridge server flash → toast ──
+  function bridgeFlash(){
+    var el=document.getElementById('server-flash');
+    if(el && el.dataset.msg){
+      toast(el.dataset.msg, el.dataset.isError==='1'?'error':'success');
+    }
+    try{
+      var u=new URL(window.location.href);
+      if(u.searchParams.has('flash')){
+        u.searchParams.delete('flash');
+        var s=u.pathname+(u.search?u.search:'')+u.hash;
+        window.history.replaceState({},'',s);
+      }
+    }catch(e){}
+  }
+
+  // ── Announcement modal: render once per revision ──
+  function showAnn(){
+    var tpl=document.getElementById('ann-content');
+    if(!tpl) return;
+    var key=tpl.getAttribute('data-key')||'site-ann';
+    try{ if(localStorage.getItem('ann-dismiss:'+key)==='1') return; }catch(e){}
+    var clone=tpl.content.cloneNode(true);
+    var wrap=document.createElement('div');
+    wrap.appendChild(document.createElement('span')).className='ti-ann-badge';
+    wrap.firstChild.textContent='📢 站点公告';
+    wrap.appendChild(clone);
+    openDocModal(tpl.getAttribute('data-title')||'公告', wrap, {
+      okText:'我知道了',
+      onClose:function(){ try{ localStorage.setItem('ann-dismiss:'+key,'1'); }catch(e){} }
+    });
+  }
+
+  function init(){ bridgeFlash(); showAnn(); }
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',init); }
+  else { init(); }
+})();
+</script>
+
 <script src="/static/js/passkey.js"></script>
 <script src="/static/js/profile.js"></script>
 </body>

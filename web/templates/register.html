@@ -39,13 +39,13 @@
         <input class="form-control" type="password" name="confirm" placeholder="再次输入密码" required>
       </div>
 
-      <div class="consent-row">
+      <div class="ti-consent">
         <input type="checkbox" id="agree-tos" name="agree_tos" value="1" required>
         <label for="agree-tos">
           我已阅读并同意
-          <a href="/tos" data-doc-modal data-doc-title="服务条款">《服务条款》</a>
+          <a href="/tos?raw=1" data-legal-doc="服务条款">《服务条款》</a>
           与
-          <a href="/privacy" data-doc-modal data-doc-title="隐私政策">《隐私政策》</a>
+          <a href="/privacy?raw=1" data-legal-doc="隐私政策">《隐私政策》</a>
         </label>
       </div>
 
@@ -55,4 +55,41 @@
     <p class="auth-footer-link">已有账号？<a href="/login{{with .Data}}{{if .OIDCChallenge}}?oidc_challenge={{.OIDCChallenge | urlEncode}}{{else if .Next}}?next={{.Next | urlEncode}}{{end}}{{end}}">去登录</a></p>
   </div>
 </div>
+
+<script>
+(function(){
+  // Open ToS / Privacy in an inline animated modal — robust to any document
+  // structure: we fetch the raw HTML fragment and place it inside our modal
+  // container. The modal itself is created by base.html's openDocModal which
+  // appends to <body> with z-index:99998 + position:fixed + flex centering.
+  function wire(){
+    document.querySelectorAll('[data-legal-doc]').forEach(function(a){
+      a.addEventListener('click',function(e){
+        e.preventDefault();
+        var url=a.getAttribute('href');
+        var title=a.getAttribute('data-legal-doc')||'文档';
+        // Show an immediate placeholder modal so the user sees an instant
+        // response, then load the content into it.
+        var ov=window.openDocModal(title,'<p style="color:#888">加载中…</p>');
+        var body=ov.querySelector('.ti-modal-b');
+        fetch(url,{credentials:'same-origin',headers:{'Accept':'text/html'}})
+          .then(function(r){return r.text();})
+          .then(function(html){
+            // Strip <!doctype>/<html>/<head>/<body> wrappers if the server
+            // happened to return a full document. We render the result inside
+            // a sandboxed wrapper so its CSS cannot affect the host page.
+            var doc=new DOMParser().parseFromString(html,'text/html');
+            var inner=doc.body? doc.body.innerHTML : html;
+            body.innerHTML=inner;
+          })
+          .catch(function(){
+            body.innerHTML='<p style="color:#dc2626">加载失败，请稍后再试，或直接 <a href="'+url.replace('?raw=1','')+'" target="_blank" rel="noopener">在新页面打开</a>。</p>';
+          });
+      });
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wire);}
+  else{wire();}
+})();
+</script>
 {{end}}
