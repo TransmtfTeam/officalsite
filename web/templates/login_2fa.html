@@ -8,10 +8,6 @@
     </div>
     <h2 class="auth-title">两步验证</h2>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     {{with .Data}}
     <p style="font-size:.9rem;color:var(--text2);margin-bottom:1rem;text-align:center">
       账号：<strong>{{index . "Email"}}</strong>

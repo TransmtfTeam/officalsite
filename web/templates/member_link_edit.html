@@ -22,10 +22,6 @@
       <a href="/member/links" style="color:var(--text2);font-size:.9rem">← 友情链接</a>
     </div>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     <h1 class="panel-title">编辑友情链接</h1>
 
     {{with .Data}}

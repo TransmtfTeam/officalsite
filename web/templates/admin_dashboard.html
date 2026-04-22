@@ -27,10 +27,6 @@
     <h1 class="panel-title">管理面板</h1>
     <p class="panel-sub">查看平台核心指标并快速进入管理模块。</p>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     {{with .Data}}
     <div class="stats-row">
       <div class="stat-card">

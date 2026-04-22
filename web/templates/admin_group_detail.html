@@ -37,10 +37,6 @@
       <a href="/admin/groups" style="color:var(--text2);font-size:.9rem">← 分组列表</a>
     </div>
 
-    {{if $.Flash}}
-    <div class="flash {{if $.IsError}}flash-err{{else}}flash-ok{{end}}">{{$.Flash}}</div>
-    {{end}}
-
     <h1 class="panel-title">{{if $group.Label}}{{$group.Label}}{{else}}{{$group.Name}}{{end}}</h1>
     <p class="panel-sub">分组标识：<code class="mono">{{$group.Name}}</code></p>
 

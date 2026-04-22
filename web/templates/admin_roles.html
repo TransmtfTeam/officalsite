@@ -29,10 +29,6 @@
       三个内置角色（user / member / admin）不可删除。可以在此创建自定义角色并分配站点权限。
     </p>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     {{with .Data}}
     {{$perms := index . "Permissions"}}
 

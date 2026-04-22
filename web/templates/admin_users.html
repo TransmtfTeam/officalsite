@@ -48,10 +48,6 @@
       <button class="btn btn-primary" type="button" data-modal-open="user-create-modal">+ 新增用户</button>
     </div>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}" style="margin-top:1rem">{{.Flash}}</div>
-    {{end}}
-
     <div class="card" style="margin-top:1rem">
       <form method="GET" action="/admin/users" class="filters-form" style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end">
         <div class="form-group" style="margin:0;flex:1;min-width:220px">

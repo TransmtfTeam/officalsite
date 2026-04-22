@@ -28,10 +28,6 @@
       <a href="/admin/providers" style="color:var(--text2);font-size:.9rem">返回登录方式列表</a>
     </div>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     {{with .Data}}
     <h1 class="panel-title">
       {{$svg := providerIconSVG .Slug .Icon}}

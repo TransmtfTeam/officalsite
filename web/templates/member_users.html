@@ -21,10 +21,6 @@
     <h1 class="panel-title">用户列表</h1>
     <p class="panel-sub">查看所有用户信息，可验证邮箱和启停账户。</p>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     <div class="card">
       <table class="data-table">
         <thead>

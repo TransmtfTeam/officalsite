@@ -34,10 +34,6 @@
     <h1 class="panel-title">新建应用</h1>
     <p class="panel-sub">注册一个新的授权登录应用。</p>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     <div class="form-panel">
       <form method="POST" action="/admin/clients">
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">

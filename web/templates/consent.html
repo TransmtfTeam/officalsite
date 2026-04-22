@@ -8,10 +8,6 @@
     </div>
     <h2 class="auth-title">授权确认</h2>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     {{with .Data}}
     <p style="font-size:.92rem;color:#a0a0b8;margin-bottom:1rem;text-align:center">
       应用 <span class="consent-client">{{.Client.Name}}</span> 正在请求访问你的账号信息。

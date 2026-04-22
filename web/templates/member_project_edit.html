@@ -20,10 +20,6 @@
     <h1 class="panel-title">编辑项目</h1>
     <p class="panel-sub">修改项目信息并保存。</p>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     {{with .Data}}
     <form class="form-panel" method="POST" action="/member/projects/{{.ID}}/edit">
       <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">

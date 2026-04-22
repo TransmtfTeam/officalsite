@@ -8,15 +8,12 @@
     </div>
     <h2 class="auth-title">欢迎登录</h2>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">
-      {{.Flash}}
-      {{with .Data}}{{if .UnverifiedEmail}}
-      <br><a href="/verify-email?email={{.UnverifiedEmail | urlEncode}}"
-        style="font-size:.85rem;text-decoration:underline">重新发送验证邮件</a>
-      {{end}}{{end}}
+    {{with .Data}}{{if .UnverifiedEmail}}
+    <div class="flash flash-err" style="margin-bottom:1rem">
+      邮箱未验证。<a href="/verify-email?email={{.UnverifiedEmail | urlEncode}}"
+        style="text-decoration:underline">重新发送验证邮件</a>
     </div>
-    {{end}}
+    {{end}}{{end}}
 
     {{with .Data}}
     {{if .OIDCChallenge}}

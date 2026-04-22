@@ -21,10 +21,6 @@
     <h1 class="panel-title">项目管理</h1>
     <p class="panel-sub">创建和维护首页展示的团队项目。</p>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     <div class="form-panel">
       <p class="form-panel-title">新增项目</p>
       <form method="POST" action="/member/projects">

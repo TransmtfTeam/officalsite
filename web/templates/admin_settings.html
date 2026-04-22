@@ -27,10 +27,6 @@
     <h1 class="panel-title">站点设置</h1>
     <p class="panel-sub">维护站点名称、公告和法律文本。</p>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     {{/* ── 图标上传（独立表单，不能嵌套） ── */}}
     <div class="form-panel" style="margin-bottom:1.2rem">
       <p class="form-panel-title">站点图标</p>

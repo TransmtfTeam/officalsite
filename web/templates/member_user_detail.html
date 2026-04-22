@@ -26,10 +26,6 @@
       <a href="/member/users" style="color:var(--text2);font-size:.9rem">← 用户列表</a>
     </div>
 
-    {{if $.Flash}}
-    <div class="flash {{if $.IsError}}flash-err{{else}}flash-ok{{end}}">{{$.Flash}}</div>
-    {{end}}
-
     <h1 class="panel-title">{{$user.DisplayName}}</h1>
 
     <div class="detail-section">

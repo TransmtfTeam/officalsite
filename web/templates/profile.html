@@ -5,9 +5,6 @@
   <h1 style="font-size:1.6rem;font-weight:800;margin-bottom:.3rem">个人资料</h1>
   <p style="color:var(--text2);margin-bottom:1.5rem">管理账户信息与安全设置</p>
 
-  {{if .Flash}}
-  <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-  {{end}}
   {{with .Data}}{{if index . "PendingSecret"}}<div id="totp-pending-marker" style="display:none"></div>{{end}}{{end}}
 
   {{with .CurrentUser}}

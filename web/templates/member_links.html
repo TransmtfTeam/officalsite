@@ -21,10 +21,6 @@
     <h1 class="panel-title">友情链接管理</h1>
     <p class="panel-sub">添加在首页底部展示的友情链接，支持图标。</p>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     <div class="form-panel">
       <p class="form-panel-title">新增链接</p>
       <form method="POST" action="/member/links">

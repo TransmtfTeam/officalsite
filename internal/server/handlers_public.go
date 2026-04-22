@@ -536,15 +536,37 @@ func (h *Handler) ProfileIdentityUnbind(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) TOSPage(w http.ResponseWriter, r *http.Request) {
+	content := h.st.GetSetting(r.Context(), "tos_content")
+	if r.URL.Query().Get("raw") == "1" {
+		writeRawDoc(w, content, "暂无服务条款内容")
+		return
+	}
 	d := h.pageData(r, "服务条款")
-	d.Data = h.st.GetSetting(r.Context(), "tos_content")
+	d.Data = content
 	h.render(w, "tos", d)
 }
 
 func (h *Handler) PrivacyPage(w http.ResponseWriter, r *http.Request) {
+	content := h.st.GetSetting(r.Context(), "privacy_content")
+	if r.URL.Query().Get("raw") == "1" {
+		writeRawDoc(w, content, "暂无隐私政策内容")
+		return
+	}
 	d := h.pageData(r, "隐私政策")
 	d.Data = h.st.GetSetting(r.Context(), "privacy_content")
 	h.render(w, "privacy", d)
+}
+
+// writeRawDoc writes a bare HTML fragment used by the in-page modal that
+// previews ToS / Privacy on the registration page.
+func writeRawDoc(w http.ResponseWriter, content, emptyMsg string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if strings.TrimSpace(content) == "" {
+		_, _ = w.Write([]byte(`<p style="color:#666">` + emptyMsg + `，请管理员在站点设置中维护。</p>`))
+		return
+	}
+	_, _ = w.Write([]byte(content))
 }
 
 // Profile2FAQR serves the pending TOTP secret as a QR code PNG.

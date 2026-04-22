@@ -45,10 +45,6 @@
     <h1 class="panel-title">审计日志</h1>
     <p class="panel-sub">共 {{$total}} 条记录，保留 90 天，{{$rollDays}} 天内的操作可回滚。</p>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     <div class="card">
       <form method="GET" action="/admin/audit-logs" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end">
         <div class="form-group" style="margin:0;flex:1;min-width:200px">

@@ -104,18 +104,14 @@
   window.openDocModal = buildModal;
 
   // Fetch a document (HTML fragment) from the server and show it in a modal.
-  // Used for /tos and /privacy from the registration page.
+  // Used for /tos and /privacy from the registration page. The server supports
+  // ?raw=1 to return a bare HTML fragment without the chrome.
   function openRemoteDoc(url, title) {
-    fetch(url, { headers: { 'Accept': 'text/html' }, credentials: 'same-origin' })
+    var sep = url.indexOf('?') >= 0 ? '&' : '?';
+    var rawURL = url + sep + 'raw=1';
+    fetch(rawURL, { headers: { 'Accept': 'text/html' }, credentials: 'same-origin' })
       .then(function (r) { return r.text(); })
-      .then(function (html) {
-        // Parse the full HTML response and extract the legal-content card.
-        var doc = new DOMParser().parseFromString(html, 'text/html');
-        // Find the first .card *inside* the page content (skip nav/header).
-        var card = doc.querySelector('.profile-page .card') || doc.querySelector('.card');
-        var body = card ? card.innerHTML : (doc.body ? doc.body.innerHTML : html);
-        buildModal(title, body);
-      })
+      .then(function (html) { buildModal(title, html); })
       .catch(function () {
         buildModal(title, '<p style="color:#dc2626">加载失败，请稍后再试，或直接访问 <a href="' + url + '" target="_blank" rel="noopener">独立页面</a>。</p>');
       });

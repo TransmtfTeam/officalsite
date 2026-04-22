@@ -45,10 +45,6 @@
       <a href="/admin/clients" style="color:var(--text2);font-size:.9rem">← 应用列表</a>
     </div>
 
-    {{if $.Flash}}
-    <div class="flash {{if $.IsError}}flash-err{{else}}flash-ok{{end}}">{{$.Flash}}</div>
-    {{end}}
-
     <h1 class="panel-title">{{$client.Name}}</h1>
 
     {{/* ── 基础信息 ── */}}

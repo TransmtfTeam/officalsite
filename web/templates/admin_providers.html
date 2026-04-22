@@ -27,10 +27,6 @@
     <h1 class="panel-title">外部登录方式</h1>
     <p class="panel-sub">为站点配置 OIDC / OAuth2 登录提供商。</p>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     <div class="form-panel">
       <p class="form-panel-title">添加登录方式</p>
       <p style="font-size:.82rem;color:#888;margin-bottom:1rem">

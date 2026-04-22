@@ -31,10 +31,6 @@
     <h1 class="panel-title">分组管理</h1>
     <p class="panel-sub">创建自定义分组并管理成员。系统内置分组会随角色自动维护，无需手动管理。</p>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     {{/* ── 内置分组说明 ── */}}
     <div class="detail-section" style="margin-bottom:1.5rem">
       <div class="detail-section-title">内置分组（系统自动）</div>

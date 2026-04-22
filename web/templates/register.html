@@ -8,10 +8,6 @@
     </div>
     <h2 class="auth-title">创建账号</h2>
 
-    {{if .Flash}}
-    <div class="flash {{if .IsError}}flash-err{{else}}flash-ok{{end}}">{{.Flash}}</div>
-    {{end}}
-
     {{with .Data}}
     {{if .OIDCChallenge}}
     <div class="flash flash-ok" style="margin-bottom:1rem">
