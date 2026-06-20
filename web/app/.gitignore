@@ -1,0 +1,9 @@
+node_modules
+*.local
+.DS_Store
+# The built SPA (dist/) IS committed so the Go binary embeds a working frontend
+# via go:embed without requiring a Node build at deploy time. The Docker build
+# regenerates it. Run `pnpm build` after changing src/ and commit the result.
+
+# TypeScript incremental build cache
+*.tsbuildinfo

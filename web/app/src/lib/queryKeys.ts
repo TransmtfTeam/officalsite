@@ -1,0 +1,31 @@
+export const qk = {
+  me: ['me'] as const,
+  home: ['home'] as const,
+  tos: ['tos'] as const,
+  privacy: ['privacy'] as const,
+  loginProviders: ['login', 'providers'] as const,
+  oidcChallenge: (c: string) => ['oidc-challenge', c] as const,
+
+  profile: ['profile'] as const,
+
+  dashboard: ['admin', 'dashboard'] as const,
+  users: (filters: unknown) => ['admin', 'users', filters] as const,
+  user: (id: string) => ['admin', 'users', id] as const,
+  clients: ['admin', 'clients'] as const,
+  client: (id: string) => ['admin', 'clients', id] as const,
+  providers: ['admin', 'providers'] as const,
+  provider: (id: string) => ['admin', 'providers', id] as const,
+  roles: ['admin', 'roles'] as const,
+  groups: ['admin', 'groups'] as const,
+  group: (id: string) => ['admin', 'groups', id] as const,
+  announcements: ['admin', 'announcements'] as const,
+  settings: ['admin', 'settings'] as const,
+  auditLogs: (filters: unknown) => ['admin', 'audit', filters] as const,
+
+  memberProjects: ['member', 'projects'] as const,
+  memberProject: (id: string) => ['member', 'projects', id] as const,
+  memberLinks: ['member', 'links'] as const,
+  memberLink: (id: string) => ['member', 'links', id] as const,
+  memberUsers: ['member', 'users'] as const,
+  memberUser: (id: string) => ['member', 'users', id] as const,
+}
