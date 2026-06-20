@@ -24,6 +24,9 @@ var templateFS embed.FS
 //go:embed web/static
 var staticFS embed.FS
 
+//go:embed all:web/app/dist
+var appDistFS embed.FS
+
 func main() {
 	cfg := config.Load()
 	if err := cfg.Validate(); err != nil {
@@ -61,7 +64,12 @@ func main() {
 		log.Fatalf("parse templates: %v", err)
 	}
 
-	handler := server.New(cfg, st, keys, tmpls, staticHandler())
+	appDist, err := fs.Sub(appDistFS, "web/app/dist")
+	if err != nil {
+		log.Fatalf("sub app dist: %v", err)
+	}
+
+	handler := server.New(cfg, st, keys, tmpls, staticHandler(), appDist)
 
 	port := os.Getenv("PORT")
 	if port == "" {

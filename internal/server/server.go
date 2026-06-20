@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
@@ -30,10 +31,11 @@ const (
 )
 
 type Handler struct {
-	cfg   *config.Config
-	st    *store.Store
-	keys  *crypto.Keys
-	tmpls map[string]*template.Template
+	cfg     *config.Config
+	st      *store.Store
+	keys    *crypto.Keys
+	tmpls   map[string]*template.Template
+	appDist fs.FS
 }
 
 const cookieName = "tmtf_session"
@@ -167,6 +169,10 @@ func (h *Handler) ensureCSRFCookie(w http.ResponseWriter, r *http.Request) strin
 func (h *Handler) verifyCSRFToken(r *http.Request) bool {
 	cookieTok := h.csrfTokenFromRequest(r)
 	formTok := r.FormValue("csrf_token")
+	if formTok == "" {
+		// SPA mutations submit the token via header (the cookie is HttpOnly).
+		formTok = r.Header.Get("X-CSRF-Token")
+	}
 	return h.verifyCSRFValue(cookieTok, formTok)
 }
 
@@ -417,8 +423,8 @@ func bearerToken(r *http.Request) string {
 	return ""
 }
 
-func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[string]*template.Template, static http.Handler) http.Handler {
-	h := &Handler{cfg: cfg, st: st, keys: keys, tmpls: tmpls}
+func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[string]*template.Template, static http.Handler, appDist fs.FS) http.Handler {
+	h := &Handler{cfg: cfg, st: st, keys: keys, tmpls: tmpls, appDist: appDist}
 
 	// Background audit-log cleanup (90 day retention).
 	h.startAuditCleanup()
@@ -430,62 +436,49 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	// Uploaded project images
 	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads"))))
 
-	// Public pages
-	mux.HandleFunc("GET /", h.Home)
+	// ── React SPA assets + JSON API base ──
+	// Hashed, immutable Vite build assets.
+	mux.Handle("GET /app/assets/", h.spaAssetsHandler())
+	// SPA bootstrap: current user, CSRF token, settings, capabilities.
+	mux.HandleFunc("GET /api/v1/me", h.APIMe)
+	// JSON API surface consumed by the React SPA.
+	registerAuthAPIRoutes(mux, h)
+	registerProfileAPIRoutes(mux, h)
+	registerMemberAPIRoutes(mux, h)
+	registerAdminUsersAPIRoutes(mux, h)
+	registerAdminClientsAPIRoutes(mux, h)
+	registerAdminMiscAPIRoutes(mux, h)
+	registerOAuthAPIRoutes(mux, h)
+	// JSON 404 for any unknown /api/v1 path (scoped so legacy /api/* endpoints win).
+	mux.Handle("/api/v1/", http.HandlerFunc(apiNotFound))
+
+	// favicon (served from site settings)
 	mux.HandleFunc("GET /favicon.png", h.SiteFaviconFile)
 	mux.HandleFunc("GET /favicon.jpg", h.SiteFaviconFile)
 	mux.HandleFunc("GET /favicon.ico", h.AdminSiteIcon)
-	mux.HandleFunc("GET /login", h.LoginPage)
-	mux.HandleFunc("POST /login", h.LoginPost)
-	mux.HandleFunc("GET /login/2fa", h.Login2FAPage)
-	mux.HandleFunc("POST /login/2fa", h.Login2FAPost)
-	mux.HandleFunc("GET /logout", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/", http.StatusFound) })
-	mux.HandleFunc("POST /logout", h.Logout)
-	mux.HandleFunc("GET /register", h.RegisterPage)
-	mux.HandleFunc("POST /register", h.RegisterPost)
-	mux.HandleFunc("GET /forgot-password", h.ForgotPasswordPage)
-	mux.HandleFunc("POST /forgot-password", h.ForgotPasswordPost)
-	mux.HandleFunc("GET /reset-password", h.ResetPasswordPage)
-	mux.HandleFunc("POST /reset-password", h.ResetPasswordPost)
-	mux.HandleFunc("GET /tos", h.TOSPage)
-	mux.HandleFunc("GET /privacy", h.PrivacyPage)
 
-	// OIDC RP - external provider login
+	// OIDC RP - external provider login (browser navigations; the callback sets the
+	// session cookie and 302s into the SPA). first-login is a React route that reads
+	// /api/v1/login/oidc-challenge, so no server-rendered first-login route is needed.
 	mux.HandleFunc("GET /auth/oidc/{slug}", h.OIDCProviderLogin)
 	mux.HandleFunc("GET /auth/oidc/{slug}/callback", h.OIDCProviderCallback)
-	mux.HandleFunc("GET /auth/oidc/first-login", h.OIDCFirstLoginPage)
-	mux.HandleFunc("POST /auth/oidc/first-login", h.OIDCFirstLoginPost)
 
 	// OIDC discovery
 	mux.HandleFunc("GET /.well-known/openid-configuration", h.Discovery)
 	mux.HandleFunc("GET /.well-known/jwks.json", h.JWKS)
 
-	// OIDC protocol (this server as provider)
-	mux.HandleFunc("GET /oauth2/authorize", h.requireLogin(h.Authorize))
-	mux.HandleFunc("POST /oauth2/authorize", h.requireLogin(h.AuthorizeConfirm))
+	// OIDC protocol (this server as provider). GET /oauth2/authorize falls through to
+	// the SPA shell; consent runs in React via the /api/v1/oauth2/authorize endpoints.
 	mux.HandleFunc("POST /oauth2/token", h.Token)
 	mux.HandleFunc("GET /oauth2/userinfo", h.UserInfo)
 	mux.HandleFunc("POST /oauth2/userinfo", h.UserInfo)
 	mux.HandleFunc("POST /oauth2/revoke", h.Revoke)
 	mux.HandleFunc("POST /oauth2/introspect", h.Introspect)
 
-	// Authenticated user
-	mux.HandleFunc("GET /profile", h.requireLogin(h.Profile))
-	mux.HandleFunc("POST /profile", h.requireLogin(h.ProfilePost))
-	mux.HandleFunc("POST /profile/identities/{slug}/bind", h.requireLogin(h.ProfileIdentityBind))
-	mux.HandleFunc("POST /profile/identities/{slug}/unbind", h.requireLogin(h.ProfileIdentityUnbind))
-	mux.HandleFunc("GET /profile/change-password", h.requireLogin(h.ProfileForceChangePage))
-	mux.HandleFunc("POST /profile/change-password", h.requireLogin(h.ProfileForceChangePost))
-	mux.HandleFunc("POST /profile/delete-password", h.requireLogin(h.ProfileDeletePassword))
-	mux.HandleFunc("POST /profile/2fa/start", h.requireLogin(h.Profile2FAStart))
-	mux.HandleFunc("POST /profile/2fa/enable", h.requireLogin(h.Profile2FAEnable))
-	mux.HandleFunc("POST /profile/2fa/disable", h.requireLogin(h.Profile2FADisable))
-	// TOTP QR code image
+	// SPA-consumed endpoints kept at their original paths (binary QR + WebAuthn).
 	mux.HandleFunc("GET /profile/2fa/qr", h.requireLogin(h.Profile2FAQR))
-	// Passkey registration
 	mux.HandleFunc("GET /profile/passkey/register/begin", h.requireLogin(h.PasskeyRegisterBegin))
 	mux.HandleFunc("POST /profile/passkey/register/finish", h.requireLogin(h.PasskeyRegisterFinish))
-	mux.HandleFunc("POST /profile/passkey/{id}/delete", h.requireLogin(h.PasskeyDeleteCredential))
 	// Passkey login (2FA step) - under /login/2fa/ so the 2FA challenge cookie (path=/login/2fa) is included
 	mux.HandleFunc("GET /login/2fa/passkey/begin", h.PasskeyLoginBegin)
 	mux.HandleFunc("POST /login/2fa/passkey/finish", h.PasskeyLoginFinish)
@@ -493,90 +486,19 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	mux.HandleFunc("GET /login/passkey/begin", h.PasskeyPrimaryLoginBegin)
 	mux.HandleFunc("POST /login/passkey/finish", h.PasskeyPrimaryLoginFinish)
 
-	// Member panel
-	mux.HandleFunc("GET /member/projects", h.requirePermission("manage_projects")(h.MemberProjects))
-	mux.HandleFunc("POST /member/projects", h.requirePermission("manage_projects")(h.MemberProjectCreate))
-	mux.HandleFunc("GET /member/projects/{id}/edit", h.requirePermission("manage_projects")(h.MemberProjectEdit))
-	mux.HandleFunc("POST /member/projects/{id}/edit", h.requirePermission("manage_projects")(h.MemberProjectUpdate))
-	mux.HandleFunc("POST /member/projects/{id}/delete", h.requirePermission("manage_projects")(h.MemberProjectDelete))
-	mux.HandleFunc("POST /member/projects/{id}/upload-image", h.requirePermission("manage_projects")(h.MemberProjectUploadImage))
-	mux.HandleFunc("GET /member/links", h.requirePermission("manage_projects")(h.MemberLinks))
-	mux.HandleFunc("POST /member/links", h.requirePermission("manage_projects")(h.MemberLinkCreate))
-	mux.HandleFunc("GET /member/links/{id}/edit", h.requirePermission("manage_projects")(h.MemberLinkEdit))
-	mux.HandleFunc("POST /member/links/{id}/edit", h.requirePermission("manage_projects")(h.MemberLinkUpdate))
-	mux.HandleFunc("POST /member/links/{id}/delete", h.requirePermission("manage_projects")(h.MemberLinkDelete))
-	mux.HandleFunc("POST /member/links/{id}/upload-icon", h.requirePermission("manage_projects")(h.MemberLinkUploadIcon))
-	// Member user management (read + limited write, no sensitive data)
-	mux.HandleFunc("GET /member/users", h.requirePermission("view_users")(h.MemberUsers))
-	mux.HandleFunc("GET /member/users/{id}", h.requirePermission("view_users")(h.MemberUserDetail))
-	mux.HandleFunc("POST /member/users/{id}/verify-email", h.requirePermission("moderate_users")(h.MemberUserVerifyEmail))
-	mux.HandleFunc("POST /member/users/{id}/toggle-status", h.requirePermission("moderate_users")(h.MemberUserToggleStatus))
+	// All admin / member / profile / auth pages and their mutations are served by the
+	// React SPA (human routes -> SPA shell below; data/mutations -> /api/v1/...).
 
-	// Admin panel - user management (admin-only or manage_users permission)
-	mux.HandleFunc("GET /admin", h.requireAdmin(h.AdminDashboard))
-	mux.HandleFunc("GET /admin/users", h.requirePermission("manage_users")(h.AdminUsers))
-	mux.HandleFunc("POST /admin/users", h.requirePermission("manage_users")(h.AdminUserCreate))
-	mux.HandleFunc("POST /admin/users/{id}/update", h.requirePermission("manage_users")(h.AdminUserUpdate))
-	mux.HandleFunc("POST /admin/users/{id}/delete", h.requirePermission("manage_users")(h.AdminUserDelete))
-	mux.HandleFunc("GET /admin/users/{id}", h.requirePermission("manage_users")(h.AdminUserDetail))
-	mux.HandleFunc("POST /admin/users/{id}/reset-password", h.requirePermission("manage_users")(h.AdminUserResetPassword))
-	mux.HandleFunc("POST /admin/users/{id}/disable-2fa", h.requirePermission("manage_users")(h.AdminUserDisable2FA))
-	mux.HandleFunc("POST /admin/users/{id}/verify-email", h.requirePermission("manage_users")(h.AdminVerifyEmail))
-	mux.HandleFunc("POST /admin/users/{id}/unverify-email", h.requirePermission("manage_users")(h.AdminUnverifyEmail))
-	mux.HandleFunc("POST /admin/users/{id}/sessions/{sid}/revoke", h.requirePermission("manage_users")(h.AdminUserRevokeSession))
-	mux.HandleFunc("POST /admin/users/{id}/tokens/{tid}/revoke", h.requirePermission("manage_users")(h.AdminUserRevokeToken))
-	mux.HandleFunc("POST /admin/users/{id}/passkeys/{pkid}/delete", h.requirePermission("manage_users")(h.AdminDeletePasskey))
-
-	// Admin panel - client management (manage_clients permission)
-	mux.HandleFunc("GET /admin/clients", h.requirePermission("manage_clients")(h.AdminClients))
-	mux.HandleFunc("GET /admin/clients/new", h.requirePermission("manage_clients")(h.AdminClientCreatePage))
-	mux.HandleFunc("GET /admin/clients/created-result", h.requirePermission("manage_clients")(h.AdminClientCreatedResult))
-	mux.HandleFunc("POST /admin/clients", h.requirePermission("manage_clients")(h.AdminClientCreate))
-	mux.HandleFunc("GET /admin/clients/{id}", h.requirePermission("manage_clients")(h.AdminClientDetail))
-	mux.HandleFunc("GET /admin/clients/{id}/secret", h.requirePermission("manage_clients")(h.AdminClientSecretResult))
-	mux.HandleFunc("POST /admin/clients/{id}/update", h.requirePermission("manage_clients")(h.AdminClientUpdate))
-	mux.HandleFunc("POST /admin/clients/{id}/reset-secret", h.requirePermission("manage_clients")(h.AdminClientResetSecret))
-	mux.HandleFunc("POST /admin/clients/{id}/delete", h.requireAdmin(h.AdminClientDelete))
-	mux.HandleFunc("POST /admin/clients/{id}/set-managers", h.requireAdmin(h.AdminClientSetManagers))
-
-	// Admin panel - providers / roles / announcements / settings
-	mux.HandleFunc("GET /admin/providers", h.requirePermission("manage_providers")(h.AdminProviders))
-	mux.HandleFunc("POST /admin/providers", h.requirePermission("manage_providers")(h.AdminProviderCreate))
-	mux.HandleFunc("GET /admin/providers/{id}/edit", h.requirePermission("manage_providers")(h.AdminProviderEditPage))
-	mux.HandleFunc("POST /admin/providers/{id}/edit", h.requirePermission("manage_providers")(h.AdminProviderEdit))
-	mux.HandleFunc("POST /admin/providers/{id}/toggle", h.requirePermission("manage_providers")(h.AdminProviderToggle))
-	mux.HandleFunc("POST /admin/providers/{id}/delete", h.requirePermission("manage_providers")(h.AdminProviderDelete))
-	mux.HandleFunc("GET /admin/roles", h.requirePermission("manage_roles")(h.AdminRoles))
-	mux.HandleFunc("POST /admin/roles", h.requirePermission("manage_roles")(h.AdminRoleCreate))
-	mux.HandleFunc("POST /admin/roles/{name}/delete", h.requirePermission("manage_roles")(h.AdminRoleDelete))
-	mux.HandleFunc("GET /admin/announcements", h.requirePermission("manage_announcements")(h.AdminAnnouncements))
-	mux.HandleFunc("POST /admin/announcements/{clientid}/save", h.requirePermission("manage_announcements")(h.AdminAnnouncementSave))
-	mux.HandleFunc("GET /admin/settings", h.requirePermission("manage_settings")(h.AdminSettings))
-	mux.HandleFunc("POST /admin/settings", h.requirePermission("manage_settings")(h.AdminSettingsSave))
-	mux.HandleFunc("POST /admin/settings/upload-icon", h.requirePermission("manage_settings")(h.AdminSettingsUploadIcon))
-
-	// Admin panel - group management
-	mux.HandleFunc("GET /admin/groups", h.requirePermission("manage_groups")(h.AdminGroups))
-	mux.HandleFunc("POST /admin/groups", h.requirePermission("manage_groups")(h.AdminGroupCreate))
-	mux.HandleFunc("GET /admin/groups/{id}", h.requirePermission("manage_groups")(h.AdminGroupDetail))
-	mux.HandleFunc("POST /admin/groups/{id}/delete", h.requirePermission("manage_groups")(h.AdminGroupDelete))
-	mux.HandleFunc("POST /admin/groups/{id}/add-member", h.requirePermission("manage_groups")(h.AdminGroupAddMember))
-	mux.HandleFunc("POST /admin/groups/{id}/members/{uid}/remove", h.requirePermission("manage_groups")(h.AdminGroupRemoveMember))
-	mux.HandleFunc("POST /admin/users/{id}/groups/add", h.requirePermission("manage_groups")(h.AdminUserGroupAdd))
-	mux.HandleFunc("POST /admin/users/{id}/groups/{gid}/remove", h.requirePermission("manage_groups")(h.AdminUserGroupRemove))
-
-	// Admin panel - audit logs (admin-only)
-	mux.HandleFunc("GET /admin/audit-logs", h.requireAdmin(h.AdminAuditLogs))
-	mux.HandleFunc("POST /admin/audit-logs/{id}/rollback", h.requireAdmin(h.AdminAuditRollback))
-
-	// Public API
+	// Public API (legacy /api/* endpoints; not under /api/v1)
 	mux.HandleFunc("GET /api/announcement/{clientid}", h.AnnouncementAPI)
 	mux.HandleFunc("GET /api/site-icon", h.AdminSiteIcon)
 	mux.HandleFunc("GET /manifest.json", h.PWAManifest)
 
-	// Email verification
-	mux.HandleFunc("GET /verify-email", h.VerifyEmailPage)
-	mux.HandleFunc("POST /verify-email/resend", h.VerifyEmailResend)
+	// SPA shell: every human-facing GET not matched by a more specific pattern
+	// (API / protocol / assets / uploads / well-known) renders index.html and lets
+	// React route client-side. The emailed /verify-email?token= link lands here and
+	// the React page posts the token to /api/v1/verify-email.
+	mux.HandleFunc("GET /", h.serveSPAShell)
 
 	// Wrap with security middlewares.
 	return h.securityHeadersMiddleware(h.sessionMiddleware(mux))
