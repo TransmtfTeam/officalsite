@@ -300,6 +300,18 @@ func (h *Handler) APIAdminClientUpdate(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusBadRequest, "validation", "名称不能为空")
 		return
 	}
+	// Redirect URIs must pass the same validation as create — never persist an
+	// empty set or a non-https/non-localhost callback (open-redirect / token theft).
+	if len(uris) == 0 {
+		apiErr(w, http.StatusBadRequest, "validation", "至少需要一个回调地址")
+		return
+	}
+	for _, u := range uris {
+		if !isAllowedAbsoluteURL(u) {
+			apiErr(w, http.StatusBadRequest, "validation", "回调地址无效："+u)
+			return
+		}
+	}
 	// Validate custom groups exist to avoid silent misconfiguration.
 	groupSet := map[string]bool{}
 	groups, err := h.st.ListUserGroups(ctx)

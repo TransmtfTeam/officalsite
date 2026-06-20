@@ -183,8 +183,8 @@ func toAdminAuditDTO(al *store.AuditLog) *adminAuditDTO {
 		EntityType:   al.EntityType,
 		EntityID:     al.EntityID,
 		EntityName:   al.EntityName,
-		BeforeState:  al.BeforeState,
-		AfterState:   al.AfterState,
+		BeforeState:  redactAuditState(al.BeforeState),
+		AfterState:   redactAuditState(al.AfterState),
 		CreatedAt:    al.CreatedAt.Format(time.RFC3339),
 	}
 }
