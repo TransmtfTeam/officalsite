@@ -429,6 +429,14 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	// Background audit-log cleanup (90 day retention).
 	h.startAuditCleanup()
 
+	// Wrap with security middlewares.
+	return h.securityHeadersMiddleware(h.sessionMiddleware(h.routes(static)))
+}
+
+// routes builds the request multiplexer. It is separated from New so route
+// registration (and ServeMux conflict detection) can be exercised in tests
+// without a database or background goroutines.
+func (h *Handler) routes(static http.Handler) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// Static files (caller supplies embedded or filesystem handler)
@@ -449,8 +457,12 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	registerAdminClientsAPIRoutes(mux, h)
 	registerAdminMiscAPIRoutes(mux, h)
 	registerOAuthAPIRoutes(mux, h)
-	// JSON 404 for any unknown /api/v1 path (scoped so legacy /api/* endpoints win).
-	mux.Handle("/api/v1/", http.HandlerFunc(apiNotFound))
+	// JSON 404 for any unknown /api/v1 path. Registered per-method (not as a
+	// method-less "/api/v1/" pattern) so it does not conflict with the GET /
+	// SPA-shell catch-all in Go's ServeMux precedence rules.
+	for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		mux.HandleFunc(m+" /api/v1/", apiNotFound)
+	}
 
 	// favicon (served from site settings)
 	mux.HandleFunc("GET /favicon.png", h.SiteFaviconFile)
@@ -500,8 +512,7 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	// the React page posts the token to /api/v1/verify-email.
 	mux.HandleFunc("GET /", h.serveSPAShell)
 
-	// Wrap with security middlewares.
-	return h.securityHeadersMiddleware(h.sessionMiddleware(mux))
+	return mux
 }
 
 func isErrNoRows(err error) bool { return errors.Is(err, sql.ErrNoRows) }
