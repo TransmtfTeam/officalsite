@@ -58,3 +58,18 @@
   .spinner,.skeleton,.is-fetching-bar{animation:none}
   .ti-toast,.ti-modal,.ti-modal-ov{transition:none}
 }
+
+/* ── Responsive (2026-06): modals + consent on small screens ── */
+.ti-consent label{flex:1;min-width:0}
+.ti-consent input[type=checkbox]{width:18px;height:18px}
+@media (max-width:600px){
+  .ti-modal-ov{padding:16px}
+  .ti-modal{max-width:100%}
+  .ti-modal-b{overflow-wrap:anywhere}
+  .ti-modal-x{min-width:40px;min-height:40px;display:inline-flex;align-items:center;justify-content:center;padding:0}
+}
+@media (max-width:480px){
+  .ti-toast{font-size:.86rem;padding:.65rem .8rem}
+  .ti-toast-close{font-size:1.1rem;padding:.2rem .35rem}
+  .ti-consent{flex-wrap:wrap}
+}

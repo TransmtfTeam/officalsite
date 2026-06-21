@@ -170,15 +170,10 @@ export default function AuditLogs() {
       {/* ── Filters ─────────────────────────────────────────────────────────── */}
       <div className="card" style={{ marginBottom: '1rem' }}>
         <form
+          className="filters-grid"
           onSubmit={(e) => {
             e.preventDefault()
             setParam('q', search.trim())
-          }}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-            gap: '.75rem',
-            alignItems: 'end',
           }}
         >
           <Input

@@ -5,7 +5,7 @@ import { qk } from '@/lib/queryKeys'
 export default function Tos() {
   const { data } = useQuery({ queryKey: qk.tos, queryFn: () => api.get<{ content: string }>('/tos') })
   return (
-    <div style={{ maxWidth: 820, margin: '0 auto', padding: '90px 1.2rem 3rem' }}>
+    <div className="legal-page">
       <h1 style={{ marginBottom: '1rem' }}>服务条款</h1>
       <div className="card">
         {data?.content ? (

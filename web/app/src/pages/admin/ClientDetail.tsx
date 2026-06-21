@@ -244,7 +244,7 @@ function IntegrationGuide({
         <table className="data-table" style={{ marginBottom: '1rem' }}>
           <thead>
             <tr>
-              <th style={{ width: '36%' }}>Field</th>
+              <th>Field</th>
               <th>Value</th>
             </tr>
           </thead>
@@ -261,7 +261,7 @@ function IntegrationGuide({
                   )}
                 </td>
                 <td>
-                  <code className="mono">{r.value}</code>
+                  <code className="mono break">{r.value}</code>
                 </td>
               </tr>
             ))}

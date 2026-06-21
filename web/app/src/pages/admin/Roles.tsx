@@ -111,7 +111,7 @@ function CreateRoleCard({ allPermissions }: { allPermissions: Permission[] }) {
     <Card>
       <div className="detail-section-title">创建角色</div>
       <form onSubmit={submit}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+        <div className="grid-2">
           <Input
             label={
               <>
@@ -134,13 +134,7 @@ function CreateRoleCard({ allPermissions }: { allPermissions: Permission[] }) {
 
         <div className="form-group">
           <label className="form-label">权限</label>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-              gap: '.6rem',
-            }}
-          >
+          <div className="checks-grid">
             {allPermissions.map((p) => (
               <label
                 key={p.name}

@@ -151,14 +151,7 @@ export default function Users() {
 
       {/* ── Filters ─────────────────────────────────────────────────────────── */}
       <div className="card" style={{ marginBottom: '1rem' }}>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-            gap: '.75rem',
-            alignItems: 'end',
-          }}
-        >
+        <div className="filters-grid">
           <Input
             label="搜索"
             placeholder="邮箱或名称…"

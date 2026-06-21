@@ -49,8 +49,8 @@ export default function Home() {
   const links = data?.links ?? []
 
   return (
-    <div style={{ background: '#fff', paddingTop: 60 }}>
-      <section className="page-hero" style={{ paddingTop: 100, minHeight: '92vh' }}>
+    <div style={{ background: '#fff' }}>
+      <section className="page-hero" style={{ minHeight: '92vh' }}>
         <div className="hero-left">
           <p className="hero-greeting">了解我们</p>
           <p className="hero-prefix">什么是</p>

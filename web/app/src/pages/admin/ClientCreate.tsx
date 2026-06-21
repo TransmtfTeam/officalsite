@@ -74,7 +74,7 @@ export default function ClientCreate() {
 
       <Card>
         <form onSubmit={submit}>
-          <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="form-row grid-2">
             <Input
               label={
                 <>

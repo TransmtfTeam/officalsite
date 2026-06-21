@@ -184,15 +184,7 @@ export default function LinkEdit() {
 
       <div className="form-panel" style={{ marginTop: '1rem' }}>
         <p className="form-panel-title">图标</p>
-        <div
-          style={{
-            display: 'flex',
-            gap: '1rem',
-            alignItems: 'flex-start',
-            flexWrap: 'wrap',
-            marginBottom: '.8rem',
-          }}
-        >
+        <div className="inline-fields" style={{ alignItems: 'flex-start', marginBottom: '.8rem' }}>
           <div
             style={{
               width: 64,
@@ -212,7 +204,7 @@ export default function LinkEdit() {
               <span style={{ color: '#9ca3af', fontSize: '1.2rem' }}>🔗</span>
             )}
           </div>
-          <form onSubmit={uploadSubmit} style={{ flex: 1, minWidth: 240 }}>
+          <form onSubmit={uploadSubmit} className="field-grow">
             <input className="form-control" type="file" accept="image/*" onChange={onFile} />
             <p style={{ fontSize: '.78rem', color: 'var(--text2)', margin: '.4rem 0' }}>
               支持任意图片格式，单文件不超过 5MB。

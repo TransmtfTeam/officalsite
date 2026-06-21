@@ -79,7 +79,7 @@ export default function Login2FA() {
 
   return (
     <AuthCard title="双重验证">
-      <p style={{ color: 'var(--text2)', fontSize: '.9rem', marginTop: 0 }}>账号 {data.email} 已启用双重验证。</p>
+      <p style={{ color: 'var(--text2)', fontSize: '.9rem', marginTop: 0 }}>账号 <span className="break">{data.email}</span> 已启用双重验证。</p>
       {error && <div className="flash flash-err">{error}</div>}
       {data.hasTOTP && (
         <form onSubmit={verify}>

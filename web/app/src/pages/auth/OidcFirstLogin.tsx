@@ -36,7 +36,7 @@ export default function OidcFirstLogin() {
   return (
     <AuthCard title={`通过 ${data.providerName} 登录`}>
       <p style={{ color: 'var(--text2)', fontSize: '.92rem' }}>
-        检测到外部账号 {data.profileEmail || data.profileName}。请选择如何继续：
+        检测到外部账号 <span className="break">{data.profileEmail || data.profileName}</span>。请选择如何继续：
       </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '.6rem', marginTop: '1rem' }}>
         <Link className="btn btn-primary" to={`/login?oidc_challenge=${encodeURIComponent(challenge)}`} style={{ justifyContent: 'center' }}>

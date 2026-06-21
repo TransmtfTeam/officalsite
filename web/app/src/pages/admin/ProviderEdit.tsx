@@ -144,7 +144,7 @@ function EditForm({ id, provider }: { id: string; provider: AdminProvider }) {
 
       <Card>
         <form onSubmit={submit}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="grid-2">
             <Input
               label={<>名称 {REQUIRED}</>}
               value={name}
@@ -168,7 +168,7 @@ function EditForm({ id, provider }: { id: string; provider: AdminProvider }) {
             hint="已知提供商（google / x）会自动显示内置图标"
           />
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="grid-2">
             <Input
               label="Client ID"
               value={clientId}

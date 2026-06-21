@@ -142,7 +142,7 @@ export default function Login() {
           <div style={{ textAlign: 'center', color: 'var(--text2)', fontSize: '.82rem', margin: '.6rem 0' }}>或使用以下方式登录</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
             {providers.map((p) => (
-              <a key={p.slug} className="btn btn-ghost" href={providerHref(p.slug)} style={{ justifyContent: 'center' }}>
+              <a key={p.slug} className="btn btn-ghost btn-block" href={providerHref(p.slug)} style={{ justifyContent: 'center' }}>
                 <ProviderIcon slug={p.slug} icon={p.icon} />
                 使用 {p.name} 登录
               </a>

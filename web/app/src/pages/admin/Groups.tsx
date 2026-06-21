@@ -90,11 +90,8 @@ export default function Groups() {
 
       <div className="card" style={{ marginBottom: '1rem' }}>
         <h2 className="form-panel-title">新建分组</h2>
-        <form
-          onSubmit={submitCreate}
-          style={{ display: 'flex', gap: '.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}
-        >
-          <div style={{ minWidth: 200 }}>
+        <form onSubmit={submitCreate} className="inline-fields">
+          <div className="field-grow">
             <Input
               label="名称"
               value={name}
@@ -104,7 +101,7 @@ export default function Groups() {
               placeholder="例如 developers"
             />
           </div>
-          <div style={{ minWidth: 200 }}>
+          <div className="field-grow">
             <Input
               label="显示名称"
               value={label}

@@ -73,7 +73,7 @@ function AccountOverview({ view }: { view: ProfileView }) {
   return (
     <Card style={{ marginTop: '1rem' }}>
       <h3 style={{ marginTop: 0 }}>账号概览</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '.6rem 1.4rem' }}>
+      <div className="auto-grid">
         <div>
           <div className="form-label">邮箱</div>
           <div>
@@ -346,7 +346,7 @@ function TwoFactorSection({ view, onChange }: { view: ProfileView; onChange: () 
         <form onSubmit={enable}>
           <p style={{ color: 'var(--text2)' }}>使用验证器 App 扫描二维码，或手动输入密钥，然后输入 6 位验证码完成启用。</p>
           <div style={{ display: 'flex', gap: '1.2rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '.8rem' }}>
-            <img src="/profile/2fa/qr" alt="TOTP 二维码" style={{ width: 180, height: 180, border: '1px solid #eee', borderRadius: 8 }} />
+            <img src="/profile/2fa/qr" alt="TOTP 二维码" style={{ width: 'min(180px, 55vw)', height: 'auto', border: '1px solid #eee', borderRadius: 8 }} />
             <code style={{ wordBreak: 'break-all', background: '#f8fafc', padding: '.4rem .6rem', borderRadius: 6 }}>{view.pendingSecret}</code>
           </div>
           <Input label="动态口令验证码" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} required />
@@ -422,28 +422,30 @@ function PasskeySection({
       {view.passkeys.length === 0 ? (
         <p style={{ color: 'var(--text2)' }}>尚未注册任何通行密钥。</p>
       ) : (
-        <table className="data-table" style={{ marginBottom: '1rem' }}>
-          <thead>
-            <tr>
-              <th>名称</th>
-              <th>创建时间</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {view.passkeys.map((p) => (
-              <tr key={p.id}>
-                <td>{p.name}</td>
-                <td>{new Date(p.createdAt).toLocaleString()}</td>
-                <td>
-                  <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(p)}>
-                    删除
-                  </Button>
-                </td>
+        <div className="table-scroll">
+          <table className="data-table" style={{ marginBottom: '1rem' }}>
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>创建时间</th>
+                <th>操作</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {view.passkeys.map((p) => (
+                <tr key={p.id}>
+                  <td>{p.name}</td>
+                  <td>{new Date(p.createdAt).toLocaleString()}</td>
+                  <td>
+                    <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(p)}>
+                      删除
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       <div style={{ display: 'flex', gap: '.6rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <Input label="新通行密钥名称" value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：我的手机" />

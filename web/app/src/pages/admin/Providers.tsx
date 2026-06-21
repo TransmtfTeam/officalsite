@@ -213,7 +213,7 @@ function CreateProviderCard() {
       </div>
 
       <form onSubmit={submit}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+        <div className="grid-2">
           <Input
             label={<>名称 {REQUIRED}</>}
             value={form.name}
@@ -231,7 +231,7 @@ function CreateProviderCard() {
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+        <div className="grid-2">
           <Select
             label={<>协议类型 {REQUIRED}</>}
             value={form.providerType}
@@ -249,7 +249,7 @@ function CreateProviderCard() {
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+        <div className="grid-2">
           <Input
             label={<>Client ID {REQUIRED}</>}
             value={form.clientId}

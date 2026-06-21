@@ -44,7 +44,7 @@ export default function ClientCreated() {
         <div className="detail-section-title">🎉 {client.name} 已创建</div>
         <div className="detail-row">
           <div className="detail-key">应用标识</div>
-          <div className="detail-val mono">{client.clientId}</div>
+          <div className="detail-val mono break">{client.clientId}</div>
         </div>
       </div>
 
@@ -52,7 +52,7 @@ export default function ClientCreated() {
         <p style={{ fontWeight: 600, marginBottom: '.6rem' }}>
           ⚠️ 应用密钥（仅显示一次，请立即复制保存，关闭后将无法再次查看）
         </p>
-        <div className="secret-val" style={{ marginBottom: '.8rem' }}>
+        <div className="secret-val break" style={{ marginBottom: '.8rem' }}>
           {clientSecret}
         </div>
         <Button size="sm" onClick={copySecret}>

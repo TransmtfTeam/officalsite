@@ -132,13 +132,13 @@ export default function GroupDetail() {
       <div className="card" style={{ marginBottom: '1rem' }}>
         <h2 className="form-panel-title">添加成员</h2>
         <form
+          className="inline-fields"
           onSubmit={(e) => {
             e.preventDefault()
             if (userId) addMember.mutate()
           }}
-          style={{ display: 'flex', gap: '.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}
         >
-          <div style={{ minWidth: 260 }}>
+          <div className="field-grow">
             <Select label="选择用户" value={userId} onChange={(e) => setUserId(e.target.value)}>
               <option value="">选择用户…</option>
               {available.map((u) => (

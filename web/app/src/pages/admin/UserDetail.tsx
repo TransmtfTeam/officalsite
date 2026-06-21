@@ -171,33 +171,33 @@ function AccountInfoCard({ user, customRoles }: { user: User; customRoles: Custo
   return (
     <Card>
       <h2 className="form-panel-title">账户信息</h2>
-      <dl style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '.5rem 1.2rem', margin: 0 }}>
-        <dt style={{ color: 'var(--text2)' }}>ID</dt>
-        <dd style={{ margin: 0, fontFamily: 'monospace', fontSize: '.85rem' }}>{user.id}</dd>
-        <dt style={{ color: 'var(--text2)' }}>邮箱</dt>
-        <dd style={{ margin: 0 }}>{user.email}</dd>
-        <dt style={{ color: 'var(--text2)' }}>名称</dt>
-        <dd style={{ margin: 0 }}>{user.displayName || '—'}</dd>
-        <dt style={{ color: 'var(--text2)' }}>角色</dt>
-        <dd style={{ margin: 0 }}>
+      <dl className="kv">
+        <dt>ID</dt>
+        <dd style={{ fontFamily: 'monospace', fontSize: '.85rem' }}>{user.id}</dd>
+        <dt>邮箱</dt>
+        <dd>{user.email}</dd>
+        <dt>名称</dt>
+        <dd>{user.displayName || '—'}</dd>
+        <dt>角色</dt>
+        <dd>
           <RoleBadge role={user.role} label={roleLabel(user.role, customRoles)} />
         </dd>
-        <dt style={{ color: 'var(--text2)' }}>状态</dt>
-        <dd style={{ margin: 0 }}>
+        <dt>状态</dt>
+        <dd>
           <StatusText active={user.active} />
         </dd>
-        <dt style={{ color: 'var(--text2)' }}>邮箱验证</dt>
-        <dd style={{ margin: 0 }}>
+        <dt>邮箱验证</dt>
+        <dd>
           <StatusText active={user.emailVerified} on="已验证" off="未验证" />
         </dd>
-        <dt style={{ color: 'var(--text2)' }}>双重验证</dt>
-        <dd style={{ margin: 0 }}>
+        <dt>双重验证</dt>
+        <dd>
           <StatusText active={user.totpEnabled} on="已开启" off="未开启" />
         </dd>
-        <dt style={{ color: 'var(--text2)' }}>强制改密</dt>
-        <dd style={{ margin: 0 }}>{user.requirePasswordChange ? '是' : '否'}</dd>
-        <dt style={{ color: 'var(--text2)' }}>创建时间</dt>
-        <dd style={{ margin: 0 }}>{fmt(user.createdAt)}</dd>
+        <dt>强制改密</dt>
+        <dd>{user.requirePasswordChange ? '是' : '否'}</dd>
+        <dt>创建时间</dt>
+        <dd>{fmt(user.createdAt)}</dd>
       </dl>
     </Card>
   )
@@ -452,9 +452,9 @@ function GroupsCard({
           e.preventDefault()
           if (groupId) addGroup.mutate()
         }}
-        style={{ display: 'flex', gap: '.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}
+        className="inline-fields"
       >
-        <div style={{ minWidth: 200 }}>
+        <div className="field-grow">
           <Select label="加入分组" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
             <option value="">选择分组…</option>
             {available.map((g) => (

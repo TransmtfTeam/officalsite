@@ -9,10 +9,7 @@ interface Props {
 export function Pagination({ page, pages, onPage }: Props) {
   if (pages <= 1) return null
   return (
-    <div
-      className="pager"
-      style={{ display: 'flex', gap: '.4rem', alignItems: 'center', justifyContent: 'flex-end', padding: '1rem', flexWrap: 'wrap' }}
-    >
+    <div className="pager">
       <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => onPage(1)}>
         首页
       </Button>
