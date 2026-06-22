@@ -198,6 +198,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE users ALTER COLUMN email_verified SET DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS require_password_change BOOLEAN NOT NULL DEFAULT false;
+-- Cutoff by which a self-registered account must verify its e-mail or be purged
+-- by the background sweeper. NULL = not subject to auto-deletion (OIDC accounts,
+-- or any account an admin has manually (un)verified).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verify_deadline TIMESTAMPTZ;
 ALTER TABLE oidc_states ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '10 minutes');
 ALTER TABLE oidc_states ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT '';
 ALTER TABLE custom_roles ADD COLUMN IF NOT EXISTS permissions TEXT NOT NULL DEFAULT '';
@@ -261,6 +265,7 @@ CREATE INDEX IF NOT EXISTS idx_user_group_members_user  ON user_group_members(us
 CREATE INDEX IF NOT EXISTS idx_user_group_members_group ON user_group_members(group_id);
 CREATE INDEX IF NOT EXISTS idx_email_verif_user         ON email_verifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_email_verif_expires      ON email_verifications(expires_at);
+CREATE INDEX IF NOT EXISTS idx_users_verify_deadline    ON users(verify_deadline) WHERE verify_deadline IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_pwd_resets_user          ON password_resets(user_id);
 CREATE INDEX IF NOT EXISTS idx_pwd_resets_expires       ON password_resets(expires_at);
 

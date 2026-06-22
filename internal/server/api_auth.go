@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -150,7 +151,19 @@ func (h *Handler) APIRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := h.st.CreateUserWithEmailVerified(ctx, email, req.Password, name, "user", false)
+	var (
+		u   *store.User
+		err error
+	)
+	if oidcChallenge != "" {
+		// External-identity registration: create without a deadline; the account is
+		// only granted the OIDC exemption if the identity actually links (below).
+		u, err = h.st.CreateUserWithEmailVerified(ctx, email, req.Password, name, "user", false)
+	} else {
+		// Pure e-mail self-registration: arm the verify-or-purge deadline atomically
+		// with account creation, so it can never be unverified-without-deadline.
+		u, err = h.st.CreateSelfRegisteredUser(ctx, email, req.Password, name, unverifiedAccountTTL)
+	}
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			apiErr(w, http.StatusConflict, "conflict", "邮箱已被注册")
@@ -162,9 +175,17 @@ func (h *Handler) APIRegister(w http.ResponseWriter, r *http.Request) {
 
 	if oidcChallenge != "" {
 		if _, linkErr := h.consumeOIDCLoginChallengeAndLink(ctx, u, oidcChallenge); linkErr != nil {
+			// Binding failed: this is a stranded e-mail registration, not an OIDC
+			// account, so it must still verify or be purged — arm the deadline.
+			if derr := h.st.SetVerifyDeadline(ctx, u.ID, unverifiedAccountTTL); derr != nil {
+				log.Printf("register: arm verify deadline for unbound %s: %v", u.ID, derr)
+			}
 			apiErr(w, http.StatusBadRequest, "oidc_link_failed", "账号已创建，但外部登录绑定失败："+linkErr.Error())
 			return
 		}
+		// Identity linked: the account is reachable via the provider and stays exempt
+		// from unverified-email auto-deletion (no deadline), like OIDC auto-registered
+		// accounts.
 	}
 
 	token, err := h.st.CreateEmailVerification(ctx, u.ID)

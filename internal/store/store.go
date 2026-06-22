@@ -338,6 +338,27 @@ func (s *Store) CreateExternalUser(ctx context.Context, displayName string) (*Us
 	return s.CreateUserWithEmailVerified(ctx, placeholder, randPass, displayName, "member", false)
 }
 
+// CreateSelfRegisteredUser creates a self-service e-mail registration (role "user",
+// email_verified=false) with the verify-or-purge deadline armed atomically in the
+// same INSERT (database clock). This guarantees the account can never exist as
+// unverified-without-deadline — a state that would be silently exempt from the
+// background sweeper.
+func (s *Store) CreateSelfRegisteredUser(ctx context.Context, email, password, displayName string, ttl time.Duration) (*User, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+	id := uuid.New().String()
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO users(id,email,password_hash,display_name,role,email_verified,verify_deadline)
+		 VALUES($1,$2,$3,$4,'user',false, now() + ($5 * interval '1 second'))`,
+		id, strings.ToLower(strings.TrimSpace(email)), string(hash), displayName, int64(ttl.Seconds()))
+	if err != nil {
+		return nil, err
+	}
+	return s.GetUserByID(ctx, id)
+}
+
 func (s *Store) GetUserByID(ctx context.Context, id string) (*User, error) {
 	return scanUser(s.db.QueryRowContext(ctx, `SELECT `+userCols+` FROM users WHERE id=$1`, id))
 }
@@ -528,11 +549,67 @@ func (s *Store) SetRequirePasswordChange(ctx context.Context, userID string, req
 	return err
 }
 
+// SetEmailVerified sets the verification flag from a moderator action (verify or
+// unverify). Either way the auto-deletion deadline is cleared: once an admin has
+// manually touched an account's verification state it is no longer subject to the
+// self-registration "verify within 72h or be purged" lifecycle.
 func (s *Store) SetEmailVerified(ctx context.Context, userID string, verified bool) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET email_verified=$1,updated_at=now() WHERE id=$2`,
+		`UPDATE users SET email_verified=$1,verify_deadline=NULL,updated_at=now() WHERE id=$2`,
 		verified, userID)
 	return err
+}
+
+// SetVerifyDeadline arms the cutoff by which a freshly self-registered account must
+// verify its e-mail, or be purged by the background sweeper. The deadline is derived
+// from the database clock (now() + ttl) — the same clock the sweeper compares
+// against — so it cannot misfire on app/DB clock skew or across multiple app
+// instances.
+func (s *Store) SetVerifyDeadline(ctx context.Context, userID string, ttl time.Duration) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET verify_deadline = now() + ($1 * interval '1 second'), updated_at=now() WHERE id=$2`,
+		int64(ttl.Seconds()), userID)
+	return err
+}
+
+// DeleteUnverifiedExpired purges accounts that registered via the self-service
+// e-mail flow but never verified before their (database-clock) deadline, returning
+// the total number deleted. Accounts with a NULL deadline are exempt by
+// construction: OIDC auto-registered accounts never receive one, OIDC-linked
+// registrations are never armed, and any admin verify/unverify clears it. Deletion
+// runs in bounded batches so a large backlog (e.g. from mass registration) cannot
+// become one long row-locking transaction.
+//
+// Child rows with a users(id) foreign key — sessions, user_identities,
+// email_verifications, password_resets, passkey_credentials, group memberships,
+// auth_codes — are removed via ON DELETE CASCADE. access_tokens/refresh_tokens
+// carry no such FK, but an unverified account can never obtain them (login is gated
+// on email_verified), so there is nothing to orphan in practice.
+func (s *Store) DeleteUnverifiedExpired(ctx context.Context, batch int) (int64, error) {
+	if batch <= 0 {
+		batch = 500
+	}
+	var total int64
+	for {
+		res, err := s.db.ExecContext(ctx,
+			`DELETE FROM users WHERE id IN (
+				SELECT id FROM users
+				WHERE email_verified = false
+				  AND verify_deadline IS NOT NULL
+				  AND verify_deadline < now()
+				ORDER BY verify_deadline
+				LIMIT $1
+			)`, batch)
+		if err != nil {
+			return total, err
+		}
+		n, _ := res.RowsAffected()
+		total += n
+		if n < int64(batch) {
+			break
+		}
+	}
+	return total, nil
 }
 
 func (s *Store) ClearPassword(ctx context.Context, userID string) error {
@@ -1795,13 +1872,13 @@ func splitFields(s string) []string {
 
 func (s *Store) SetEmailUnverified(ctx context.Context, userID string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET email_verified=false, updated_at=now() WHERE id=$1`, userID)
+		`UPDATE users SET email_verified=false, verify_deadline=NULL, updated_at=now() WHERE id=$1`, userID)
 	return err
 }
 
 func (s *Store) VerifyUserEmail(ctx context.Context, userID string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET email_verified=true, updated_at=now() WHERE id=$1`, userID)
+		`UPDATE users SET email_verified=true, verify_deadline=NULL, updated_at=now() WHERE id=$1`, userID)
 	return err
 }
 
@@ -1847,8 +1924,21 @@ func (s *Store) ConsumeEmailVerification(ctx context.Context, token string) (*Us
 		_ = tx.Commit()
 		return nil, errors.New("验证链接已过期")
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE users SET email_verified=true, updated_at=now() WHERE id=$1`, userID); err != nil {
+	// Enforce the registration verify-by deadline at consume time as well: once it
+	// has passed, refuse verification regardless of whether the hourly sweeper has
+	// reached the row yet (and even if the sweeper is down). Exempt accounts have
+	// verify_deadline IS NULL and are unaffected.
+	res, err := tx.ExecContext(ctx,
+		`UPDATE users SET email_verified=true, verify_deadline=NULL, updated_at=now()
+		 WHERE id=$1 AND (verify_deadline IS NULL OR verify_deadline >= now())`, userID)
+	if err != nil {
 		return nil, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		// Past the verification deadline: the token is already deleted above; commit
+		// that and report expiry. The account will be removed by the sweeper.
+		_ = tx.Commit()
+		return nil, errors.New("账号验证时限已过，请重新注册")
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err

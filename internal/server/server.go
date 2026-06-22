@@ -429,6 +429,10 @@ func New(cfg *config.Config, st *store.Store, keys *crypto.Keys, tmpls map[strin
 	// Background audit-log cleanup (90 day retention).
 	h.startAuditCleanup()
 
+	// Background purge of self-registered accounts that never verified their
+	// e-mail within unverifiedAccountTTL.
+	h.startUnverifiedCleanup()
+
 	// Wrap with security middlewares.
 	return h.securityHeadersMiddleware(h.sessionMiddleware(h.routes(static)))
 }

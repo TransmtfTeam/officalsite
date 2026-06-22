@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -269,7 +270,18 @@ func (h *Handler) RegisterPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := h.st.CreateUserWithEmailVerified(ctx, email, pass, name, "user", false)
+	var (
+		u   *store.User
+		err error
+	)
+	if oidcChallenge != "" {
+		// External-identity registration: no deadline unless the bind fails (below).
+		u, err = h.st.CreateUserWithEmailVerified(ctx, email, pass, name, "user", false)
+	} else {
+		// Pure e-mail self-registration: arm the verify-or-purge deadline atomically
+		// with account creation, so it can never be unverified-without-deadline.
+		u, err = h.st.CreateSelfRegisteredUser(ctx, email, pass, name, unverifiedAccountTTL)
+	}
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			fail("邮箱已被注册", oidcChallenge != "")
@@ -281,12 +293,18 @@ func (h *Handler) RegisterPost(w http.ResponseWriter, r *http.Request) {
 
 	if oidcChallenge != "" {
 		if _, linkErr := h.consumeOIDCLoginChallengeAndLink(ctx, u, oidcChallenge); linkErr != nil {
+			// Binding failed: stranded e-mail registration, not an OIDC account, so it
+			// must still verify or be purged — arm the deadline.
+			if derr := h.st.SetVerifyDeadline(ctx, u.ID, unverifiedAccountTTL); derr != nil {
+				log.Printf("register: arm verify deadline for unbound %s: %v", u.ID, derr)
+			}
 			d := h.pageData(r, "注册结果")
 			d.Flash = "账号已创建，但外部登录绑定失败：" + linkErr.Error()
 			d.IsError = true
 			h.render(w, "error", d)
 			return
 		}
+		// Identity linked: reachable via the provider, stays exempt (no deadline).
 	}
 
 	token, err := h.st.CreateEmailVerification(ctx, u.ID)
